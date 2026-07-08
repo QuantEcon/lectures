@@ -1,0 +1,49 @@
+name: sync
+
+# Refresh the pinned SHAs for each live series in sync/state.yml.
+#
+# To keep CI light we only re-pin here (`--pin-only`): we do NOT download the
+# full mirror in CI. Reconstruction of mirror/ happens on demand, locally.
+# mirror/ is gitignored and is never added or committed by this job.
+#
+# The tool is invoked via `uv run --script` (not the bare `tools/sync` path) so
+# CI does not depend on the committed executable bit of tools/sync.
+#
+# NOTE ON PERMISSIONS: this job pushes a refreshed sync/state.yml to main using
+# the default GITHUB_TOKEN. Once branch protection is enabled on main, this job
+# will need a sanctioned bypass identity -- a GitHub App token or a fine-grained
+# PAT -- instead of GITHUB_TOKEN, which cannot push past protected-branch rules.
+
+on:
+  schedule:
+    # Weekly, Monday 06:17 UTC (a low-traffic time; offset off the hour).
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  refresh-pins:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Refresh pinned SHAs (no mirror download)
+        run: uv run --script tools/sync --update --pin-only
+
+      - name: Commit refreshed SHAs if changed
+        run: |
+          if [ -n "$(git status --porcelain sync/state.yml)" ]; then
+            git config user.name  'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add sync/state.yml
+            git commit -m 'sync: refresh pinned SHAs'
+            git push
+          else
+            echo 'No change to sync/state.yml -- nothing to commit.'
+          fi

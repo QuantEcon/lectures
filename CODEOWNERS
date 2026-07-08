@@ -1,0 +1,14 @@
+# Code owners for QuantEcon/lectures.
+#
+# Default owner for everything in the repository.
+* @mmcky
+
+# --- Machine-maintained during the pre-cutover period ---
+# The files below are written by automation (the sync bot), not edited by hand.
+# Ownership stays with @mmcky, who reviews the bot's changes.
+
+# Machine state: pinned SHAs, refreshed by tools/sync in CI.
+/sync/ @mmcky
+
+# The curated pool is machine-populated (via promotion) in a later milestone.
+/lectures/ @mmcky

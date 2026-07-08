@@ -1,0 +1,32 @@
+# sync/manifest.yml — HUMAN INTENT
+#
+# The single source of truth for WHICH repositories feed the mirror, and which
+# paths are taken from each. tools/sync reads this file (together with the
+# machine-written sync/state.yml) to reconstruct mirror/<key>/.
+#
+# Adding a series later is a single stanza under `series`. Per-series overrides
+# of `branch` or `paths` are allowed but not currently needed — every series
+# uses the defaults below.
+#
+# Series are ordered by curriculum progression: intro -> programming ->
+# intermediate -> advanced -> dp -> jax.
+
+defaults:
+  branch: main
+  paths:
+    - lectures/
+    - environment.yml
+
+series:
+  intro:
+    repo: QuantEcon/lecture-python-intro
+  programming:
+    repo: QuantEcon/lecture-python-programming
+  intermediate:
+    repo: QuantEcon/lecture-python.myst
+  advanced:
+    repo: QuantEcon/lecture-python-advanced.myst
+  dp:
+    repo: QuantEcon/lecture-dp
+  jax:
+    repo: QuantEcon/lecture-jax

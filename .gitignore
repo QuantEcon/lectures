@@ -1,0 +1,24 @@
+# The reconstructed mirror is a pure function of (repo, pinned SHA, allowlist).
+# It is rebuilt on demand by tools/sync and MUST NEVER be committed.
+/mirror/
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+venv/
+
+# Node
+node_modules/
+
+# MyST / Jupyter build + execute caches
+_build/
+.jupyter_cache/
+.myst_cache/
+jupyter_execute/
+**/execute/
+**/.execute/
+
+# OS cruft
+.DS_Store
