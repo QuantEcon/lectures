@@ -1,0 +1,1221 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.9"
+# dependencies = ["pyyaml"]
+# ///
+"""tools/promote — promote lectures from ``mirror/`` into the ``lectures/`` pool.
+
+Promotion copies a lecture from ``mirror/<series>/lectures/`` into the flat
+pool at ``lectures/``, together with its ASSET CLOSURE — the files the lecture
+actually references (figures, includes, ``:load:`` scripts, downloads), found
+by parsing the MyST source. Nothing is copied wholesale: only referenced
+assets enter the pool, so orphans are excluded by construction.
+
+Dedup happens at promotion time: the same-named copy is hashed across every
+non-excluded series in ``sync/manifest.yml``; the pool takes the copy from the
+CANONICAL series (the highest-priority series, in manifest order, whose copy is
+byte-identical to the requested source) and records every identical series as
+a source. Same-named copies that differ in bytes are recorded under
+``divergent:`` and the entry is marked ``interim: true`` (canonical pending
+human triage). ``jax`` is ALWAYS excluded (variant regime).
+
+Asset references are normalised into the pool ``_static`` conventions
+(``_static/<slug>/`` for per-lecture assets, ``_static/_shared/`` for assets
+used by two or more lectures) via an ORDERED LIST OF LITERAL STRING
+REPLACEMENTS, each recorded in ``sync/ledger.yml``. Applying exactly those
+replacements to the canonical mirror copy reproduces the pool copy
+byte-for-byte — the invariant the drift-check relies on. No unrecorded
+transformation of lecture text is permitted.
+
+Two files record the outcome:
+
+* ``sync/ledger.yml`` — MACHINE STATE: provenance, pins, assets, and rewrites
+  per pool lecture (written by this script; do not hand-edit).
+* ``lectures/``       — the pool itself: ``<slug>.md`` files plus ``_static/``.
+
+Usage
+-----
+    tools/promote SLUG [SLUG...]   # promote named lectures (source resolved
+                                   # per-lecture, highest-priority series wins)
+    tools/promote --toc dp         # promote every lecture in dp's _toc.yml
+    tools/promote --refresh        # re-promote entries whose canonical pin moved
+
+Flags
+-----
+    --toc SERIES       take the slug list from mirror/SERIES/lectures/_toc.yml
+                       (product pages — intro, status, troubleshooting,
+                       zreferences — are skipped: they become products/<key>/
+                       pages in M3, not pool content).
+    --refresh          re-run the promotion pipeline for every ledger entry
+                       whose canonical series pin in sync/state.yml differs
+                       from its recorded promoted_at pin; unchanged pins are a
+                       strict no-op.
+    --exclude SERIES [SERIES...]
+                       series excluded from source/dedup consideration for
+                       this run (jax is always excluded by default).
+    --dry-run          print the full plan (sources, closures, rewrites,
+                       collisions, skips) without writing anything.
+    -h/--help          show help and exit.
+
+This script NEVER commits anything and NEVER touches ``mirror/`` — it only
+reads the mirror and writes the pool plus ``sync/ledger.yml``.
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import os
+import posixpath
+import re
+import shutil
+import sys
+from pathlib import Path
+
+try:
+    import yaml
+except ImportError:  # pragma: no cover - dependency is declared in PEP-723 block
+    sys.stderr.write(
+        "error: PyYAML is required. Run this script via `uv run` (the shebang\n"
+        "       `#!/usr/bin/env -S uv run --script` handles the dependency), or\n"
+        "       install it with `pip install pyyaml`.\n"
+    )
+    sys.exit(1)
+
+
+# --------------------------------------------------------------------------- #
+# Paths (resolved relative to the repo root, derived from this script's own    #
+# location, so the script works from any current working directory).           #
+# --------------------------------------------------------------------------- #
+SCRIPT_PATH = Path(__file__).resolve()
+REPO_ROOT = SCRIPT_PATH.parent.parent
+SYNC_DIR = REPO_ROOT / "sync"
+MANIFEST_PATH = SYNC_DIR / "manifest.yml"
+STATE_PATH = SYNC_DIR / "state.yml"
+LEDGER_PATH = SYNC_DIR / "ledger.yml"
+MIRROR_DIR = REPO_ROOT / "mirror"
+POOL_DIR = REPO_ROOT / "lectures"
+
+# Series that never participate as a source or in dedup (variant regime).
+ALWAYS_EXCLUDED = ("jax",)
+
+# Per-series boilerplate: product pages, not pool content (M3 owns them).
+PRODUCT_PAGES = ("intro", "status", "troubleshooting", "zreferences")
+
+# The merged bibliography is owned by the separate bib-merge tool.
+BIB_BASENAME = "quant-econ.bib"
+
+# Branding assets are only referenced from _config.yml, never from lecture
+# text, so they must never appear in a closure — asserted per reference.
+BRANDING_PREFIXES = ("qe-logo", "lectures-favicon", "qe-menubar", "qemb-logo")
+
+# Byte-identical header on every write, so regenerating the ledger with the
+# same inputs is a zero-diff no-op.
+LEDGER_HEADER = (
+    "# generated by tools/promote — do not hand-edit\n"
+    "# Provenance ledger: one entry per pool lecture (keyed lectures/<slug>.md)\n"
+    "# plus a top-level `assets:` map giving the content digest and source\n"
+    "# provenance for every pool asset. Asset/rewrite paths are relative to the\n"
+    "# pool root (lectures/); source `path` values are relative to\n"
+    "# mirror/<series>/lectures/.\n"
+    "# Every lecture `sources`/`divergent` item records the sha256 `digest` of\n"
+    "# that series' copy AS OF PROMOTION — the drift-check's baseline for\n"
+    "# telling fresh upstream movement from already-recorded divergence.\n"
+    "# `rewrites` is an ordered list of literal replacements: applying each\n"
+    "# {from -> to} in turn to the canonical mirror copy reproduces the pool\n"
+    "# copy byte-for-byte. Each pair is ONE non-rescanning pass with Python\n"
+    "# str.replace semantics: every occurrence present when its turn comes is\n"
+    "# replaced, but a pair's own output is never re-matched — a `from`\n"
+    "# embedded in its own `to` (e.g. an _admonition include) is applied\n"
+    "# exactly once, never to a fixpoint. The drift-check applies exactly\n"
+    "# this transform before comparing.\n"
+)
+
+
+class PromoteError(Exception):
+    """A recoverable, per-lecture error. Reported, then the run continues."""
+
+
+# --------------------------------------------------------------------------- #
+# Reference extraction (the asset-closure parser)                              #
+# --------------------------------------------------------------------------- #
+# Directive argument on the opening fence line, backtick- or colon-fenced:
+#   ```{figure} /_static/...      :::{image} _static/...
+DIRECTIVE_RE = re.compile(
+    r"^(?:`{3,}|:{3,})\{(figure|image|include|literalinclude|bibliography)\}\s+(\S+)\s*$"
+)
+# code-cell blocks delimit where code-string/:load: scanning applies.
+CODE_CELL_OPEN_RE = re.compile(r"^(`{3,})\{code-cell\}")
+FENCE_ONLY_RE = re.compile(r"^`{3,}\s*$")
+# :load: is a code-cell directive option loading a script by path. It has a
+# second spelling: a YAML options block (--- fenced, first thing in the cell)
+# with a plain `load:` key — the estate uses BOTH forms, so both are parsed.
+LOAD_RE = re.compile(r"^\s*:load:\s+(\S+)\s*$")
+YAML_LOAD_RE = re.compile(r"^\s*load:\s+[\"']?([^\"'\s]+)[\"']?\s*$")
+# Markdown images / links (images guarded out of the link pattern).
+MD_IMAGE_RE = re.compile(r"!\[[^\]]*\]\(\s*<?([^)<>\s]+)>?\s*(?:[\"'][^)\"']*[\"']\s*)?\)")
+MD_LINK_RE = re.compile(r"(?<!!)\[[^\]]*\]\(\s*<?([^)<>\s]+)>?\s*(?:[\"'][^)\"']*[\"']\s*)?\)")
+# {download} role: {download}`path` or {download}`text <path>`.
+DOWNLOAD_RE = re.compile(r"\{download\}`(?:[^`]*?<([^`>]+)>|([^`<>]+))`")
+# Raw HTML anchors — the estate uses UNQUOTED attributes (<a href=_static/...
+# download>), which pure MyST tooling misses; all three quoting forms handled.
+HREF_RE = re.compile(r"<a\s[^>]*?href=(?:\"([^\"]+)\"|'([^']+)'|([^\"'\s>]+))", re.IGNORECASE)
+# Hardcoded published asset URLs (the Colab-compatibility pattern).
+QE_URL_RE = re.compile(
+    r"https://[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.quantecon\.org(/_static/[^\s\"'<>()\[\]`]+)"
+)
+# Quoted string literals inside code cells that look like repo asset paths.
+CODE_STR_RE = re.compile(
+    r"[\"']([^\"'\n]*(?:_static/|datasets/|lecture_specific)[^\"'\n]*)[\"']"
+)
+SCHEME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*:")
+
+
+def extract_refs(text):
+    """Scan MyST source for candidate file references.
+
+    Returns a list of ``(kind, written)`` pairs where ``written`` is the path
+    (or URL) exactly as it appears in the source — the literal a rewrite's
+    ``from`` field must match. Prose and code-cell contexts are scanned with
+    different patterns so quoted strings in code are not confused with
+    directives and vice versa.
+    """
+    refs = []
+    in_code = 0  # opening-fence length while inside a {code-cell} block
+    cell_first_line = False  # the line straight after a {code-cell} fence
+    in_options = False  # inside the cell's ---/--- YAML options block
+    for line in text.split("\n"):
+        if in_code:
+            stripped = line.strip()
+            if FENCE_ONLY_RE.match(stripped) and len(stripped) >= in_code:
+                in_code = 0
+                in_options = False
+                continue
+            if cell_first_line:
+                cell_first_line = False
+                if stripped == "---":
+                    in_options = True
+                    continue
+            if in_options:
+                if stripped == "---":
+                    in_options = False
+                    continue
+                m = YAML_LOAD_RE.match(line)
+                if m:
+                    refs.append(("load", m.group(1)))
+                continue
+            m = LOAD_RE.match(line)
+            if m:
+                refs.append(("load", m.group(1)))
+            for m in QE_URL_RE.finditer(line):
+                refs.append(("url", m.group(0)))
+            for m in CODE_STR_RE.finditer(line):
+                if "://" not in m.group(1):
+                    refs.append(("code-str", m.group(1)))
+            continue
+
+        m = CODE_CELL_OPEN_RE.match(line)
+        if m:
+            in_code = len(m.group(1))
+            cell_first_line = True
+            continue
+
+        m = DIRECTIVE_RE.match(line.strip())
+        if m:
+            refs.append((m.group(1), m.group(2)))
+        for m in MD_IMAGE_RE.finditer(line):
+            refs.append(("image-md", m.group(1)))
+        for m in MD_LINK_RE.finditer(line):
+            refs.append(("link", m.group(1)))
+        for m in DOWNLOAD_RE.finditer(line):
+            refs.append(("download", m.group(1) or m.group(2)))
+        for m in HREF_RE.finditer(line):
+            refs.append(("href", m.group(1) or m.group(2) or m.group(3)))
+        for m in QE_URL_RE.finditer(line):
+            refs.append(("url", m.group(0)))
+    return refs
+
+
+# --------------------------------------------------------------------------- #
+# Small helpers                                                                #
+# --------------------------------------------------------------------------- #
+def sha256_file(path: Path) -> str:
+    """Content digest of a file (streamed, so large binaries are fine)."""
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 16), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def tmp_sibling(path: Path) -> Path:
+    """A per-process temp name beside ``path`` — the pid suffix keeps two
+    concurrent runs from clobbering each other's in-flight temp file."""
+    return path.with_name(f"{path.name}.promote-tmp.{os.getpid()}")
+
+
+def atomic_write(path: Path, data: bytes):
+    """Write via a sibling temp file (fsynced) + ``os.replace`` so a crash
+    mid-write can never leave a truncated file — pool files and the ledger
+    must always be either the old bytes or the new bytes, never a partial
+    write. The temp file is removed even when the write itself fails."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = tmp_sibling(path)
+    try:
+        with open(tmp, "wb") as fh:
+            fh.write(data)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp, path)
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
+def read_text_exact(path: Path) -> str:
+    """Read UTF-8 text WITHOUT universal-newline translation.
+
+    ``Path.read_text`` silently normalises ``\\r\\n``/``\\r`` to ``\\n``, which
+    would be an UNRECORDED transformation of lecture text — a CRLF upstream
+    file would break the byte-for-byte rewrite-replay invariant. Reading raw
+    bytes keeps the mirror's exact line endings in the pool copy."""
+    return path.read_bytes().decode("utf-8")
+
+
+def mirror_lectures(series: str) -> Path:
+    """The lectures root of a series' mirror tree."""
+    return MIRROR_DIR / series / "lectures"
+
+
+def to_src_rel(written: str) -> str:
+    """Normalise a path-as-written to a mirror-lectures-relative POSIX path.
+
+    Root-relative forms (``/_static/...``) and file-relative forms both occur
+    upstream; the pool is flat, so a lecture's directory IS the lectures root
+    and both resolve against the same base.
+    """
+    p = written[1:] if written.startswith("/") else written
+    p = posixpath.normpath(p)
+    if p.startswith("../") or p in ("..", ".") or p.startswith("/"):
+        raise PromoteError(f"reference escapes the lectures tree: {written!r}")
+    return p
+
+
+def slug_of(name: str) -> str:
+    """Accept both ``short_path`` and ``short_path.md`` as a slug."""
+    return name[:-3] if name.endswith(".md") else name
+
+
+# --------------------------------------------------------------------------- #
+# Manifest / state / ledger I/O                                                #
+# --------------------------------------------------------------------------- #
+def load_yaml(path: Path):
+    """Load a YAML mapping, tolerating an empty/None document (-> {})."""
+    if not path.exists():
+        return None
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError as exc:
+        raise SystemExit(f"error: could not parse {path}:\n{exc}")
+    if not isinstance(data, dict):
+        raise SystemExit(f"error: expected a mapping at the top of {path}.")
+    return data
+
+
+def load_manifest_order():
+    """Return the series keys in manifest order (= dedup priority order)."""
+    data = load_yaml(MANIFEST_PATH)
+    if data is None:
+        raise SystemExit(
+            f"error: manifest not found at {MANIFEST_PATH}.\n"
+            "       Restore sync/manifest.yml before running tools/promote."
+        )
+    series_block = data.get("series") or {}
+    if not isinstance(series_block, dict) or not series_block:
+        raise SystemExit(f"error: {MANIFEST_PATH} has no `series:` mapping.")
+    return list(series_block.keys())
+
+
+def load_state():
+    """Return the pinned-SHA state mapping written by tools/sync.
+
+    SHAs are stripped here, once, so every consumer (pin validation, refresh
+    comparison, promoted_at recording) sees the same normalised value — a
+    padded sha in state.yml must not make --refresh spin forever. A mangled
+    non-mapping entry (bad hand-edit, truncated write) is normalised to an
+    EMPTY mapping so it reads as a missing pin — a clean, actionable error
+    downstream instead of an AttributeError.
+    """
+    data = load_yaml(STATE_PATH)
+    if not data:
+        raise SystemExit(
+            f"error: no pinned SHAs found — {STATE_PATH} is missing or empty.\n"
+            "       Run `tools/sync --update` first; promotion records pins."
+        )
+    normalised = {}
+    for key, meta in data.items():
+        if not isinstance(meta, dict):
+            meta = {}
+        elif isinstance(meta.get("sha"), str):
+            meta["sha"] = meta["sha"].strip()
+        normalised[key] = meta
+    return normalised
+
+
+def load_ledger():
+    """Return ``(lecture_entries, assets_map)`` from sync/ledger.yml.
+
+    The ledger is bot-written, so malformed entries mean corruption or a bad
+    hand-edit — error out rather than silently dropping data on the next write.
+    """
+    data = load_yaml(LEDGER_PATH) or {}
+    assets = data.pop("assets", {}) or {}
+    bad = [str(k) for k, v in data.items() if not isinstance(v, dict)]
+    if not isinstance(assets, dict):
+        bad.append("assets")
+    if bad:
+        raise SystemExit(
+            f"error: malformed entries in {LEDGER_PATH}: {', '.join(sorted(bad))}\n"
+            "       The ledger is bot-written — restore it from git before promoting."
+        )
+    return data, assets
+
+
+def ledger_asset_digest(pool_path: str, meta: dict):
+    """The recorded content digest of a ledger asset (falling back to hashing
+    the pool file itself for ledgers written before digests were recorded).
+
+    The digest is part of an asset's IDENTITY: two upstream files that merely
+    share a relative path across series are different assets, and conflating
+    them would deadlock legitimate promotions on phantom collisions."""
+    digest = meta.get("digest")
+    if not digest:
+        f = POOL_DIR / pool_path
+        if f.is_file():
+            digest = sha256_file(f)
+    return digest
+
+
+def dump_ledger(lectures: dict, assets: dict) -> str:
+    """Serialise the ledger deterministically (sorted keys, fixed field order)."""
+    doc = {}
+    for key in sorted(lectures):
+        doc[key] = lectures[key]
+    if assets:
+        doc["assets"] = {k: assets[k] for k in sorted(assets)}
+    body = yaml.safe_dump(
+        doc, sort_keys=False, default_flow_style=False, allow_unicode=True, width=4096
+    )
+    return LEDGER_HEADER + body
+
+
+def ordered_entry(canonical, interim, sources, divergent, promoted_at, assets, rewrites):
+    """A ledger lecture entry with a stable key order.
+
+    ``interim`` is present only while ``divergent`` is non-empty — it marks
+    the canonical choice as pending human triage.
+    """
+    entry = {"canonical": canonical}
+    if interim:
+        entry["interim"] = True
+    entry["sources"] = sources
+    if divergent:
+        entry["divergent"] = divergent
+    entry["promoted_at"] = promoted_at
+    entry["assets"] = assets
+    entry["rewrites"] = rewrites
+    return entry
+
+
+# --------------------------------------------------------------------------- #
+# The per-lecture plan                                                         #
+# --------------------------------------------------------------------------- #
+class Plan:
+    """Everything decided about one lecture before anything is written."""
+
+    def __init__(self, slug, requested_series):
+        self.slug = slug
+        self.requested = requested_series  # None => resolve by priority
+        self.canonical = None
+        self.sources = []  # series with byte-identical copies (manifest order)
+        self.divergent = []  # series with same-named, byte-different copies
+        self.digests = {}  # series -> sha256 of its copy at promotion time
+        self.refs = []  # (kind, literal, src_rel, digest) — deduped, source order
+        self.warnings = []
+        self.error = None
+        self.rewrites = []  # ordered [(from, to)]
+        self.pool_text = None
+        self.assets = []  # pool-relative destinations (sorted)
+
+
+def resolve_sources(plan: Plan, considered):
+    """Fill in canonical/sources/divergent by hashing across series.
+
+    The requested copy anchors the byte-identity set; the canonical series is
+    the highest-priority member of that set (manifest order). Series whose
+    same-named copy differs in bytes land in ``divergent`` for human triage.
+    """
+    rel = f"{plan.slug}.md"
+    digests = {}
+    for series in considered:
+        f = mirror_lectures(series) / rel
+        if f.is_file():
+            digests[series] = sha256_file(f)
+    if not digests:
+        raise PromoteError(
+            f"{rel} not found in any non-excluded series "
+            f"(searched: {', '.join(considered)})"
+        )
+    requested = plan.requested
+    if requested is None:
+        requested = next(s for s in considered if s in digests)
+    elif requested not in digests:
+        raise PromoteError(f"{rel} not found in mirror/{requested}/lectures/")
+    anchor = digests[requested]
+    plan.sources = [s for s in considered if digests.get(s) == anchor]
+    plan.divergent = [s for s in digests if digests[s] != anchor]
+    plan.canonical = plan.sources[0]
+    plan.digests = digests
+    return read_text_exact(mirror_lectures(plan.canonical) / rel)
+
+
+def check_include_is_leaf(root: Path, src_rel: str):
+    """Guard the depth-1 closure assumption for ``{include}`` targets.
+
+    Included files are copied into the pool VERBATIM, so any local file
+    reference inside one would be neither closed over nor rewritten — a
+    silently broken pool lecture. Transitive closures are deliberately not
+    supported; refuse instead, so the include must be flattened upstream.
+    (Today the only include in the estate, ``_admonition/gpu.md``, is
+    reference-free — this asserts that stays true.)
+    """
+    text = read_text_exact(root / src_rel)
+    base_dir = posixpath.dirname(src_rel)
+    for kind, written in extract_refs(text):
+        candidate = written.split("#", 1)[0]
+        if not candidate or SCHEME_RE.match(candidate):
+            continue
+        try:
+            rel = to_src_rel(candidate)
+        except PromoteError:
+            continue
+        if kind == "link" and rel.endswith(".md"):
+            continue  # cross-lecture links resolve in the flat pool as-is
+        rel_to_include = posixpath.normpath(posixpath.join(base_dir, rel))
+        if (root / rel).is_file() or (root / rel_to_include).is_file():
+            raise PromoteError(
+                f"include target {src_rel} contains its own file reference "
+                f"{written!r} — transitive asset closures are not supported; "
+                "flatten the include upstream first"
+            )
+
+
+def collect_refs(plan: Plan, text: str):
+    """Resolve extracted references into the lecture's asset closure.
+
+    Every kept item is ``(kind, literal, src_rel, digest)`` where ``literal``
+    is the exact source substring a rewrite must replace, ``src_rel`` is the
+    asset's path relative to the canonical mirror's lectures root, and
+    ``digest`` is the referenced file's content hash — part of the asset's
+    identity, so same-named but byte-different files across series are never
+    conflated.
+    """
+    root = mirror_lectures(plan.canonical)
+    seen = set()
+    for kind, written in extract_refs(text):
+        if kind == "url":
+            # Rule 7: hardcoded published URL — localise only when the target
+            # exists in the source series' mirror _static, else warn.
+            idx = written.find("/_static/")
+            src_rel = written[idx + 1 :]
+            if (root / src_rel).is_file():
+                key = (written, src_rel)
+                if key not in seen:
+                    seen.add(key)
+                    plan.refs.append((kind, written, src_rel, sha256_file(root / src_rel)))
+            else:
+                plan.warnings.append(
+                    f"hardcoded URL target not in mirror/{plan.canonical} "
+                    f"_static — left untouched: {written}"
+                )
+            continue
+
+        literal = written.split("#", 1)[0]
+        if not literal or SCHEME_RE.match(literal) or literal.startswith("#"):
+            continue
+        try:
+            src_rel = to_src_rel(literal)
+        except PromoteError:
+            if kind in ("link", "code-str"):
+                continue  # heuristic kinds: not a repo file reference
+            raise
+        base = posixpath.basename(src_rel)
+        if base == BIB_BASENAME:
+            plan.warnings.append(
+                f"skipping {literal} — quant-econ.bib is owned by the "
+                "bib-merge tool, not promotion"
+            )
+            continue
+        if base.startswith(BRANDING_PREFIXES):
+            raise PromoteError(
+                f"branding asset {literal!r} referenced from lecture text — "
+                "branding is a product/_base concern and must never enter a "
+                "closure (assertion per _static conventions rule 6)"
+            )
+        exists = (root / src_rel).is_file()
+        if kind == "link":
+            # Local-file markdown links only: not .md (cross-lecture links
+            # stay as-is) and only when the target is a real repo file.
+            if src_rel.endswith(".md") or not exists:
+                continue
+        elif kind == "code-str":
+            if not exists:
+                plan.warnings.append(
+                    f"code string looks like an asset path but resolves to no "
+                    f"file in mirror/{plan.canonical} — ignored: {literal!r}"
+                )
+                continue
+        elif not exists:
+            raise PromoteError(
+                f"{kind} reference {literal!r} does not resolve to a file "
+                f"under mirror/{plan.canonical}/lectures/ — closure incomplete"
+            )
+        if kind == "include":
+            check_include_is_leaf(root, src_rel)
+        key = (literal, src_rel)
+        if key not in seen:
+            seen.add(key)
+            plan.refs.append((kind, literal, src_rel, sha256_file(root / src_rel)))
+
+
+# --------------------------------------------------------------------------- #
+# Destination mapping (the pool _static conventions)                           #
+# --------------------------------------------------------------------------- #
+def plan_destination(src_rel: str, consumers) -> str:
+    """Map a mirror asset path to its pool destination.
+
+    Conventions (PLAN.md, M2): ``_static/<slug>/`` for single-consumer assets
+    owned by that lecture; ``_static/_shared/`` for assets referenced by two
+    or more pool lectures, for ``lecture_specific/<dir>/`` family dirs whose
+    name is not the consuming slug (cross-lecture by construction), and for
+    ``_admonition/`` includes (multi-lecture by construction).
+    """
+    if src_rel.startswith("_admonition/"):
+        return "_static/_shared/" + src_rel
+    shared = len(consumers) >= 2
+    if src_rel.startswith("_static/lecture_specific/"):
+        rest = src_rel[len("_static/lecture_specific/") :]
+        dirname, _, tail = rest.partition("/")
+        if tail:
+            if shared or any(slug != dirname for slug in consumers):
+                return f"_static/_shared/{dirname}/{tail}"
+            return f"_static/{dirname}/{tail}"
+    if src_rel.startswith("_static/"):
+        rest = src_rel[len("_static/") :]
+        if shared:
+            return f"_static/_shared/{rest}"
+        (only,) = tuple(consumers)
+        if rest.startswith(only + "/"):
+            return src_rel  # already in new-style _static/<slug>/ form
+        return f"_static/{only}/{rest}"
+    # Outside _static entirely (e.g. datasets/): keep the relative shape.
+    if shared:
+        return f"_static/_shared/{src_rel}"
+    (only,) = tuple(consumers)
+    return f"_static/{only}/{src_rel}"
+
+
+def check_admonition_identity(src_rel: str, considered):
+    """Rule 4 guard: an ``_admonition/`` include merges into ``_shared`` only
+    if every non-excluded series that carries the file agrees byte-for-byte."""
+    digests = {}
+    for series in considered:
+        f = mirror_lectures(series) / src_rel
+        if f.is_file():
+            digests[series] = sha256_file(f)
+    if len(set(digests.values())) > 1:
+        detail = ", ".join(f"{s}:{d[:12]}" for s, d in digests.items())
+        raise PromoteError(
+            f"{src_rel} differs across series ({detail}) — cannot merge into "
+            "_static/_shared/; reconcile upstream first"
+        )
+
+
+def build_rewrites(plan: Plan, text: str, dest_map):
+    """Derive the ordered literal replacements and the transformed pool text.
+
+    Replacements are applied longest-``from`` first so a root-relative form
+    (``/_static/...``) can never be corrupted by its embedded file-relative
+    substring, then each is verified to (a) still occur when its turn comes
+    and (b) not be re-matchable inside an earlier replacement's output. The
+    recorded order IS the application order, and each pair is a SINGLE
+    non-rescanning ``str.replace`` pass — a ``from`` embedded in its own
+    ``to`` (the common ``_admonition/gpu.md`` include rewrite) is therefore
+    legal and correct, but any replayer MUST NOT apply the list iteratively
+    to a fixpoint or via rescanning substitution (see LEDGER_HEADER).
+    """
+    pairs = {}
+    for kind, literal, src_rel, digest in plan.refs:
+        dest = dest_map[(src_rel, digest)]
+        if literal != dest:
+            if literal in pairs and pairs[literal] != dest:
+                raise PromoteError(
+                    f"conflicting rewrites for literal {literal!r}: "
+                    f"{pairs[literal]!r} vs {dest!r}"
+                )
+            pairs[literal] = dest
+    ordered = sorted(pairs.items(), key=lambda kv: (-len(kv[0]), kv[0]))
+    for i, (_, to_i) in enumerate(ordered):
+        for frm_j, _ in ordered[i + 1 :]:
+            if frm_j in to_i:
+                raise PromoteError(
+                    f"rewrite ordering hazard: later from {frm_j!r} occurs "
+                    f"inside earlier to {to_i!r} — refusing to promote"
+                )
+    out = text
+    for frm, to in ordered:
+        if frm not in out:
+            raise PromoteError(
+                f"rewrite from {frm!r} no longer matches after earlier "
+                "replacements — refusing to promote"
+            )
+        out = out.replace(frm, to)
+    plan.rewrites = ordered
+    plan.pool_text = out
+
+
+# --------------------------------------------------------------------------- #
+# Target selection                                                             #
+# --------------------------------------------------------------------------- #
+def toc_slugs(series: str):
+    """Every ``file:`` entry (plus the root) of a series' _toc.yml, in order."""
+    path = mirror_lectures(series) / "_toc.yml"
+    if not path.is_file():
+        raise SystemExit(
+            f"error: {path} not found — run `tools/sync {series}` first."
+        )
+    data = load_yaml(path) or {}
+    slugs = []
+
+    def walk(node):
+        if isinstance(node, dict):
+            f = node.get("file")
+            if isinstance(f, str):
+                slugs.append(slug_of(f))
+            for key in ("parts", "chapters", "sections"):
+                walk(node.get(key))
+        elif isinstance(node, list):
+            for item in node:
+                walk(item)
+
+    root = data.get("root")
+    if isinstance(root, str):
+        slugs.append(slug_of(root))
+    walk(data)
+    ordered, seen = [], set()
+    for s in slugs:
+        if s not in seen:
+            seen.add(s)
+            ordered.append(s)
+    return ordered
+
+
+def refresh_targets(ledger_lectures, state, considered):
+    """Ledger entries whose canonical series pin moved since promotion.
+
+    Design note: refresh deliberately re-anchors each entry on its RECORDED
+    canonical series (``requested=canonical``), not on a fresh priority
+    resolution — refresh tracks the canonical copy's movement, so the entry's
+    identity stays stable even when a higher-priority series' copy has since
+    diverged. Only the canonical pin is watched (per the refresh spec);
+    ``sources``/``divergent`` provenance is as of each entry's last promotion.
+    """
+    targets, skipped = [], []
+    for key in sorted(ledger_lectures):
+        entry = ledger_lectures[key]
+        slug = slug_of(posixpath.basename(key))
+        canonical = entry.get("canonical")
+        if canonical not in considered:
+            skipped.append((slug, f"canonical series '{canonical}' is excluded"))
+            continue
+        pinned = (entry.get("promoted_at") or {}).get(canonical)
+        current = (state.get(canonical) or {}).get("sha") or ""
+        if pinned != current:
+            targets.append((slug, canonical))
+    return targets, skipped
+
+
+# --------------------------------------------------------------------------- #
+# CLI                                                                          #
+# --------------------------------------------------------------------------- #
+def build_parser():
+    parser = argparse.ArgumentParser(
+        prog="tools/promote",
+        description=(
+            "Promote lectures from mirror/<series>/lectures/ into the "
+            "lectures/ pool with their asset closures, recording provenance "
+            "and every rewrite in sync/ledger.yml."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="Series keys are defined in sync/manifest.yml; jax is always excluded.",
+    )
+    parser.add_argument(
+        "slugs",
+        nargs="*",
+        metavar="SLUG",
+        help="lecture slugs to promote (source resolved per-lecture).",
+    )
+    parser.add_argument(
+        "--toc",
+        metavar="SERIES",
+        help="promote every lecture in mirror/SERIES/lectures/_toc.yml.",
+    )
+    parser.add_argument(
+        "--refresh",
+        action="store_true",
+        help="re-promote pool files whose canonical series pin moved.",
+    )
+    parser.add_argument(
+        "--exclude",
+        nargs="+",
+        metavar="SERIES",
+        default=[],
+        help="series excluded from source/dedup consideration "
+        "(jax is always excluded).",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="print the full plan without writing anything.",
+    )
+    return parser
+
+
+def main(argv=None):
+    argv = list(sys.argv[1:] if argv is None else argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
+
+    modes = [bool(args.slugs), bool(args.toc), args.refresh]
+    if sum(modes) != 1:
+        parser.error("choose exactly one of: SLUG..., --toc SERIES, --refresh")
+
+    order = load_manifest_order()
+    excluded = set(ALWAYS_EXCLUDED) | set(args.exclude)
+    unknown = [s for s in args.exclude if s not in order]
+    if unknown:
+        parser.error(
+            "unknown series in --exclude: "
+            + ", ".join(unknown)
+            + "\nvalid keys: "
+            + ", ".join(order)
+        )
+    considered = [s for s in order if s not in excluded]
+    if not considered:
+        parser.error("every series is excluded — nothing can be promoted.")
+    if args.toc and args.toc not in order:
+        parser.error(f"unknown series '{args.toc}' (valid: {', '.join(order)})")
+    if args.toc and args.toc in excluded:
+        parser.error(f"series '{args.toc}' is excluded from consideration.")
+
+    # Dedup hashes across every considered series, so all their mirrors must
+    # exist — a missing mirror would silently change canonical decisions.
+    missing = [s for s in considered if not mirror_lectures(s).is_dir()]
+    if missing:
+        sys.stderr.write(
+            "error: mirror missing for: "
+            + ", ".join(missing)
+            + "\n       Run `tools/sync "
+            + " ".join(missing)
+            + "` first (dedup must see every non-excluded series).\n"
+        )
+        return 1
+
+    state = load_state()
+    for s in considered:
+        if not ((state.get(s) or {}).get("sha") or ""):
+            sys.stderr.write(
+                f"error: no pinned SHA for '{s}' in {STATE_PATH.name} — "
+                "promotion records pins; run `tools/sync --update` first.\n"
+            )
+            return 1
+
+    ledger_lectures, ledger_assets = load_ledger()
+
+    # ------------------------------------------------------------------ #
+    # Target selection                                                    #
+    # ------------------------------------------------------------------ #
+    skips = []  # (slug, reason)
+    if args.refresh:
+        targets, refresh_skips = refresh_targets(ledger_lectures, state, considered)
+        skips.extend(refresh_skips)
+        if not targets and not refresh_skips:
+            print("nothing to refresh — every canonical pin matches its ledger entry.")
+            return 0
+    elif args.toc:
+        targets = [(slug, args.toc) for slug in toc_slugs(args.toc)]
+    else:
+        targets = [(slug_of(s), None) for s in args.slugs]
+
+    plans, seen_slugs = [], set()
+    for slug, requested in targets:
+        if slug in seen_slugs:
+            continue
+        seen_slugs.add(slug)
+        if posixpath.basename(slug) in PRODUCT_PAGES:
+            # Product pages are never pool content. Encountered via --toc
+            # they are expected and skipped (the spec's rule); named
+            # EXPLICITLY they are refused as an error — an operator asking
+            # for one must not get a silent success.
+            reason = (
+                "product page (per-series boilerplate) — becomes a "
+                "products/<key>/ page in M3, not pool content"
+            )
+            if args.toc:
+                skips.append((slug, reason))
+            else:
+                plan = Plan(slug, requested)
+                plan.error = f"refusing to promote a {reason}"
+                plans.append(plan)
+            continue
+        plans.append(Plan(slug, requested))
+
+    # ------------------------------------------------------------------ #
+    # Phase 1 — resolve sources and parse closures (per-lecture errors    #
+    # are recorded and never abort the rest of the batch).                #
+    # ------------------------------------------------------------------ #
+    texts = {}
+    for plan in plans:
+        if plan.error is not None:
+            continue
+        try:
+            text = resolve_sources(plan, considered)
+            collect_refs(plan, text)
+            texts[plan.slug] = text
+        except PromoteError as exc:
+            plan.error = str(exc)
+        except Exception as exc:  # never let one lecture abort the rest
+            plan.error = f"unexpected: {exc}"
+
+    ok = [p for p in plans if p.error is None]
+
+    # ------------------------------------------------------------------ #
+    # Phases 2–4 — consumer counts, destination decisions, asset bytes,   #
+    # collision checks, and rewrites. Destination decisions depend on     #
+    # which plans SURVIVE, so the phases iterate to a fixed point: after  #
+    # every cull, consumers and destinations are re-derived from the      #
+    # surviving batch only. The pool layout therefore never counts a      #
+    # failed plan (or a re-promoted lecture's stale old closure) as a     #
+    # consumer. Culled plans keep their first error; none are revived.    #
+    # ------------------------------------------------------------------ #
+    # Asset identity is (src_rel, digest), NOT the path alone: two series can
+    # carry same-named but byte-different files, and keying by path would
+    # conflate them into phantom shared consumers and unresolvable collisions.
+    src_to_pool = {}  # (src_rel, digest) -> pool path already in the ledger
+    for pool_path, meta in ledger_assets.items():
+        digest = ledger_asset_digest(pool_path, meta)
+        for src in meta.get("sources") or []:
+            src_to_pool.setdefault((src.get("path"), digest), pool_path)
+
+    while True:
+        replanned = {p.slug for p in ok}
+        consumers = {}  # (src_rel, digest) -> set of consuming slugs
+        for plan in ok:
+            for _, _, src_rel, digest in plan.refs:
+                consumers.setdefault((src_rel, digest), set()).add(plan.slug)
+        kept_consumers = {}  # pool path -> ledger slugs NOT being re-promoted
+        for key, entry in ledger_lectures.items():
+            slug = slug_of(posixpath.basename(key))
+            if slug in replanned:
+                # This batch replaces the entry, so its OLD closure must not
+                # count — a dropped reference would otherwise linger as a
+                # phantom consumer and misplace single-consumer assets.
+                continue
+            for pool_path in entry.get("assets") or []:
+                kept_consumers.setdefault(pool_path, set()).add(slug)
+                meta = ledger_assets.get(pool_path) or {}
+                digest = ledger_asset_digest(pool_path, meta)
+                for src in meta.get("sources") or []:
+                    consumers.setdefault((src.get("path"), digest), set()).add(slug)
+
+        dest_map = {}
+        for (src_rel, digest), cons in consumers.items():
+            dest_map[(src_rel, digest)] = plan_destination(src_rel, sorted(cons))
+
+        # A previously promoted asset whose destination decision has now
+        # changed (a second consumer arrived, so it belongs in _shared/)
+        # cannot move unless every lecture referencing the old location is
+        # in this batch.
+        for plan in ok:
+            for _, _, src_rel, digest in plan.refs:
+                old = src_to_pool.get((src_rel, digest))
+                new = dest_map[(src_rel, digest)]
+                if old and old != new and kept_consumers.get(old):
+                    plan.error = (
+                        f"asset {src_rel} is recorded at {old} but now maps to "
+                        f"{new} — re-promote its other consumer(s) "
+                        f"({', '.join(sorted(kept_consumers[old]))}) in the same batch"
+                    )
+                    break
+        if any(p.error is not None for p in ok):
+            ok = [p for p in ok if p.error is None]
+            continue
+
+        # Asset bytes, identity checks, and collision detection. Every
+        # source path contributing the same bytes to a destination is kept
+        # (``src_rels``) so the ledger records the full dedup provenance.
+        planned = {}  # dest -> {digest, src_rel(s), series, path (source)}
+        for plan in ok:
+            try:
+                for _, _, src_rel, digest in plan.refs:
+                    if src_rel.startswith("_admonition/"):
+                        check_admonition_identity(src_rel, considered)
+                    dest = dest_map[(src_rel, digest)]
+                    src_file = mirror_lectures(plan.canonical) / src_rel
+                    prior = planned.get(dest)
+                    if prior and prior["digest"] != digest:
+                        raise PromoteError(
+                            f"asset destination collision at {dest}: "
+                            f"{plan.canonical}:{src_rel} differs from "
+                            f"{prior['series']}:{prior['src_rel']}"
+                        )
+                    if prior:
+                        prior["src_rels"].add(src_rel)
+                    else:
+                        planned[dest] = {
+                            "digest": digest,
+                            "src_rel": src_rel,
+                            "src_rels": {src_rel},
+                            "series": plan.canonical,
+                            "path": src_file,
+                        }
+            except PromoteError as exc:
+                plan.error = str(exc)
+                # Stop at the first failure: later plans could otherwise
+                # inherit spurious collisions against this plan's stale
+                # ``planned`` records — the restart re-evaluates them cleanly.
+                break
+        if any(p.error is not None for p in ok):
+            ok = [p for p in ok if p.error is None]
+            continue
+
+        # Existing pool bytes may only change under a recorded re-promotion:
+        # a differing file that is still referenced by lectures OUTSIDE the
+        # batch, or that has NO ledger record at all (hand-dropped, or
+        # orphaned by a crash), is a hard error — never silently clobbered.
+        blocked = {}
+        for dest, rec in planned.items():
+            target = POOL_DIR / dest
+            if target.is_file() and sha256_file(target) != rec["digest"]:
+                kept = kept_consumers.get(dest)
+                if kept:
+                    blocked[dest] = (
+                        "referenced by lectures outside this batch: "
+                        + ", ".join(sorted(kept))
+                    )
+                elif dest not in ledger_assets:
+                    blocked[dest] = "not recorded in the ledger"
+        for plan in ok:
+            hits = sorted(
+                {dest_map[(r[2], r[3])] for r in plan.refs if dest_map[(r[2], r[3])] in blocked}
+            )
+            if hits:
+                plan.error = (
+                    "pool asset(s) exist with different bytes and may not be "
+                    "overwritten — reconcile deliberately: "
+                    + "; ".join(f"{d} ({blocked[d]})" for d in hits)
+                )
+        if any(p.error is not None for p in ok):
+            ok = [p for p in ok if p.error is None]
+            continue
+
+        # Rewrites and pool text (destination-dependent, so inside the loop).
+        for plan in ok:
+            try:
+                build_rewrites(plan, texts[plan.slug], dest_map)
+                plan.assets = sorted({dest_map[(r[2], r[3])] for r in plan.refs})
+                pool_file = POOL_DIR / f"{plan.slug}.md"
+                key = f"lectures/{plan.slug}.md"
+                if (
+                    pool_file.is_file()
+                    and key not in ledger_lectures
+                    and pool_file.read_bytes() != plan.pool_text.encode("utf-8")
+                ):
+                    raise PromoteError(
+                        f"lectures/{plan.slug}.md already exists with different "
+                        "bytes but has no ledger entry — refusing to overwrite an "
+                        "unrecorded pool file"
+                    )
+            except PromoteError as exc:
+                plan.error = str(exc)
+        if any(p.error is not None for p in ok):
+            ok = [p for p in ok if p.error is None]
+            continue
+
+        break  # a full pass with no culls: the plan set is stable
+
+    def asset_provenance(dest):
+        """Sources for a pool asset: every considered series whose copy at ANY
+        of the contributing relative paths is byte-identical to the promoted
+        bytes. Multiple paths per destination arise when different written
+        forms normalise to the same pool file (same-bytes dedup) — each is
+        recorded so the drift-check watches every upstream copy."""
+        rec = planned[dest]
+        sources = []
+        for series in considered:
+            for src_rel in sorted(rec["src_rels"]):
+                f = mirror_lectures(series) / src_rel
+                if f.is_file() and sha256_file(f) == rec["digest"]:
+                    sources.append({"series": series, "path": src_rel})
+        return {
+            "canonical": sources[0]["series"],
+            "digest": rec["digest"],
+            "sources": sources,
+        }
+
+    new_lectures = dict(ledger_lectures)
+    new_assets = dict(ledger_assets)
+    for plan in ok:
+        pin_series = plan.sources + [s for s in plan.divergent if s not in plan.sources]
+        promoted_at = {
+            s: (state.get(s) or {}).get("sha") or ""
+            for s in order
+            if s in pin_series
+        }
+        new_lectures[f"lectures/{plan.slug}.md"] = ordered_entry(
+            canonical=plan.canonical,
+            interim=bool(plan.divergent),
+            sources=[
+                {"series": s, "path": f"{plan.slug}.md", "digest": plan.digests[s]}
+                for s in plan.sources
+            ],
+            divergent=[
+                {"series": s, "path": f"{plan.slug}.md", "digest": plan.digests[s]}
+                for s in order
+                if s in plan.divergent
+            ],
+            promoted_at=promoted_at,
+            assets=plan.assets,
+            rewrites=[{"from": f, "to": t} for f, t in plan.rewrites],
+        )
+        for dest in plan.assets:
+            new_assets[dest] = asset_provenance(dest)
+
+    # Prune assets no longer referenced by any ledger entry (a re-promotion
+    # may have moved them), so the pool never accretes dead weight.
+    referenced = set()
+    for entry in new_lectures.values():
+        referenced.update(entry.get("assets") or [])
+    stale = [k for k in new_assets if k not in referenced]
+    for k in stale:
+        del new_assets[k]
+
+    # ------------------------------------------------------------------ #
+    # Phase 5 — report the plan; write unless --dry-run.                  #
+    # ------------------------------------------------------------------ #
+    for slug, reason in skips:
+        print(f"[{slug}] SKIP: {reason}")
+    for plan in plans:
+        for warning in plan.warnings:
+            print(f"[{plan.slug}] WARN: {warning}")
+        if plan.error is not None:
+            sys.stderr.write(f"[{plan.slug}] FAILED: {plan.error}\n")
+
+    unchanged = []  # ok plans whose pool text was already byte-identical
+    if args.dry_run:
+        for plan in ok:
+            line = f"[{plan.slug}] plan: canonical={plan.canonical} sources={plan.sources}"
+            if plan.divergent:
+                line += f" divergent={plan.divergent} (interim)"
+            print(line)
+            for _, _, src_rel, digest in sorted(set(plan.refs), key=lambda r: (r[2], r[0], r[1])):
+                dest = dest_map[(src_rel, digest)]
+                cons = sorted(consumers[(src_rel, digest)])
+                note = f"  [consumers: {', '.join(cons)}]" if len(cons) > 1 else ""
+                print(f"[{plan.slug}]   asset: {src_rel} -> {dest}{note}")
+            for frm, to in plan.rewrites:
+                print(f"[{plan.slug}]   rewrite: {frm!r} -> {to!r}")
+        for k in stale:
+            print(f"[ledger] would prune stale asset: {k}")
+    else:
+        written_assets = set()
+        for plan in ok:
+            pool_file = POOL_DIR / f"{plan.slug}.md"
+            changed = (
+                not pool_file.is_file()
+                or pool_file.read_bytes() != plan.pool_text.encode("utf-8")
+            )
+            if changed:
+                atomic_write(pool_file, plan.pool_text.encode("utf-8"))
+            else:
+                unchanged.append(plan.slug)
+            for dest in plan.assets:
+                if dest in written_assets:
+                    continue
+                written_assets.add(dest)
+                target = POOL_DIR / dest
+                rec = planned[dest]
+                if not target.is_file() or sha256_file(target) != rec["digest"]:
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    tmp = tmp_sibling(target)
+                    try:
+                        shutil.copyfile(rec["path"], tmp)
+                        os.replace(tmp, target)
+                    finally:
+                        tmp.unlink(missing_ok=True)
+            state_word = "promoted" if changed else "unchanged"
+            print(
+                f"[{plan.slug}] {state_word} -> lectures/{plan.slug}.md "
+                f"(canonical {plan.canonical}, {len(plan.assets)} assets, "
+                f"{len(plan.rewrites)} rewrites"
+                + (", interim: divergent copies pending triage" if plan.divergent else "")
+                + ")"
+            )
+        # The ledger is written BEFORE stale assets are unlinked: a crash in
+        # between leaves orphaned pool files (loudly refused if ever
+        # recontested) rather than a ledger referencing files that no longer
+        # exist. Pool writes above precede the ledger for the same reason.
+        if ok or stale:
+            body = dump_ledger(new_lectures, new_assets)
+            if not LEDGER_PATH.exists() or LEDGER_PATH.read_bytes() != body.encode("utf-8"):
+                atomic_write(LEDGER_PATH, body.encode("utf-8"))
+        for k in stale:
+            target = POOL_DIR / k
+            if target.is_file():
+                target.unlink()
+                parent = target.parent
+                while parent != POOL_DIR and not any(parent.iterdir()):
+                    parent.rmdir()
+                    parent = parent.parent
+            print(f"[ledger] pruned stale asset: {k}")
+
+    # ----------------------------------------------------------------------- #
+    # Summary                                                                  #
+    # ----------------------------------------------------------------------- #
+    failed = [p.slug for p in plans if p.error is not None]
+    promoted = [p.slug for p in ok]
+
+    print("\n" + "─" * 60)
+    mode = (
+        "refresh"
+        if args.refresh
+        else (f"toc {args.toc}" if args.toc else "promote")
+    )
+    if args.dry_run:
+        mode += ", dry-run"
+    print(
+        f"summary [{mode}]: {len(promoted) - len(unchanged)} promoted, "
+        f"{len(unchanged)} unchanged, {len(skips)} skipped, {len(failed)} failed"
+    )
+    if promoted:
+        print("  PASS: " + ", ".join(promoted))
+    if skips:
+        print("  SKIP: " + ", ".join(s for s, _ in skips))
+    if failed:
+        print("  FAIL: " + ", ".join(failed))
+    print("─" * 60)
+
+    return 1 if failed else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
