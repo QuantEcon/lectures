@@ -9,7 +9,8 @@
 # uses the defaults below.
 #
 # Series are ordered by curriculum progression: intro -> programming ->
-# intermediate -> advanced -> dp -> jax.
+# intermediate -> advanced -> dp -> jax. (dp-test is a temporary test double,
+# not part of the progression.)
 
 defaults:
   branch: main
@@ -28,5 +29,11 @@ series:
     repo: QuantEcon/lecture-python-advanced.myst
   dp:
     repo: QuantEcon/lecture-dp
+  # TEST DOUBLE (M2 development only): a disposable public copy of lecture-dp
+  # that we deliberately edit to exercise promotion/drift tooling — the live
+  # repos stay read-only. Excluded from canonical-home consideration when the
+  # real dp set is promoted; removed at the M3 switch-over. See its README.
+  dp-test:
+    repo: QuantEcon/lecture-dp.monorepo
   jax:
     repo: QuantEcon/lecture-jax

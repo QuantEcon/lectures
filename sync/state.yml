@@ -16,6 +16,9 @@ advanced:
 dp:
   sha: 0a12f79cb4fa924f130adc6a4a591208a6bbc3a4
   synced_at: '2026-07-08T11:16:45Z'
+dp-test:
+  sha: 1fe6c64a850daf59823ae3ac9cf69d41fa360287
+  synced_at: '2026-07-09T03:59:51Z'
 jax:
   sha: 35c4fd1a97fdb68ab0898369c609d06f2a6b0ea8
   synced_at: '2026-07-08T11:16:45Z'
