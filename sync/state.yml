@@ -2,8 +2,8 @@
 # Machine state: the exact commit each series is pinned to.
 # Refresh with `tools/sync --update` (or `--update --pin-only` in CI).
 intro:
-  sha: 6669b7bff0a8c04acfdd993a726702fa3cd29fcc
-  synced_at: '2026-07-08T11:16:41Z'
+  sha: 29000a444f1ab49ea2a268ab320a96d4f2a30c12
+  synced_at: '2026-07-09T07:31:23Z'
 programming:
   sha: d37b1d8adbf6e18b17e125cca761a6eb2ccd9041
   synced_at: '2026-07-08T11:16:42Z'
@@ -14,11 +14,11 @@ advanced:
   sha: 71f2bf77c24109cc6513b868e71732a94818e8bc
   synced_at: '2026-07-08T11:16:44Z'
 dp:
-  sha: 0a12f79cb4fa924f130adc6a4a591208a6bbc3a4
-  synced_at: '2026-07-08T11:16:45Z'
+  sha: 85272e82b7e9bff5f40b91f5e30a2e8df8d54fb0
+  synced_at: '2026-07-09T07:31:24Z'
 dp-test:
   sha: 1fe6c64a850daf59823ae3ac9cf69d41fa360287
   synced_at: '2026-07-09T03:59:51Z'
 jax:
-  sha: 35c4fd1a97fdb68ab0898369c609d06f2a6b0ea8
-  synced_at: '2026-07-08T11:16:45Z'
+  sha: be37bf334deeedaa47e4ba3f226ddfa3ef75a13a
+  synced_at: '2026-07-09T07:31:25Z'
