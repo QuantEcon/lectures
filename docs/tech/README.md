@@ -14,7 +14,7 @@ Three parts, all required.
 
 | Part | Rule |
 |---|---|
-| **What it is** | One paragraph and a link. Include current project health — release cadence, last activity — so a future reader can tell a considered decline from a dead-technology decline |
+| **What it is** | What the option is, and a link, plus current project health — release cadence, last activity — so a future reader can tell a considered decline from a dead-technology decline. Two or three short paragraphs at most; if the option has an obvious current alternative, name it here |
 | **Where it would apply** | **Named files.** Never "the lectures", never "our docs". If you cannot name a file, the entry is not ready |
 | **Decision** | The call, the date, who made it, and the reason. Required whenever `state` is `adopted`, `declined` or `superseded` |
 
@@ -41,6 +41,8 @@ Add one if none fits.
 ## Adding an entry
 
 One file per technology in `entries/`, named for the technology. Copy the frontmatter block below, write the three sections, then add a row to [index.md](index.md).
+
+The index's **Applies to** column names the primary file or files, repo-qualified — it is a pointer, not the full list, and the entry itself carries every site. The same rule applies as in the entry: name files, not areas. An index row that reads "the pandas lectures" tells a reader nothing they could act on.
 
 ```yaml
 ---
