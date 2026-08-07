@@ -34,7 +34,7 @@ The middle row is the one that carries the value. It is also the one that is eas
 
 ## Categories
 
-`authoring` · `plotting` · `notebooks` · `execution` · `environments` · `publishing` · `tooling` · `ai`
+`authoring` · `plotting` · `notebooks` · `execution` · `environments` · `publishing` · `tooling` · `community` · `ai`
 
 Add one if none fits.
 
