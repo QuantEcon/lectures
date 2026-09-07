@@ -37,8 +37,11 @@ Usage
                                            # current pin as the watched baseline
 
 Exit status: 0 clean (info only), 1 drift or refresh findings, 2 violations or
-an error. ``--issues`` never touches pool files; the only file this script
-writes is ``sync/toc.yml`` under ``--accept-toc``.
+an error. The script never writes to the pool or the mirror. The only
+repository file it writes is ``sync/toc.yml``, under ``--accept-toc``;
+``--json PATH`` writes the report wherever PATH points, and under GitHub
+Actions it appends step outputs to ``$GITHUB_OUTPUT``. ``--issues`` writes to
+GitHub, not to the checkout.
 
 The toc watch: a series' ``_toc.yml`` is watched once it has been accepted
 (``sync/toc.yml`` records the digest and the pin it was taken at). Accept a
@@ -213,7 +216,7 @@ def series_in_ledger(ledger_lectures, ledger_assets, toc_state):
     return seen
 
 
-def check_lecture(key: str, entry: dict, findings: list):
+def check_lecture(key: str, entry: dict, manifest: dict, findings: list):
     canonical = entry.get("canonical")
     sources = entry.get("sources") or []
     divergent = entry.get("divergent") or []
@@ -252,7 +255,33 @@ def check_lecture(key: str, entry: dict, findings: list):
         rewritten = None
 
     if canonical_moved:
+        # The pool copy should still equal rewrites(canonical AS OF PROMOTION).
+        # The ledger holds only that copy's digest, so fetch the bytes at the
+        # recorded pin: a direct pool edit must not hide behind upstream
+        # movement. (A pool digest in the ledger would make this offline —
+        # a promote change, noted on the work item.)
+        pin = (entry.get("promoted_at") or {}).get(canonical) or ""
+        repo = ((manifest.get(canonical) or {}).get("repo")) or ""
+        base = fetch_at_pin(repo, pin, "lectures/" + can_src["path"])
         already = rewritten == pool_bytes
+        if base is not None and sha256_bytes(base) == can_src.get("digest"):
+            try:
+                expected = apply_rewrites(base.decode("utf-8"), rewrites).encode("utf-8")
+            except UnicodeDecodeError:
+                expected = None
+            if expected != pool_bytes and not already:
+                findings.append(Finding(
+                    "violation", "pool-edited", key,
+                    f"{key} does not equal rewrites({canonical}/lectures/{can_src['path']} at promotion {pin[:12]}) — the pool copy was edited directly",
+                    detail="Fixes go to the live repo and flow down (upstream-first). Revert the pool edit, or make it upstream and refresh.",
+                    diff=unified_diff(expected or b"", pool_bytes, f"rewrites({canonical}/{can_src['path']}@{pin[:12]})", key),
+                ))
+        elif not already:
+            findings.append(Finding(
+                "info", "pool-unverified", key,
+                f"{key}: could not fetch the canonical copy at its promotion pin {pin[:12]}, so the pool copy is unverified until the refresh",
+                data={"series": canonical, "path": can_src["path"], "pin": pin},
+            ))
         findings.append(Finding(
             "refresh", "canonical-moved", key,
             f"{key}: canonical copy in {canonical} changed upstream"
@@ -369,17 +398,19 @@ def check_asset(pool_rel: str, meta: dict, findings: list):
     can_digest = sha256_bytes(can_bytes)
     canonical_moved = can_digest != recorded
 
+    # The ledger records the pool asset's own digest, so a direct edit is
+    # detectable whether or not the canonical asset also moved.
+    if pool_digest != recorded:
+        findings.append(Finding(
+            "violation", "asset-edited", pool_rel,
+            f"lectures/{pool_rel} differs from its recorded digest — the pool asset was edited directly",
+            diff=unified_diff(can_bytes, pool_bytes, f"{canonical}/lectures/{can_src['path']}", f"lectures/{pool_rel}"),
+        ))
     if canonical_moved:
         findings.append(Finding(
             "refresh", "asset-moved", pool_rel,
             f"lectures/{pool_rel}: canonical asset in {canonical} changed upstream",
             data={"series": canonical, "path": can_src["path"]},
-        ))
-    elif pool_digest != recorded:
-        findings.append(Finding(
-            "violation", "asset-edited", pool_rel,
-            f"lectures/{pool_rel} differs from its recorded digest — the pool asset was edited directly",
-            diff=unified_diff(can_bytes, pool_bytes, f"{canonical}/lectures/{can_src['path']}", f"lectures/{pool_rel}"),
         ))
 
     for s in sources:
@@ -413,15 +444,22 @@ def check_asset(pool_rel: str, meta: dict, findings: list):
         ))
 
 
-def fetch_baseline_toc(repo: str, sha: str):
-    """The accepted toc's bytes, fetched from GitHub so the finding can carry
-    a diff. Best effort: None when offline or the blob is gone."""
-    url = f"https://raw.githubusercontent.com/{repo}/{sha}/lectures/_toc.yml"
+def fetch_at_pin(repo: str, sha: str, path: str):
+    """Bytes of ``path`` in ``repo`` at commit ``sha``, from GitHub. Best
+    effort: None when offline, the repo is unknown, or the blob is gone."""
+    if not (repo and sha):
+        return None
+    url = f"https://raw.githubusercontent.com/{repo}/{sha}/{path}"
     try:
         with urllib.request.urlopen(url, timeout=20) as resp:
             return resp.read()
     except Exception:
         return None
+
+
+def fetch_baseline_toc(repo: str, sha: str):
+    """The accepted toc's bytes, so the finding can carry a diff."""
+    return fetch_at_pin(repo, sha, "lectures/_toc.yml")
 
 
 def check_tocs(toc_state: dict, manifest: dict, findings: list):
@@ -683,7 +721,7 @@ def main(argv=None):
 
         findings = []
         for key in sorted(ledger_lectures):
-            check_lecture(key, ledger_lectures[key], findings)
+            check_lecture(key, ledger_lectures[key], manifest, findings)
         for pool_rel in sorted(ledger_assets):
             check_asset(pool_rel, ledger_assets[pool_rel], findings)
         check_tocs(toc_state, manifest, findings)

@@ -85,7 +85,7 @@ A series' pin (and its timestamp) is only rewritten when the upstream `HEAD` has
 
 ## Running the drift-check
 
-[`tools/drift-check`](tools/drift-check) proves the pre-cutover invariant: every pool lecture equals its canonical mirror copy modulo the rewrites recorded in `sync/ledger.yml`, and every other series' copy is where the ledger last saw it. Like `tools/sync` it is a self-contained uv script. It reads the mirror and the pool and writes nothing — except `sync/toc.yml` under `--accept-toc`.
+[`tools/drift-check`](tools/drift-check) proves the pre-cutover invariant: every pool lecture equals its canonical mirror copy modulo the rewrites recorded in `sync/ledger.yml`, and every other series' copy is where the ledger last saw it. Like `tools/sync` it is a self-contained uv script. It never writes to the pool or the mirror: the only repository file it writes is `sync/toc.yml`, under `--accept-toc`; `--json` writes its report wherever you point it, and under GitHub Actions it appends step outputs.
 
 | Command | What it does |
 | --- | --- |
