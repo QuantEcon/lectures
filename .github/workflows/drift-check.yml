@@ -1,0 +1,153 @@
+name: drift-check
+
+# Prove the pool still equals its sources after every sync, and turn what it
+# finds into the right artefact:
+#
+#   * a pool file no longer equals rewrites(canonical)   -> this job goes RED
+#   * a non-canonical copy diverged, or a watched toc     -> a `drift` issue
+#     changed                                                (closes itself when
+#                                                            the finding clears)
+#   * the canonical copy moved upstream                   -> `promote --refresh`
+#                                                            on a branch, and a
+#                                                            pull request
+#
+# tools/drift-check does the comparison; see its docstring for the outcomes.
+# Runs after the `sync` workflow completes (so it sees the fresh pins), on
+# demand, and on pull requests that touch the pool, the ledger or the tools
+# (report only — no issues, no refresh PR).
+#
+# The refresh lands as a pull request rather than a push to main so a human
+# sees the ledger diff: a refresh can change which entries are `interim`.
+# PERMISSIONS: uses the default GITHUB_TOKEN. A PR opened with it does not
+# trigger this workflow's own pull_request run; once branch protection is on,
+# the push to `drift/refresh` still works (it is not a protected branch).
+
+on:
+  workflow_run:
+    workflows: [sync]
+    types: [completed]
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'lectures/**'
+      - 'sync/**'
+      - 'tools/**'
+      - '.github/workflows/drift-check.yml'
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: drift-check
+  cancel-in-progress: false
+
+env:
+  # M2 posture (PLAN.md): the real `dp` series is excluded from promotion while
+  # the `dp-test` sandbox stands in for it. Retired at the switch-over
+  # (QuantEcon/project-monorepo#24), when this becomes empty.
+  PROMOTE_EXCLUDE: dp
+
+jobs:
+  check:
+    # After a sync, only run when the sync itself succeeded.
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    outputs:
+      refresh_needed: ${{ steps.check.outputs.refresh_needed }}
+      violations: ${{ steps.check.outputs.violations }}
+      drift: ${{ steps.check.outputs.drift }}
+      refresh: ${{ steps.check.outputs.refresh }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # A workflow_run event carries the default branch's current commit,
+          # which already includes the pins the sync just pushed.
+          ref: ${{ github.event_name == 'workflow_run' && github.event.repository.default_branch || github.ref }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Reconstruct the mirror and check the pool against it
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set +e
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            uv run --script tools/drift-check --reconstruct --json drift-report.json --print-issues
+          else
+            uv run --script tools/drift-check --reconstruct --json drift-report.json --issues
+          fi
+          rc=$?
+          set -e
+          echo "drift-check exit status: $rc (0 clean, 1 findings handled below, 2 violation)"
+          test "$rc" -le 1
+
+      - name: Keep the report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: drift-report
+          path: drift-report.json
+          if-no-files-found: ignore
+
+  refresh:
+    needs: check
+    if: needs.check.outputs.refresh_needed == 'true' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Reconstruct every series (promotion dedups across all of them)
+        run: uv run --script tools/sync
+
+      - name: Refresh the pool entries whose canonical source moved
+        run: uv run --script tools/promote --refresh --exclude $PROMOTE_EXCLUDE
+
+      - name: Open or update the refresh pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name  'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add lectures sync/ledger.yml
+          if git diff --cached --quiet; then
+            echo 'promote --refresh changed nothing -- no pull request.'
+            exit 0
+          fi
+          before=$(git show HEAD:sync/ledger.yml | grep -c 'interim: true' || true)
+          after=$(grep -c 'interim: true' sync/ledger.yml || true)
+          n=$(git diff --cached --name-only -- lectures | grep -c '\.md$' || true)
+          git switch -c drift/refresh
+          git commit -m "promote: refresh $n pool lectures whose canonical source moved"
+          git push --force -u origin drift/refresh
+          {
+            echo "\`tools/drift-check\` found pool entries whose **canonical copy moved upstream**; \`tools/promote --refresh --exclude $PROMOTE_EXCLUDE\` re-promoted them. Review the ledger diff, not just the lecture text: a refresh re-resolves every source, so an entry whose other copies went stale can change shape."
+            echo
+            echo "| | before | after |"
+            echo "|---|---|---|"
+            echo "| \`interim: true\` ledger entries | $before | $after |"
+            echo "| lectures re-copied | | $n |"
+            echo
+            echo "Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}. The branch is force-pushed from \`${{ github.event.repository.default_branch }}\` on every run that still needs a refresh, so this PR always shows the current delta."
+            echo
+            echo '```'
+            git diff --cached --stat HEAD~1 | tail -n 40
+            echo '```'
+          } > pr-body.md
+          existing=$(gh pr list --head drift/refresh --state open --json number --jq '.[0].number')
+          if [ -n "$existing" ]; then
+            gh pr edit "$existing" --body-file pr-body.md
+            echo "updated PR #$existing"
+          else
+            gh pr create --head drift/refresh --title "promote: refresh $n pool lectures whose canonical source moved" --body-file pr-body.md
+          fi
