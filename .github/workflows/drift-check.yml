@@ -146,7 +146,7 @@ jobs:
           } > pr-body.md
           existing=$(gh pr list --head drift/refresh --state open --json number --jq '.[0].number')
           if [ -n "$existing" ]; then
-            gh pr edit "$existing" --body-file pr-body.md
+            gh pr edit "$existing" --title "promote: refresh $n pool lectures whose canonical source moved" --body-file pr-body.md
             echo "updated PR #$existing"
           else
             gh pr create --head drift/refresh --title "promote: refresh $n pool lectures whose canonical source moved" --body-file pr-body.md
