@@ -1,0 +1,784 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.9"
+# dependencies = ["pyyaml"]
+# ///
+"""tools/drift-check — prove the pool still matches its sources, and say how not.
+
+The pre-cutover invariant (PLAN.md M2): every pool lecture equals its CANONICAL
+mirror copy modulo the rewrites recorded in ``sync/ledger.yml``. The ledger
+also records, as of promotion, the digest of every other series' copy of the
+same lecture. This script compares all of that against the reconstructed
+``mirror/`` and sorts what it finds into four outcomes:
+
+* ``refresh`` — the canonical copy moved upstream. The pool copy is stale, not
+  wrong: ``tools/promote --refresh`` re-copies it. CI does this automatically
+  and opens a pull request.
+* ``drift``   — a NON-canonical copy (today: the dp copy of an advanced or
+  intermediate lecture) no longer matches its canonical home, or a copy was
+  removed upstream, or a watched ``_toc.yml`` changed. Each becomes a GitHub
+  issue (``--issues``) that closes itself when the finding clears.
+* ``violation`` — the POOL itself no longer equals rewrites(canonical), or a
+  pool asset changed: someone edited the pool directly, which the upstream-
+  first rule forbids. Exit code 2; a red run is the alarm.
+* ``info``    — nothing to act on now, but worth reading: a non-canonical copy
+  that is merely stale (canonical moved, the copy did not), an ``interim``
+  entry whose divergent copy moved again, or a divergence that converged.
+
+Usage
+-----
+    tools/drift-check                      # report against the existing mirror/
+    tools/drift-check --reconstruct        # rebuild mirror/ for the series the
+                                           # ledger references, then report
+    tools/drift-check --json PATH          # also write a machine-readable report
+    tools/drift-check --issues             # open/update/close `drift` issues
+                                           # on GitHub (needs `gh`, authenticated)
+    tools/drift-check --accept-toc SERIES  # record SERIES' _toc.yml at its
+                                           # current pin as the watched baseline
+
+Exit status: 0 clean (info only), 1 drift or refresh findings, 2 violations or
+an error. The script never writes to the pool or the mirror. The only
+repository file it writes is ``sync/toc.yml``, under ``--accept-toc``;
+``--json PATH`` writes the report wherever PATH points, and under GitHub
+Actions it appends step outputs to ``$GITHUB_OUTPUT``. ``--issues`` writes to
+GitHub, not to the checkout.
+
+The toc watch: a series' ``_toc.yml`` is watched once it has been accepted
+(``sync/toc.yml`` records the digest and the pin it was taken at). Accept a
+series when a product manifest is generated from its toc; until then a toc
+change is upstream's business, not the pool's.
+"""
+
+from __future__ import annotations
+
+import argparse
+import difflib
+import hashlib
+import json
+import os
+import shutil
+import subprocess
+import sys
+import urllib.request
+from datetime import datetime, timezone
+from pathlib import Path
+
+try:
+    import yaml
+except ImportError:  # pragma: no cover - dependency is declared in PEP-723 block
+    sys.stderr.write(
+        "error: PyYAML is required. Run this script via `uv run` (the shebang\n"
+        "       `#!/usr/bin/env -S uv run --script` handles the dependency), or\n"
+        "       install it with `pip install pyyaml`.\n"
+    )
+    sys.exit(2)
+
+ROOT = Path(__file__).resolve().parent.parent
+MIRROR_DIR = ROOT / "mirror"
+LEDGER_PATH = ROOT / "sync" / "ledger.yml"
+STATE_PATH = ROOT / "sync" / "state.yml"
+MANIFEST_PATH = ROOT / "sync" / "manifest.yml"
+TOC_STATE_PATH = ROOT / "sync" / "toc.yml"
+
+DRIFT_LABEL = "drift"
+DIFF_LINE_CAP = 300  # lines of unified diff kept in an issue body
+
+
+# --------------------------------------------------------------------------- #
+# Small helpers                                                                #
+# --------------------------------------------------------------------------- #
+class DriftError(Exception):
+    pass
+
+
+def now_iso() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def load_yaml(path: Path):
+    if not path.exists():
+        return {}
+    with open(path, "r", encoding="utf-8") as fh:
+        return yaml.safe_load(fh) or {}
+
+
+def sha256_bytes(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def read_bytes(path: Path):
+    """Bytes of ``path``, or None when it does not exist. Never normalises
+    newlines — the invariant is byte-for-byte."""
+    try:
+        return path.read_bytes()
+    except FileNotFoundError:
+        return None
+
+
+def apply_rewrites(text: str, rewrites) -> str:
+    """Replay the ledger's rewrites exactly as ``tools/promote`` applied them:
+    each pair is one non-rescanning ``str.replace`` pass, in order."""
+    for r in rewrites or []:
+        text = text.replace(r["from"], r["to"])
+    return text
+
+
+def is_text(data: bytes) -> bool:
+    if b"\x00" in data[:8192]:
+        return False
+    try:
+        data.decode("utf-8")
+    except UnicodeDecodeError:
+        return False
+    return True
+
+
+def unified_diff(a: bytes, b: bytes, a_name: str, b_name: str) -> str:
+    """A unified diff of two files, or a size note when either is binary."""
+    if not (is_text(a) and is_text(b)):
+        return f"binary files differ: {a_name} ({len(a)} bytes) vs {b_name} ({len(b)} bytes)\n"
+    a_lines = a.decode("utf-8").splitlines(keepends=True)
+    b_lines = b.decode("utf-8").splitlines(keepends=True)
+    notes = []
+    for name, lines in ((a_name, a_lines), (b_name, b_lines)):
+        if lines and not lines[-1].endswith("\n"):
+            lines[-1] += "\n"  # keep difflib's line structure intact
+            notes.append(f"\\ No newline at end of file: {name}\n")
+    out = "".join(difflib.unified_diff(a_lines, b_lines, fromfile=a_name, tofile=b_name))
+    return out + "".join(notes)
+
+
+def mirror_lectures(series: str) -> Path:
+    return MIRROR_DIR / series / "lectures"
+
+
+# --------------------------------------------------------------------------- #
+# Findings                                                                     #
+# --------------------------------------------------------------------------- #
+SEVERITY_ORDER = {"violation": 0, "drift": 1, "refresh": 2, "info": 3}
+
+
+class Finding:
+    """One observation. ``severity`` decides the exit code and the channel;
+    ``issue_title`` is the stable identity a GitHub issue is keyed on (drift
+    only); ``diff`` is optional and already capped by the caller."""
+
+    def __init__(self, severity, kind, subject, summary, detail="", diff=None, issue_title=None, data=None):
+        self.severity = severity
+        self.kind = kind
+        self.subject = subject
+        self.summary = summary
+        self.detail = detail
+        self.diff = diff
+        self.issue_title = issue_title
+        self.data = data or {}
+
+    def as_dict(self):
+        d = {
+            "severity": self.severity,
+            "kind": self.kind,
+            "subject": self.subject,
+            "summary": self.summary,
+        }
+        if self.detail:
+            d["detail"] = self.detail
+        if self.diff is not None:
+            d["diff"] = self.diff
+        if self.issue_title:
+            d["issue_title"] = self.issue_title
+        d.update(self.data)
+        return d
+
+
+# --------------------------------------------------------------------------- #
+# The checks                                                                   #
+# --------------------------------------------------------------------------- #
+def series_in_ledger(ledger_lectures, ledger_assets, toc_state):
+    """Every series whose mirror the checks read."""
+    seen = []
+
+    def add(s):
+        if s and s not in seen:
+            seen.append(s)
+
+    for entry in ledger_lectures.values():
+        add(entry.get("canonical"))
+        for s in entry.get("sources") or []:
+            add(s.get("series"))
+        for s in entry.get("divergent") or []:
+            add(s.get("series"))
+    for meta in ledger_assets.values():
+        add(meta.get("canonical"))
+        for s in meta.get("sources") or []:
+            add(s.get("series"))
+    for s in toc_state:
+        add(s)
+    return seen
+
+
+def check_lecture(key: str, entry: dict, manifest: dict, findings: list):
+    canonical = entry.get("canonical")
+    sources = entry.get("sources") or []
+    divergent = entry.get("divergent") or []
+    rewrites = entry.get("rewrites") or []
+    interim = bool(entry.get("interim"))
+
+    pool_path = ROOT / key
+    pool_bytes = read_bytes(pool_path)
+    if pool_bytes is None:
+        findings.append(Finding("violation", "pool-missing", key, f"{key} is in the ledger but not in the pool"))
+        return
+
+    can_src = next((s for s in sources if s.get("series") == canonical), None)
+    if can_src is None:
+        findings.append(Finding("violation", "ledger-malformed", key, f"{key}: no source entry for canonical series {canonical!r}"))
+        return
+
+    can_path = mirror_lectures(canonical) / can_src["path"]
+    can_bytes = read_bytes(can_path)
+    if can_bytes is None:
+        findings.append(Finding(
+            "drift", "canonical-removed", key,
+            f"{key}: canonical copy {canonical}/lectures/{can_src['path']} no longer exists upstream",
+            detail="The pool copy has no source to follow. Decide whether the lecture was retired, renamed or moved before the next refresh.",
+            issue_title=f"drift({canonical}): lectures/{can_src['path']} removed upstream",
+            data={"series": canonical, "path": can_src["path"]},
+        ))
+        return
+
+    can_digest = sha256_bytes(can_bytes)
+    canonical_moved = can_digest != can_src.get("digest")
+
+    try:
+        rewritten = apply_rewrites(can_bytes.decode("utf-8"), rewrites).encode("utf-8")
+    except UnicodeDecodeError:
+        rewritten = None
+
+    if canonical_moved:
+        # The pool copy should still equal rewrites(canonical AS OF PROMOTION).
+        # The ledger holds only that copy's digest, so fetch the bytes at the
+        # recorded pin: a direct pool edit must not hide behind upstream
+        # movement. (A pool digest in the ledger would make this offline —
+        # a promote change, noted on the work item.)
+        pin = (entry.get("promoted_at") or {}).get(canonical) or ""
+        repo = ((manifest.get(canonical) or {}).get("repo")) or ""
+        base = fetch_at_pin(repo, pin, "lectures/" + can_src["path"])
+        already = rewritten == pool_bytes
+        if base is not None and sha256_bytes(base) == can_src.get("digest"):
+            try:
+                expected = apply_rewrites(base.decode("utf-8"), rewrites).encode("utf-8")
+            except UnicodeDecodeError:
+                expected = None
+            if expected != pool_bytes and not already:
+                findings.append(Finding(
+                    "violation", "pool-edited", key,
+                    f"{key} does not equal rewrites({canonical}/lectures/{can_src['path']} at promotion {pin[:12]}) — the pool copy was edited directly",
+                    detail="Fixes go to the live repo and flow down (upstream-first). Revert the pool edit, or make it upstream and refresh.",
+                    diff=unified_diff(expected or b"", pool_bytes, f"rewrites({canonical}/{can_src['path']}@{pin[:12]})", key),
+                ))
+        elif not already:
+            findings.append(Finding(
+                "info", "pool-unverified", key,
+                f"{key}: could not fetch the canonical copy at its promotion pin {pin[:12]}, so the pool copy is unverified until the refresh",
+                data={"series": canonical, "path": can_src["path"], "pin": pin},
+            ))
+        findings.append(Finding(
+            "refresh", "canonical-moved", key,
+            f"{key}: canonical copy in {canonical} changed upstream"
+            + (" (pool already matches; ledger digest is stale)" if already else ""),
+            data={"series": canonical, "path": can_src["path"], "pool_matches_current": already},
+        ))
+    elif rewritten != pool_bytes:
+        findings.append(Finding(
+            "violation", "pool-edited", key,
+            f"{key} does not equal rewrites({canonical}/lectures/{can_src['path']}) — the pool copy was edited directly",
+            detail="Fixes go to the live repo and flow down (upstream-first). Revert the pool edit, or make it upstream and refresh.",
+            diff=unified_diff(rewritten or b"", pool_bytes, f"rewrites({canonical}/{can_src['path']})", key),
+        ))
+
+    # Non-canonical copies: did any of them stop matching their canonical home?
+    for s in sources:
+        series = s.get("series")
+        if series == canonical:
+            continue
+        p = mirror_lectures(series) / s["path"]
+        cur = read_bytes(p)
+        if cur is None:
+            findings.append(Finding(
+                "drift", "source-removed", key,
+                f"{key}: the {series} copy lectures/{s['path']} was removed upstream",
+                detail=f"{series} no longer carries this lecture; its product manifest will need a decision.",
+                issue_title=f"drift({series}): lectures/{s['path']} removed upstream",
+                data={"series": series, "path": s["path"]},
+            ))
+            continue
+        if sha256_bytes(cur) == s.get("digest"):
+            if canonical_moved:
+                findings.append(Finding(
+                    "info", "stale-copy", key,
+                    f"{key}: the {series} copy is unchanged while {canonical} moved — {series} is now stale",
+                    data={"series": series, "path": s["path"]},
+                ))
+            continue
+        if cur == can_bytes:
+            findings.append(Finding(
+                "info", "converged", key,
+                f"{key}: the {series} copy changed and now matches {canonical} exactly",
+                data={"series": series, "path": s["path"]},
+            ))
+            continue
+        findings.append(Finding(
+            "drift", "diverged", key,
+            f"{key}: the {series} copy lectures/{s['path']} no longer matches its canonical home in {canonical}",
+            detail=(
+                f"At promotion the {series} copy was byte-identical to {canonical}'s. It has since been edited "
+                f"on its own. Under the upstream-first rule the fix belongs in {canonical} (and flows down); "
+                f"if the edit is a deliberate variant, record it as one rather than leaving a silent fork."
+            ),
+            diff=unified_diff(can_bytes, cur, f"{canonical}/lectures/{can_src['path']}", f"{series}/lectures/{s['path']}"),
+            issue_title=f"drift({series}): lectures/{s['path']} differs from its canonical copy in {canonical}",
+            data={"series": series, "path": s["path"], "canonical": canonical},
+        ))
+
+    # Already-divergent copies (interim entries): did they move again, or converge?
+    for d in divergent:
+        series = d.get("series")
+        p = mirror_lectures(series) / d["path"]
+        cur = read_bytes(p)
+        if cur is None:
+            findings.append(Finding(
+                "info", "divergent-removed", key,
+                f"{key}: the divergent {series} copy lectures/{d['path']} was removed upstream",
+                data={"series": series, "path": d["path"], "interim": interim},
+            ))
+            continue
+        if sha256_bytes(cur) == d.get("digest"):
+            continue
+        if cur == can_bytes:
+            findings.append(Finding(
+                "info", "converged", key,
+                f"{key}: the divergent {series} copy now matches {canonical} exactly — the interim entry can be re-promoted",
+                data={"series": series, "path": d["path"], "interim": interim},
+            ))
+        else:
+            findings.append(Finding(
+                "info", "divergent-moved", key,
+                f"{key}: the divergent {series} copy moved again (still differs from {canonical})",
+                data={"series": series, "path": d["path"], "interim": interim},
+            ))
+
+
+def check_asset(pool_rel: str, meta: dict, findings: list):
+    canonical = meta.get("canonical")
+    sources = meta.get("sources") or []
+    recorded = meta.get("digest")
+    pool_path = ROOT / "lectures" / pool_rel
+
+    pool_bytes = read_bytes(pool_path)
+    if pool_bytes is None:
+        findings.append(Finding("violation", "asset-missing", pool_rel, f"lectures/{pool_rel} is in the ledger but not in the pool"))
+        return
+
+    can_src = next((s for s in sources if s.get("series") == canonical), None)
+    if can_src is None:
+        findings.append(Finding("violation", "ledger-malformed", pool_rel, f"lectures/{pool_rel}: no source entry for canonical series {canonical!r}"))
+        return
+
+    can_bytes = read_bytes(mirror_lectures(canonical) / can_src["path"])
+    if can_bytes is None:
+        findings.append(Finding(
+            "drift", "canonical-removed", pool_rel,
+            f"lectures/{pool_rel}: canonical asset {canonical}/lectures/{can_src['path']} no longer exists upstream",
+            issue_title=f"drift({canonical}): lectures/{can_src['path']} removed upstream",
+            data={"series": canonical, "path": can_src["path"]},
+        ))
+        return
+
+    pool_digest = sha256_bytes(pool_bytes)
+    can_digest = sha256_bytes(can_bytes)
+    canonical_moved = can_digest != recorded
+
+    # The ledger records the pool asset's own digest, so a direct edit is
+    # detectable whether or not the canonical asset also moved.
+    if pool_digest != recorded:
+        findings.append(Finding(
+            "violation", "asset-edited", pool_rel,
+            f"lectures/{pool_rel} differs from its recorded digest — the pool asset was edited directly",
+            diff=unified_diff(can_bytes, pool_bytes, f"{canonical}/lectures/{can_src['path']}", f"lectures/{pool_rel}"),
+        ))
+    if canonical_moved:
+        findings.append(Finding(
+            "refresh", "asset-moved", pool_rel,
+            f"lectures/{pool_rel}: canonical asset in {canonical} changed upstream",
+            data={"series": canonical, "path": can_src["path"]},
+        ))
+
+    for s in sources:
+        series = s.get("series")
+        if series == canonical:
+            continue
+        cur = read_bytes(mirror_lectures(series) / s["path"])
+        if cur is None:
+            findings.append(Finding(
+                "drift", "source-removed", pool_rel,
+                f"lectures/{pool_rel}: the {series} copy lectures/{s['path']} was removed upstream",
+                issue_title=f"drift({series}): lectures/{s['path']} removed upstream",
+                data={"series": series, "path": s["path"]},
+            ))
+            continue
+        if cur == can_bytes:
+            continue
+        if sha256_bytes(cur) == recorded:
+            findings.append(Finding(
+                "info", "stale-copy", pool_rel,
+                f"lectures/{pool_rel}: the {series} copy is unchanged while {canonical} moved",
+                data={"series": series, "path": s["path"]},
+            ))
+            continue
+        findings.append(Finding(
+            "drift", "asset-diverged", pool_rel,
+            f"lectures/{pool_rel}: the {series} copy lectures/{s['path']} no longer matches its canonical home in {canonical}",
+            diff=unified_diff(can_bytes, cur, f"{canonical}/lectures/{can_src['path']}", f"{series}/lectures/{s['path']}"),
+            issue_title=f"drift({series}): lectures/{s['path']} differs from its canonical copy in {canonical}",
+            data={"series": series, "path": s["path"], "canonical": canonical, "asset_of": pool_rel},
+        ))
+
+
+def fetch_at_pin(repo: str, sha: str, path: str):
+    """Bytes of ``path`` in ``repo`` at commit ``sha``, from GitHub. Best
+    effort: None when offline, the repo is unknown, or the blob is gone."""
+    if not (repo and sha):
+        return None
+    url = f"https://raw.githubusercontent.com/{repo}/{sha}/{path}"
+    try:
+        with urllib.request.urlopen(url, timeout=20) as resp:
+            return resp.read()
+    except Exception:
+        return None
+
+
+def fetch_baseline_toc(repo: str, sha: str):
+    """The accepted toc's bytes, so the finding can carry a diff."""
+    return fetch_at_pin(repo, sha, "lectures/_toc.yml")
+
+
+def check_tocs(toc_state: dict, manifest: dict, findings: list):
+    for series, rec in toc_state.items():
+        p = mirror_lectures(series) / "_toc.yml"
+        cur = read_bytes(p)
+        if cur is None:
+            findings.append(Finding(
+                "drift", "toc-removed", f"{series}/_toc.yml",
+                f"{series}: lectures/_toc.yml no longer exists upstream",
+                issue_title=f"drift({series}): _toc.yml removed upstream",
+                data={"series": series},
+            ))
+            continue
+        if sha256_bytes(cur) == rec.get("digest"):
+            continue
+        repo = ((manifest.get(series) or {}).get("repo")) or ""
+        base = fetch_baseline_toc(repo, rec.get("sha", "")) if repo and rec.get("sha") else None
+        diff = unified_diff(base, cur, f"{series}/_toc.yml@{rec.get('sha', '')[:12]}", f"{series}/_toc.yml@current") if base is not None else None
+        findings.append(Finding(
+            "drift", "toc-changed", f"{series}/_toc.yml",
+            f"{series}: lectures/_toc.yml changed since it was accepted at {rec.get('sha', '')[:12]}",
+            detail=(
+                f"The product manifest generated from {series}'s toc may need regenerating, or the change is a "
+                f"deliberate divergence to record. When the manifest is in step again, re-accept with "
+                f"`tools/drift-check --accept-toc {series}`."
+            ),
+            diff=diff,
+            issue_title=f"drift({series}): _toc.yml changed since it was accepted",
+            data={"series": series, "accepted_sha": rec.get("sha")},
+        ))
+
+
+def accept_tocs(series_list, state: dict, toc_state: dict):
+    for series in series_list:
+        p = mirror_lectures(series) / "_toc.yml"
+        cur = read_bytes(p)
+        if cur is None:
+            raise DriftError(f"cannot accept {series}: {p} does not exist — reconstruct the mirror first")
+        sha = ((state.get(series) or {}).get("sha") or "").strip()
+        if not sha:
+            raise DriftError(f"cannot accept {series}: no pinned SHA in {STATE_PATH.name}")
+        toc_state[series] = {"digest": sha256_bytes(cur), "sha": sha, "accepted_at": now_iso()}
+        print(f"[{series}] accepted lectures/_toc.yml @ {sha[:12]} ({toc_state[series]['digest'][:12]}…)")
+    header = (
+        "# generated by tools/drift-check --accept-toc — do not hand-edit\n"
+        "# The watched _toc.yml baselines: digest of lectures/_toc.yml and the pin\n"
+        "# it was accepted at. A series is watched once it appears here; re-accept\n"
+        "# after its product manifest has been regenerated from the new toc.\n"
+    )
+    body = yaml.safe_dump(toc_state, sort_keys=True, default_flow_style=False)
+    TOC_STATE_PATH.write_text(header + body, encoding="utf-8")
+    print(f"wrote {TOC_STATE_PATH.relative_to(ROOT)}")
+
+
+# --------------------------------------------------------------------------- #
+# Mirror reconstruction (delegated to tools/sync)                             #
+# --------------------------------------------------------------------------- #
+def reconstruct(series_list):
+    sync = ROOT / "tools" / "sync"
+    if shutil.which("uv"):
+        cmd = ["uv", "run", "--quiet", "--script", str(sync), *series_list]
+    else:
+        cmd = [str(sync), *series_list]
+    print("reconstructing mirror/ for:", " ".join(series_list))
+    rc = subprocess.call(cmd, cwd=str(ROOT))
+    if rc != 0:
+        raise DriftError(f"tools/sync exited {rc}")
+
+
+# --------------------------------------------------------------------------- #
+# GitHub issues                                                                #
+# --------------------------------------------------------------------------- #
+def gh(args, input_text=None):
+    proc = subprocess.run(["gh", *args], input=input_text, capture_output=True, text=True)
+    if proc.returncode != 0:
+        raise DriftError(f"gh {' '.join(args[:3])}… failed: {proc.stderr.strip()}")
+    return proc.stdout
+
+
+def run_url():
+    server = os.environ.get("GITHUB_SERVER_URL")
+    repo = os.environ.get("GITHUB_REPOSITORY")
+    run_id = os.environ.get("GITHUB_RUN_ID")
+    if server and repo and run_id:
+        return f"{server}/{repo}/actions/runs/{run_id}"
+    return None
+
+
+def issue_body(f: Finding, pins: dict) -> str:
+    parts = [f"**{f.summary}**", ""]
+    if f.detail:
+        parts += [f.detail, ""]
+    if f.diff:
+        lines = f.diff.splitlines(keepends=True)
+        capped = "".join(lines[:DIFF_LINE_CAP])
+        if len(lines) > DIFF_LINE_CAP:
+            capped += f"… ({len(lines) - DIFF_LINE_CAP} more lines; run `tools/drift-check` locally for the full diff)\n"
+        parts += ["```diff", capped.rstrip("\n"), "```", ""]
+    pin_lines = []
+    for s in sorted({f.data.get("series"), f.data.get("canonical")} - {None}):
+        sha = (pins.get(s) or {}).get("sha") or ""
+        if sha:
+            pin_lines.append(f"`{s}` @ `{sha[:12]}`")
+    if pin_lines:
+        parts += ["Pins at this run: " + ", ".join(pin_lines), ""]
+    url = run_url()
+    stamp = f"Last seen {now_iso()}" + (f" in [this run]({url})" if url else "") + "."
+    parts += [
+        stamp,
+        "",
+        "_Opened by `tools/drift-check` after the daily sync; it updates this body while the finding persists and closes the issue when the finding clears. The live series stay read-only until cutover (posture rule 1): this issue records the divergence, it does not edit anything._",
+    ]
+    return "\n".join(parts)
+
+
+def sync_issues(findings, pins, repo: str):
+    if shutil.which("gh") is None:
+        raise DriftError("--issues needs the GitHub CLI (`gh`) on PATH")
+    wanted = {f.issue_title: f for f in findings if f.severity == "drift" and f.issue_title}
+
+    gh(["label", "create", DRIFT_LABEL, "--repo", repo, "--force",
+        "--color", "D93F0B",
+        "--description", "Opened by tools/drift-check: a copy diverged from its canonical home"])
+
+    existing = json.loads(gh(["issue", "list", "--repo", repo, "--label", DRIFT_LABEL, "--state", "open",
+                              "--limit", "500", "--json", "number,title"]))
+    by_title = {}
+    for it in existing:
+        by_title.setdefault(it["title"], it["number"])
+
+    opened, updated, closed = [], [], []
+    for title, f in wanted.items():
+        body = issue_body(f, pins)
+        if title in by_title:
+            n = by_title[title]
+            gh(["issue", "edit", str(n), "--repo", repo, "--body-file", "-"], input_text=body)
+            updated.append(n)
+        else:
+            out = gh(["issue", "create", "--repo", repo, "--title", title, "--label", DRIFT_LABEL, "--body-file", "-"],
+                     input_text=body)
+            opened.append(out.strip())
+
+    url = run_url()
+    for title, n in by_title.items():
+        if title in wanted:
+            continue
+        note = "Resolved: `tools/drift-check` no longer detects this divergence" + (f" ([run]({url}))" if url else "") + "."
+        gh(["issue", "close", str(n), "--repo", repo, "--comment", note])
+        closed.append(n)
+
+    print(f"issues: {len(opened)} opened, {len(updated)} updated, {len(closed)} closed")
+    for o in opened:
+        print(f"  opened  {o}")
+    for n in updated:
+        print(f"  updated #{n}")
+    for n in closed:
+        print(f"  closed  #{n}")
+    return {"opened": opened, "updated": updated, "closed": closed}
+
+
+def default_repo():
+    env = os.environ.get("GITHUB_REPOSITORY")
+    if env:
+        return env
+    try:
+        return gh(["repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"]).strip()
+    except DriftError:
+        return None
+
+
+# --------------------------------------------------------------------------- #
+# Reporting                                                                    #
+# --------------------------------------------------------------------------- #
+HEADINGS = {
+    "violation": "VIOLATIONS — the pool no longer equals rewrites(canonical); fix before anything else",
+    "drift": "DRIFT — a copy diverged from its canonical home (each becomes an issue under --issues)",
+    "refresh": "REFRESH — the canonical copy moved; `tools/promote --refresh` brings the pool up to date",
+    "info": "INFO — nothing to act on now",
+}
+
+
+def print_report(findings, pins, n_lectures, n_assets):
+    print(f"drift-check @ {now_iso()} — {n_lectures} pool lectures, {n_assets} assets, "
+          f"pins: " + ", ".join(f"{k}@{(v or {}).get('sha', '')[:7]}" for k, v in pins.items()))
+    if not findings:
+        print("clean: every pool file equals rewrites(canonical) and every recorded copy is where it was.")
+        return
+    for sev in ("violation", "drift", "refresh", "info"):
+        group = [f for f in findings if f.severity == sev]
+        if not group:
+            continue
+        print()
+        print(f"{HEADINGS[sev]} ({len(group)})")
+        for f in group:
+            print(f"  [{f.kind}] {f.summary}")
+
+
+def write_github_output(summary):
+    path = os.environ.get("GITHUB_OUTPUT")
+    if not path:
+        return
+    with open(path, "a", encoding="utf-8") as fh:
+        for k in ("violations", "drift", "refresh", "info"):
+            fh.write(f"{k}={summary[k]}\n")
+        fh.write(f"refresh_needed={'true' if summary['refresh_needed'] else 'false'}\n")
+
+
+# --------------------------------------------------------------------------- #
+# CLI                                                                          #
+# --------------------------------------------------------------------------- #
+def build_parser():
+    p = argparse.ArgumentParser(prog="tools/drift-check", description=__doc__.split("\n\n")[0])
+    p.add_argument("--reconstruct", action="store_true",
+                   help="rebuild mirror/ for every series the ledger references before checking")
+    p.add_argument("--json", metavar="PATH", help="write the findings as JSON to PATH")
+    p.add_argument("--issues", action="store_true",
+                   help="open, update and close `drift` issues on GitHub to match the findings")
+    p.add_argument("--repo", help="owner/repo for --issues (default: $GITHUB_REPOSITORY, else the checkout's remote)")
+    p.add_argument("--print-issues", action="store_true",
+                   help="print the issue titles and bodies --issues would post, without touching GitHub")
+    p.add_argument("--accept-toc", nargs="+", metavar="SERIES",
+                   help="record SERIES' lectures/_toc.yml at its current pin as the watched baseline, then exit")
+    return p
+
+
+def main(argv=None):
+    args = build_parser().parse_args(argv)
+
+    ledger = load_yaml(LEDGER_PATH)
+    if not ledger:
+        sys.stderr.write(f"error: {LEDGER_PATH.relative_to(ROOT)} is missing or empty — nothing has been promoted.\n")
+        return 2
+    ledger_assets = ledger.pop("assets", {}) or {}
+    ledger_lectures = {k: v for k, v in ledger.items() if isinstance(v, dict)}
+    state = load_yaml(STATE_PATH)
+    manifest = (load_yaml(MANIFEST_PATH).get("series")) or {}
+    toc_state = load_yaml(TOC_STATE_PATH)
+
+    try:
+        if args.accept_toc:
+            unknown = [s for s in args.accept_toc if s not in manifest]
+            if unknown:
+                raise DriftError("unknown series: " + ", ".join(unknown))
+            if args.reconstruct:
+                reconstruct(args.accept_toc)
+            accept_tocs(args.accept_toc, state, toc_state)
+            return 0
+
+        needed = series_in_ledger(ledger_lectures, ledger_assets, toc_state)
+        if args.reconstruct:
+            reconstruct(needed)
+        missing = [s for s in needed if not mirror_lectures(s).exists()]
+        if missing:
+            raise DriftError(
+                "mirror/ is missing for: " + ", ".join(missing)
+                + f"\n       run `tools/sync {' '.join(missing)}` first, or pass --reconstruct."
+            )
+
+        findings = []
+        for key in sorted(ledger_lectures):
+            check_lecture(key, ledger_lectures[key], manifest, findings)
+        for pool_rel in sorted(ledger_assets):
+            check_asset(pool_rel, ledger_assets[pool_rel], findings)
+        check_tocs(toc_state, manifest, findings)
+        findings.sort(key=lambda f: (SEVERITY_ORDER[f.severity], f.subject, f.kind))
+
+        pins = {s: state.get(s) for s in needed}
+        print_report(findings, pins, len(ledger_lectures), len(ledger_assets))
+
+        summary = {
+            "violations": sum(f.severity == "violation" for f in findings),
+            "drift": sum(f.severity == "drift" for f in findings),
+            "refresh": sum(f.severity == "refresh" for f in findings),
+            "info": sum(f.severity == "info" for f in findings),
+        }
+        summary["refresh_needed"] = summary["refresh"] > 0
+        summary["toc_changed"] = sorted(f.data["series"] for f in findings if f.kind == "toc-changed")
+
+        issues = None
+        if args.print_issues:
+            print()
+            drift = [f for f in findings if f.severity == "drift" and f.issue_title]
+            print(f"--issues would keep {len(drift)} issue(s) open:")
+            for f in drift:
+                print()
+                print(f"### {f.issue_title}")
+                print(issue_body(f, pins))
+        if args.issues:
+            repo = args.repo or default_repo()
+            if not repo:
+                raise DriftError("--issues: could not determine the repository; pass --repo owner/repo")
+            print()
+            issues = sync_issues(findings, pins, repo)
+
+        if args.json:
+            report = {
+                "generated_at": now_iso(),
+                "pins": pins,
+                "summary": summary,
+                "findings": [f.as_dict() for f in findings],
+            }
+            if issues is not None:
+                report["issues"] = issues
+            Path(args.json).write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+            print(f"\nwrote {args.json}")
+
+        write_github_output(summary)
+
+        if summary["violations"]:
+            return 2
+        if summary["drift"] or summary["refresh"]:
+            return 1
+        return 0
+
+    except DriftError as exc:
+        sys.stderr.write(f"error: {exc}\n")
+        return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())

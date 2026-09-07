@@ -58,9 +58,12 @@ The repository is organised around three layers. Only the first exists in a mean
 │   ├── manifest.yml  # human intent: which repos feed the mirror
 │   └── state.yml     # machine state: pinned SHAs (bot-written)
 ├── tools/
-│   └── sync          # reconstructs the mirror from pinned SHAs
+│   ├── sync          # reconstructs the mirror from pinned SHAs
+│   ├── promote       # promotes lectures + their asset closure into the pool; writes the ledger
+│   └── drift-check   # proves the pool still equals its sources; issues, refresh PR
 └── .github/workflows/
-    └── sync.yml      # weekly job that refreshes the pinned SHAs
+    ├── sync.yml         # daily job that refreshes the pinned SHAs
+    └── drift-check.yml  # runs after sync: drift issues, refresh PR, red on a pool edit
 ```
 
 ## Running the sync
@@ -80,6 +83,20 @@ The tool **never commits anything**; committing a refreshed `sync/state.yml` is 
 
 A series' pin (and its timestamp) is only rewritten when the upstream `HEAD` has actually moved, so a re-pin run over unchanged series leaves `sync/state.yml` untouched. If a series has no pinned SHA yet, a plain `tools/sync` reports a clear error and suggests running `--update` first. Failures are per-series: the tool logs each and carries on, then prints a `PASS`/`FAIL` summary and exits non-zero if any series failed.
 
+## Running the drift-check
+
+[`tools/drift-check`](tools/drift-check) proves the pre-cutover invariant: every pool lecture equals its canonical mirror copy modulo the rewrites recorded in `sync/ledger.yml`, and every other series' copy is where the ledger last saw it. Like `tools/sync` it is a self-contained uv script. It never writes to the pool or the mirror: the only repository file it writes is `sync/toc.yml`, under `--accept-toc`; `--json` writes its report wherever you point it, and under GitHub Actions it appends step outputs.
+
+| Command | What it does |
+| --- | --- |
+| `tools/drift-check` | Report against the existing `mirror/`. Exit 0 clean, 1 findings, 2 a pool file was edited directly. |
+| `tools/drift-check --reconstruct` | Rebuild `mirror/` for the series the ledger references first. |
+| `tools/drift-check --print-issues` | Show the issues `--issues` would open, without touching GitHub. |
+| `tools/drift-check --issues` | Open, update and close `drift` issues to match the findings (CI). |
+| `tools/drift-check --accept-toc dp-test` | Record a series' `_toc.yml` at its current pin as the watched baseline. |
+
+Four outcomes: **refresh** (the canonical copy moved upstream; CI runs `promote --refresh` and opens a pull request), **drift** (a non-canonical copy diverged from its canonical home, a copy was removed, or a watched toc changed; each becomes an issue that closes itself when the finding clears), **violation** (the pool itself was edited; the job goes red), and **info** (a copy is merely stale, or a divergence converged). [`drift-check.yml`](.github/workflows/drift-check.yml) runs it after every `sync`.
+
 ## Roadmap / coming next
 
 This milestone is intentionally small. Planned follow-on work, roughly in order:
@@ -87,7 +104,7 @@ This milestone is intentionally small. Planned follow-on work, roughly in order:
 - **The curated pool** — populate `lectures/` with canonical lectures, held exactly once.
 - **Product manifests** — thin per-product folders under `products/` that select and order pool lectures.
 - **Promotion + provenance ledger** — a tool and record for promoting a mirrored lecture into the pool, tracking where each pool lecture came from.
-- **Drift check** — detect when a mirrored series has diverged from its pooled counterpart.
+- ~~**Drift check**~~ — landed: `tools/drift-check` and its workflow, see below.
 - **The `dp` pilot** — prove the whole pool-and-product approach on dynamic programming, the evidence gate before any cutover.
 
 ## Licence
