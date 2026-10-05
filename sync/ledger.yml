@@ -355,6 +355,16 @@ lectures/ifp_opi.md:
   rewrites:
   - from: _admonition/gpu.md
     to: _static/_shared/_admonition/gpu.md
+lectures/information_market_equilibrium.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: information_market_equilibrium.md
+    digest: 6032176f53b45f763a5f01ca7e06235205c70924d61c1d8fdd729adedda1118e
+  promoted_at:
+    intermediate: 0abf4031c9db8f7a50abb2b21af78929ca39e179
+  assets: []
+  rewrites: []
 lectures/inventory_q.md:
   canonical: intermediate
   interim: true
@@ -591,6 +601,31 @@ lectures/mccall_q.md:
     dp-test: 8d26b9349f55f6f185395c82279518bd3ba6a51c
   assets: []
   rewrites: []
+lectures/networks.md:
+  canonical: intro
+  sources:
+  - series: intro
+    path: networks.md
+    digest: ab39506f1a33f0755a8ddc5b5dc06cbc73f4bd5bee5051d09c1feaba21482df8
+  promoted_at:
+    intro: 8a60bd2728658689b9389e0c0b5ef4e31568d81e
+  assets:
+  - _static/networks/mc.png
+  - _static/networks/poverty_trap_1.png
+  - _static/networks/poverty_trap_2.png
+  - _static/networks/properties.png
+  - _static/networks/weighted.png
+  rewrites:
+  - from: /_static/lecture_specific/networks/poverty_trap_1.png
+    to: _static/networks/poverty_trap_1.png
+  - from: /_static/lecture_specific/networks/poverty_trap_2.png
+    to: _static/networks/poverty_trap_2.png
+  - from: /_static/lecture_specific/networks/properties.png
+    to: _static/networks/properties.png
+  - from: /_static/lecture_specific/networks/weighted.png
+    to: _static/networks/weighted.png
+  - from: /_static/lecture_specific/networks/mc.png
+    to: _static/networks/mc.png
 lectures/odu.md:
   canonical: dp-test
   interim: true
@@ -762,6 +797,16 @@ lectures/perm_income_cons.md:
   promoted_at:
     intermediate: 3b5fde644bbb15d51b398d0232cd6429d99a0a03
     dp-test: 8d26b9349f55f6f185395c82279518bd3ba6a51c
+  assets: []
+  rewrites: []
+lectures/phillips_drifts_volatilities.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: phillips_drifts_volatilities.md
+    digest: fe0f8eb5238437d02a201dd2894a20941ce227f8e378e11046835e69bcc3ade5
+  promoted_at:
+    intermediate: 0abf4031c9db8f7a50abb2b21af78929ca39e179
   assets: []
   rewrites: []
 lectures/rs_inventory_q.md:
@@ -1069,6 +1114,36 @@ assets:
       path: _static/lecture_specific/lqramsey/firenze.pdf
     - series: dp-test
       path: _static/lecture_specific/lqramsey/firenze.pdf
+  _static/networks/mc.png:
+    canonical: intro
+    digest: f60ac44c43cf138f7d3483e77681a7bacd99fff90ffbdac4cd49584df1f62020
+    sources:
+    - series: intro
+      path: _static/lecture_specific/networks/mc.png
+  _static/networks/poverty_trap_1.png:
+    canonical: intro
+    digest: 38d83489c1c406c89df60dc745e0dd26a49b3c322c9eaf22d98906034bc0ff11
+    sources:
+    - series: intro
+      path: _static/lecture_specific/networks/poverty_trap_1.png
+  _static/networks/poverty_trap_2.png:
+    canonical: intro
+    digest: 827efb64c396387fe0a3ef5f2545d4e11e20347dafcb445575587d59a913c233
+    sources:
+    - series: intro
+      path: _static/lecture_specific/networks/poverty_trap_2.png
+  _static/networks/properties.png:
+    canonical: intro
+    digest: 29c1499ad1708f38173d26e1d5080b234dc778bbe7e0a42bef2cb78ea1028422
+    sources:
+    - series: intro
+      path: _static/lecture_specific/networks/properties.png
+  _static/networks/weighted.png:
+    canonical: intro
+    digest: f9cdae92a8aafa07b8dfe436c589274058a317ae09cdb306f2a6e6398c9dba5d
+    sources:
+    - series: intro
+      path: _static/lecture_specific/networks/weighted.png
   _static/opt_tax_recur/recursive_allocation.py:
     canonical: advanced
     digest: 0031ff1af560c329dc9011269d8a9b403c4a1afb8004a183a6a24fe3f0a41e59
