@@ -25,6 +25,14 @@ same lecture. This script compares all of that against the reconstructed
   that is merely stale (canonical moved, the copy did not), an ``interim``
   entry whose divergent copy moved again, or a divergence that converged.
 
+Two kinds of copy are deliberately NOT watched. A consumer series' copies
+(``class: consumer`` in ``sync/manifest.yml``, recorded under ``superseded:``
+in the ledger, or under ``sources``/``divergent`` by a ledger written before
+the class was declared) are stale by design and raise nothing. An entry or
+asset switched over by ``tools/promote --switch`` (``canonical: pool``) is
+canonical in the pool: the pool copy may be edited, no series copy of it is
+compared, and the only check left is that the pool file exists.
+
 Usage
 -----
     tools/drift-check                      # report against the existing mirror/
@@ -82,6 +90,10 @@ TOC_STATE_PATH = ROOT / "sync" / "toc.yml"
 
 DRIFT_LABEL = "drift"
 DIFF_LINE_CAP = 300  # lines of unified diff kept in an issue body
+
+# The ledger's `canonical` value for a switched-over entry (tools/promote).
+POOL = "pool"
+CONSUMER_CLASS = "consumer"
 
 
 # --------------------------------------------------------------------------- #
@@ -152,6 +164,11 @@ def mirror_lectures(series: str) -> Path:
     return MIRROR_DIR / series / "lectures"
 
 
+def consumer_series(manifest: dict) -> set:
+    """Series declared ``class: consumer``: never canonical, never watched."""
+    return {k for k, v in manifest.items() if (v or {}).get("class") == CONSUMER_CLASS}
+
+
 # --------------------------------------------------------------------------- #
 # Findings                                                                     #
 # --------------------------------------------------------------------------- #
@@ -193,8 +210,9 @@ class Finding:
 # --------------------------------------------------------------------------- #
 # The checks                                                                   #
 # --------------------------------------------------------------------------- #
-def series_in_ledger(ledger_lectures, ledger_assets, toc_state):
-    """Every series whose mirror the checks read."""
+def series_in_ledger(ledger_lectures, ledger_assets, toc_state, consumers):
+    """Every series whose mirror the checks read. Switched entries and
+    consumer copies are never read, so they need no mirror."""
     seen = []
 
     def add(s):
@@ -202,21 +220,25 @@ def series_in_ledger(ledger_lectures, ledger_assets, toc_state):
             seen.append(s)
 
     for entry in ledger_lectures.values():
+        if entry.get("canonical") == POOL:
+            continue
         add(entry.get("canonical"))
-        for s in entry.get("sources") or []:
-            add(s.get("series"))
-        for s in entry.get("divergent") or []:
-            add(s.get("series"))
+        for s in (entry.get("sources") or []) + (entry.get("divergent") or []):
+            if s.get("series") not in consumers:
+                add(s.get("series"))
     for meta in ledger_assets.values():
+        if meta.get("canonical") == POOL:
+            continue
         add(meta.get("canonical"))
         for s in meta.get("sources") or []:
-            add(s.get("series"))
+            if s.get("series") not in consumers:
+                add(s.get("series"))
     for s in toc_state:
         add(s)
     return seen
 
 
-def check_lecture(key: str, entry: dict, manifest: dict, findings: list):
+def check_lecture(key: str, entry: dict, manifest: dict, consumers: set, findings: list):
     canonical = entry.get("canonical")
     sources = entry.get("sources") or []
     divergent = entry.get("divergent") or []
@@ -227,6 +249,11 @@ def check_lecture(key: str, entry: dict, manifest: dict, findings: list):
     pool_bytes = read_bytes(pool_path)
     if pool_bytes is None:
         findings.append(Finding("violation", "pool-missing", key, f"{key} is in the ledger but not in the pool"))
+        return
+
+    # Switched over: the pool copy is the source of truth and may be edited.
+    # Nothing upstream is compared any more.
+    if canonical == POOL:
         return
 
     can_src = next((s for s in sources if s.get("series") == canonical), None)
@@ -297,9 +324,10 @@ def check_lecture(key: str, entry: dict, manifest: dict, findings: list):
         ))
 
     # Non-canonical copies: did any of them stop matching their canonical home?
+    # A consumer's copy is stale by design and is never watched.
     for s in sources:
         series = s.get("series")
-        if series == canonical:
+        if series == canonical or series in consumers:
             continue
         p = mirror_lectures(series) / s["path"]
         cur = read_bytes(p)
@@ -343,6 +371,8 @@ def check_lecture(key: str, entry: dict, manifest: dict, findings: list):
     # Already-divergent copies (interim entries): did they move again, or converge?
     for d in divergent:
         series = d.get("series")
+        if series in consumers:
+            continue
         p = mirror_lectures(series) / d["path"]
         cur = read_bytes(p)
         if cur is None:
@@ -368,7 +398,7 @@ def check_lecture(key: str, entry: dict, manifest: dict, findings: list):
             ))
 
 
-def check_asset(pool_rel: str, meta: dict, findings: list):
+def check_asset(pool_rel: str, meta: dict, consumers: set, findings: list):
     canonical = meta.get("canonical")
     sources = meta.get("sources") or []
     recorded = meta.get("digest")
@@ -377,6 +407,10 @@ def check_asset(pool_rel: str, meta: dict, findings: list):
     pool_bytes = read_bytes(pool_path)
     if pool_bytes is None:
         findings.append(Finding("violation", "asset-missing", pool_rel, f"lectures/{pool_rel} is in the ledger but not in the pool"))
+        return
+
+    # Switched over with every lecture that uses it: the pool copy may be edited.
+    if canonical == POOL:
         return
 
     can_src = next((s for s in sources if s.get("series") == canonical), None)
@@ -415,7 +449,7 @@ def check_asset(pool_rel: str, meta: dict, findings: list):
 
     for s in sources:
         series = s.get("series")
-        if series == canonical:
+        if series == canonical or series in consumers:
             continue
         cur = read_bytes(mirror_lectures(series) / s["path"])
         if cur is None:
@@ -697,6 +731,7 @@ def main(argv=None):
     ledger_lectures = {k: v for k, v in ledger.items() if isinstance(v, dict)}
     state = load_yaml(STATE_PATH)
     manifest = (load_yaml(MANIFEST_PATH).get("series")) or {}
+    consumers = consumer_series(manifest)
     toc_state = load_yaml(TOC_STATE_PATH)
 
     try:
@@ -709,7 +744,7 @@ def main(argv=None):
             accept_tocs(args.accept_toc, state, toc_state)
             return 0
 
-        needed = series_in_ledger(ledger_lectures, ledger_assets, toc_state)
+        needed = series_in_ledger(ledger_lectures, ledger_assets, toc_state, consumers)
         if args.reconstruct:
             reconstruct(needed)
         missing = [s for s in needed if not mirror_lectures(s).exists()]
@@ -721,9 +756,9 @@ def main(argv=None):
 
         findings = []
         for key in sorted(ledger_lectures):
-            check_lecture(key, ledger_lectures[key], manifest, findings)
+            check_lecture(key, ledger_lectures[key], manifest, consumers, findings)
         for pool_rel in sorted(ledger_assets):
-            check_asset(pool_rel, ledger_assets[pool_rel], findings)
+            check_asset(pool_rel, ledger_assets[pool_rel], consumers, findings)
         check_tocs(toc_state, manifest, findings)
         findings.sort(key=lambda f: (SEVERITY_ORDER[f.severity], f.subject, f.kind))
 
