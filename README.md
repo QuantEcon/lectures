@@ -55,15 +55,18 @@ The repository is organised around three layers. Only the first exists in a mean
 ├── products/         # (future) one manifest per published product — empty
 ├── mirror/           # reconstructed, verbatim, GITIGNORED — never committed
 ├── sync/
-│   ├── manifest.yml  # human intent: which repos feed the mirror
+│   ├── manifest.yml  # human intent: which repos feed the mirror, and each series' class
+│   ├── canonical.yml # human intent: the winning series for a same-name collision
 │   └── state.yml     # machine state: pinned SHAs (bot-written)
 ├── tools/
 │   ├── sync          # reconstructs the mirror from pinned SHAs
 │   ├── promote       # promotes lectures + their asset closure into the pool; writes the ledger
-│   └── drift-check   # proves the pool still equals its sources; issues, refresh PR
+│   ├── drift-check   # proves the pool still equals its sources; issues, refresh PR
+│   └── tests/        # pytest suite for promote and drift-check (scratch repos)
 └── .github/workflows/
     ├── sync.yml         # daily job that refreshes the pinned SHAs
-    └── drift-check.yml  # runs after sync: drift issues, refresh PR, red on a pool edit
+    ├── drift-check.yml  # runs after sync: drift issues, refresh PR, red on a pool edit
+    └── tests.yml        # runs tools/tests on pull requests
 ```
 
 ## Running the sync
@@ -96,6 +99,10 @@ A series' pin (and its timestamp) is only rewritten when the upstream `HEAD` has
 | `tools/drift-check --accept-toc dp-test` | Record a series' `_toc.yml` at its current pin as the watched baseline. |
 
 Four outcomes: **refresh** (the canonical copy moved upstream; CI runs `promote --refresh` and opens a pull request), **drift** (a non-canonical copy diverged from its canonical home, a copy was removed, or a watched toc changed; each becomes an issue that closes itself when the finding clears), **violation** (the pool itself was edited; the job goes red), and **info** (a copy is merely stale, or a divergence converged). [`drift-check.yml`](.github/workflows/drift-check.yml) runs it after every `sync`.
+
+Two kinds of copy are never watched. A **consumer** series (`class: consumer` in `sync/manifest.yml`, today `dp`) only republishes other series' lectures, so its copies are recorded as `superseded` and are expected to go stale. A lecture whose series has been **switched** (`tools/promote --switch <series>`, which sets `canonical: pool` in the ledger) is canonical in the pool: it may be edited there, and the drift-check only confirms the file exists.
+
+`tools/promote` refuses a lecture name held by two canonical-eligible series with different text, naming the lecture and every series involved. It does not pick a winner by run order. A rename or merge upstream fixes it; until then, [`sync/canonical.yml`](sync/canonical.yml) can name the winning series, and the entry is recorded as `interim`.
 
 ## Roadmap / coming next
 

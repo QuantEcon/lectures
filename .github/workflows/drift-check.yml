@@ -47,7 +47,12 @@ env:
   # M2 posture (PLAN.md): the real `dp` series is excluded from promotion while
   # the `dp-test` sandbox stands in for it. Retired at the switch-over
   # (QuantEcon/project-monorepo#24), when this becomes empty.
-  PROMOTE_EXCLUDE: dp
+  # `jax` used to be excluded inside tools/promote; it is now excluded here,
+  # by the same per-run flag, so the refresh keeps its posture. Two pool
+  # lectures (ifp_egm, short_path) share a name with a different jax lecture
+  # and would fail the refresh until jax's renames land; drop jax from this
+  # list then.
+  PROMOTE_EXCLUDE: dp jax
 
 jobs:
   check:
