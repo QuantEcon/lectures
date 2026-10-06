@@ -84,6 +84,23 @@ def test_canonical_map_resolves_a_collision(make_repo):
     assert repo.pool("lake_model.md").read_text(encoding="utf-8") == winner
 
 
+def test_canonical_map_picks_a_copy_and_priority_picks_among_identical_holders(make_repo):
+    repo = make_repo(["intro", "intermediate", "jax"])
+    repo.lecture("intro", "mle", lecture_text("MLE (intro)"))
+    shared = lecture_text("MLE (intermediate and jax)")
+    repo.lecture("intermediate", "mle", shared)
+    repo.lecture("jax", "mle", shared)
+    repo.write_canonical_map({"mle": "jax"})
+
+    res = repo.promote("mle")
+
+    assert res.returncode == 0, res.stderr
+    entry = repo.entry("mle")
+    assert entry["canonical"] == "intermediate"
+    assert [s["series"] for s in entry["sources"]] == ["intermediate", "jax"]
+    assert [s["series"] for s in entry["divergent"]] == ["intro"]
+
+
 def test_canonical_map_rejects_unknown_and_consumer_series(make_repo):
     repo = make_repo(["intermediate", "dp"], consumers=["dp"])
     repo.lecture("intermediate", "career", lecture_text("Career"))
@@ -110,7 +127,12 @@ def test_canonical_map_entry_that_settles_nothing_warns(make_repo):
 
     assert res.returncode == 0, res.stderr
     assert "settles nothing" in res.stdout
-    assert repo.entry("shared")["canonical"] == "intermediate"
+    # The map picks a copy, not a priority: identical copies still go to the
+    # highest-priority series, so removing the entry changes nothing.
+    entry = repo.entry("shared")
+    assert entry["canonical"] == "intro"
+    assert [s["series"] for s in entry["sources"]] == ["intro", "intermediate"]
+    assert "interim" not in entry
 
 
 def test_jax_is_considered_by_default(make_repo):

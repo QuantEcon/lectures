@@ -591,9 +591,12 @@ def resolve_sources(plan: Plan, considered, consumers, canonical_map):
     A copy outside the set is a different lecture under the same name, and an
     error naming the lecture and every series involved: which copy survives
     must never fall out of run order. Only the committed canonical map settles
-    it — the map's series is canonical, and the differing copies land in
-    ``divergent`` (the entry is ``interim``). Consumer copies, equal or not,
-    are recorded under ``superseded`` and never anchor anything.
+    it — the map's copy anchors the set, and the differing copies land in
+    ``divergent`` (the entry is ``interim``). The map picks a COPY, never a
+    priority: among identical copies the highest-priority series is still
+    canonical, so deleting an entry that settles nothing changes nothing.
+    Consumer copies, equal or not, are recorded under ``superseded`` and
+    never anchor anything.
     """
     rel = f"{plan.slug}.md"
     digests = {}
@@ -658,7 +661,7 @@ def resolve_sources(plan: Plan, considered, consumers, canonical_map):
     plan.sources = same
     plan.divergent = differ
     plan.superseded = [s for s in considered if s in digests and s in consumers]
-    plan.canonical = mapped or same[0]
+    plan.canonical = same[0]
     plan.digests = digests
     return read_text_exact(mirror_lectures(plan.canonical) / rel)
 
