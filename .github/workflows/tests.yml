@@ -1,0 +1,34 @@
+name: tests
+
+# Run the tools' test suite (tools/tests/). Each test builds a small scratch
+# repository in a temp dir — mirror, manifest, state, empty pool — and runs a
+# copy of tools/promote or tools/drift-check against it, so the suite needs no
+# network, no mirror reconstruction and no access to the real pool.
+#
+# Dependencies are declared inline, as the tools themselves declare theirs
+# (PEP 723), so there is no project file or lockfile to keep in step.
+#
+# Pull requests and manual runs only: a push to a branch triggers nothing.
+
+on:
+  pull_request:
+    paths:
+      - 'tools/**'
+      - '.github/workflows/tests.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Run the tools' tests
+        run: uv run --no-project --with pytest --with pyyaml pytest tools/tests -v
