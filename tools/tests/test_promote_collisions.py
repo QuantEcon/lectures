@@ -267,3 +267,102 @@ def test_a_copy_that_caught_up_then_fell_behind_again_is_still_stale(make_repo):
     assert res.returncode == 0, res.stderr
     digests = {s["series"]: s["digest"] for s in repo.entry("amss")["sources"]}
     assert digests["dp-test"] == hashlib.sha256(caught_up.encode("utf-8")).hexdigest()
+
+
+def test_a_second_canonical_move_keeps_an_unmoved_copy_stale(make_repo):
+    # After the first refresh only the copy's OWN recorded digest still
+    # matches it, so this pins that half of the rule.
+    repo, recorded = stale_pair(make_repo)
+    assert repo.promote("--refresh").returncode == 0
+    repo.lecture("advanced", "amss", lecture_text("AMSS", "A second fix upstream."))
+    repo.move_pin("advanced", 3)
+
+    res = repo.promote("--refresh")
+
+    assert res.returncode == 0, res.stderr
+    digests = {s["series"]: s["digest"] for s in repo.entry("amss")["sources"]}
+    assert digests["dp-test"] == recorded["dp-test"]
+    assert "A second fix upstream." in repo.pool("amss.md").read_text(encoding="utf-8")
+
+
+def test_a_copy_never_recorded_as_a_source_is_not_stale(make_repo):
+    # A series that holds an old version but was never recorded is a
+    # collision, even when its copy equals the canonical's recorded version.
+    repo = make_repo(["advanced", "dp-test"])
+    repo.lecture("advanced", "amss", lecture_text("AMSS"))
+    assert repo.promote("amss").returncode == 0
+    repo.lecture("dp-test", "amss", lecture_text("AMSS"))
+    repo.lecture("advanced", "amss", lecture_text("AMSS", "A fix upstream."))
+    repo.move_pin("advanced")
+
+    res = repo.promote("--refresh")
+
+    assert res.returncode == 1
+    assert "[amss] FAILED: amss.md differs across series" in res.stderr
+
+
+def test_toc_of_a_lagging_series_takes_the_canonical_copy(make_repo):
+    repo = make_repo(["advanced", "dp-test"])
+    repo.lecture("advanced", "amss", lecture_text("AMSS"))
+    repo.lecture("dp-test", "amss", lecture_text("AMSS"))
+    repo.toc("dp-test", ["amss"])
+    assert repo.promote("--toc", "dp-test").returncode == 0
+    assert repo.entry("amss")["canonical"] == "advanced"
+    repo.lecture("advanced", "amss", lecture_text("AMSS", "A fix upstream."))
+    repo.move_pin("advanced")
+
+    # Before any refresh, and again after one, --toc of the lagging series
+    # takes the canonical copy and keeps its own copy as a stale source.
+    for _ in range(2):
+        res = repo.promote("--toc", "dp-test")
+        assert res.returncode == 0, res.stderr
+        assert "A fix upstream." in repo.pool("amss.md").read_text(encoding="utf-8")
+        entry = repo.entry("amss")
+        assert entry["canonical"] == "advanced"
+        assert [s["series"] for s in entry["sources"]] == ["advanced", "dp-test"]
+        assert "divergent" not in entry and "interim" not in entry
+        assert repo.promote("--refresh").returncode == 0
+
+
+def test_a_map_entry_naming_a_stale_copy_is_refused(make_repo):
+    # The map names the lower-priority holder of two identical copies (it
+    # settles nothing); when the canonical copy moves on, following the map
+    # would keep the lagging text, so the entry is refused and named.
+    repo = make_repo(["advanced", "dp-test"])
+    repo.lecture("advanced", "amss", lecture_text("AMSS"))
+    repo.lecture("dp-test", "amss", lecture_text("AMSS"))
+    repo.write_canonical_map({"amss": "dp-test"})
+    res = repo.promote("amss")
+    assert res.returncode == 0, res.stderr
+    assert "settles nothing" in res.stdout
+    assert repo.entry("amss")["canonical"] == "advanced"
+    before = repo.ledger_path.read_bytes()
+    repo.lecture("advanced", "amss", lecture_text("AMSS", "A fix upstream."))
+    repo.move_pin("advanced")
+
+    res = repo.promote("--refresh")
+
+    assert res.returncode == 1
+    failed = [line for line in res.stderr.splitlines() if line.startswith("[amss] FAILED")]
+    assert len(failed) == 1, res.stderr
+    assert "names 'dp-test'" in failed[0] and "earlier promoted version" in failed[0]
+    assert "remove it" in failed[0]
+    assert repo.ledger_path.read_bytes() == before
+
+
+def test_a_map_entry_over_spelling_only_copies_is_not_refused(make_repo):
+    # Copies equal after asset-path normalisation, nothing moved: a map line
+    # naming either holder settles nothing, and a refresh goes through.
+    repo = make_repo(["intro", "intermediate"])
+    for series in ("intro", "intermediate"):
+        repo.mirror_file(series, "_static/lecture_specific/short_path/graph.png", b"png")
+    repo.lecture("intro", "short_path", lecture_text("Short paths", refs=["/_static/lecture_specific/short_path/graph.png"]))
+    repo.lecture("intermediate", "short_path", lecture_text("Short paths", refs=["_static/lecture_specific/short_path/graph.png"]))
+    repo.write_canonical_map({"short_path": "intermediate"})
+    assert repo.promote("short_path").returncode == 0
+    repo.move_pin("intro")
+
+    res = repo.promote("--refresh")
+
+    assert res.returncode == 0, res.stderr
+    assert "settles nothing" in res.stdout

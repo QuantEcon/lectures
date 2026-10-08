@@ -582,14 +582,19 @@ def resolve_sources(plan: Plan, considered, consumers, canonical_map, recorded=N
     Consumer copies, equal or not, are recorded under ``superseded`` and
     never anchor anything.
 
-    ``recorded`` is the slug's ledger entry, if any. When the anchor is that
-    entry's canonical series, a differing copy recorded under ``sources``
-    whose digest equals its own recorded digest (it has not moved) or the
-    canonical copy's recorded digest (it caught up, then the canonical copy
-    moved on) is STALE, not a different lecture: it is still at a version
-    the pool already took. It stays a source (``plan.stale``) — the
-    drift-check's ``stale-copy`` — and only a copy edited to something else
-    is refused.
+    ``recorded`` is the slug's ledger entry, if any. A copy is STALE, not a
+    different lecture, when it is recorded under ``sources``, is not the
+    recorded canonical copy's lecture as that copy now stands, and is still
+    at a version the pool already took: its own recorded digest (it has not
+    moved) or the canonical copy's (it caught up, then the canonical copy
+    moved on).
+    Staleness is judged against the recorded canonical copy whatever anchors
+    the run: a stale requested copy (``--toc`` of a series that lags) gives
+    way to the canonical copy, and a canonical-map entry naming a stale copy
+    is refused, since it no longer settles a collision and following it
+    would keep the lagging text. A stale copy stays a source
+    (``plan.stale``) — the drift-check's ``stale-copy`` — and only a copy
+    edited to something else is a collision.
     """
     rel = f"{plan.slug}.md"
     digests = {}
@@ -624,24 +629,52 @@ def resolve_sources(plan: Plan, considered, consumers, canonical_map, recorded=N
             f"{CANONICAL_MAP_PATH.name} names '{mapped}' for {plan.slug}, but "
             f"{rel} is not in mirror/{mapped}/lectures/"
         )
-    anchor = mapped or requested or eligible[0]
+    base = mapped or requested or eligible[0]
 
-    same, differ = [], []
-    anchor_text = None  # normalised lazily: only a byte-different copy needs it
-    for series in eligible:
-        if digests[series] == digests[anchor]:
-            same.append(series)
-            continue
-        if anchor_text is None:
-            anchor_text = normalised_text(anchor, plan.slug)
-        if normalised_text(series, plan.slug) == anchor_text:
-            same.append(series)
-        else:
-            differ.append(series)
-    stale = []
-    if recorded and recorded.get("canonical") == anchor:
+    normalised = {}  # series -> normalised text, computed only when needed
+
+    def split(anchor):
+        """``(same, differ)``: the eligible copies that are, and are not, the
+        anchor's lecture (byte-identical, or identical once normalised)."""
+        same, differ = [], []
+        for series in eligible:
+            if digests[series] == digests[anchor]:
+                same.append(series)
+                continue
+            for s in (anchor, series):
+                if s not in normalised:
+                    normalised[s] = normalised_text(s, plan.slug)
+            (same if normalised[series] == normalised[anchor] else differ).append(series)
+        return same, differ
+
+    # Staleness is judged against the recorded canonical copy, whatever
+    # anchors this run, so a refresh and --toc of a lagging series agree.
+    recorded_canonical, stale_copies = None, []
+    if recorded and recorded.get("canonical") in eligible:
+        recorded_canonical = recorded.get("canonical")
         was = {s.get("series"): s.get("digest") for s in recorded.get("sources") or []}
-        stale = [s for s in differ if s in was and digests[s] in (was[s], was.get(anchor))]
+        _, differ_c = split(recorded_canonical)
+        stale_copies = [
+            s for s in differ_c
+            if s in was and digests[s] in (was[s], was.get(recorded_canonical))
+        ]
+
+    anchor = base
+    if base in stale_copies:
+        if base == mapped:
+            raise PromoteError(
+                f"{CANONICAL_MAP_PATH.name} names '{mapped}' for {plan.slug}, "
+                f"but '{mapped}' holds an earlier promoted version while the "
+                f"recorded canonical copy in '{recorded_canonical}' has moved "
+                "on — the map entry no longer settles a collision: remove it, "
+                f"or bring {mapped}'s copy up to date upstream"
+            )
+        anchor = recorded_canonical
+
+    same, differ = split(anchor)
+    stale = []
+    if anchor == recorded_canonical:
+        stale = [s for s in differ if s in stale_copies]
         differ = [s for s in differ if s not in stale]
     if differ and mapped is None:
         detail = "same: " + ", ".join(f"{s}:{digests[s][:12]}" for s in same)
