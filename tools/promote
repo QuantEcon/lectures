@@ -39,13 +39,6 @@ NOT watched by the drift-check. No series is excluded by default: ``jax``
 takes part like any other, so until its renames land its colliding names fail
 by the rule above. ``--exclude`` drops series for one run.
 
-The switch (``--switch SERIES``) is the tooling step of a series' cutover:
-every ledger entry the series is canonical for becomes ``canonical: pool``,
-stamped ``switched_at:`` with the series pin and the date. From then on the
-pool copy is the source of truth and may be edited, the drift-check stops
-guarding the entry, and promotion refuses to overwrite it. An asset switches
-once every lecture that references it has.
-
 Asset references are normalised into the pool ``_static`` conventions
 (``_static/<slug>/`` for per-lecture assets, ``_static/_shared/`` for assets
 used by two or more lectures) via an ORDERED LIST OF LITERAL STRING
@@ -66,26 +59,18 @@ Usage
                                    # per-lecture, highest-priority series wins)
     tools/promote --toc dp         # promote every lecture in dp's _toc.yml
     tools/promote --refresh        # re-promote entries whose canonical pin moved
-    tools/promote --switch SERIES  # cut SERIES over: its entries become
-                                   # canonical in the pool
 
 Flags
 -----
     --toc SERIES       take the slug list from mirror/SERIES/lectures/_toc.yml
                        (product pages — intro, status, troubleshooting,
                        zreferences — are skipped: they become products/<key>/
-                       pages in M3, not pool content; so are lectures already
-                       switched over, see --switch). For a consumer series
+                       pages in M3, not pool content). For a consumer series
                        each lecture comes from its canonical home instead.
     --refresh          re-run the promotion pipeline for every ledger entry
                        whose canonical series pin in sync/state.yml differs
                        from its recorded promoted_at pin; unchanged pins are a
-                       strict no-op. Switched entries are never refreshed.
-    --switch SERIES    set ``canonical: pool`` (with ``switched_at:``) on every
-                       ledger entry SERIES is canonical for. Refused for an
-                       unknown or consumer series, and while any of those
-                       entries was promoted at an older pin (refresh first).
-                       Idempotent: switched entries are left as they are.
+                       strict no-op.
     --exclude SERIES [SERIES...]
                        series excluded from source/dedup consideration for
                        this run (none is excluded by default).
@@ -106,7 +91,6 @@ import posixpath
 import re
 import shutil
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
 try:
@@ -140,10 +124,6 @@ POOL_DIR = REPO_ROOT / "lectures"
 SOURCE_CLASS = "source"
 CONSUMER_CLASS = "consumer"
 SERIES_CLASSES = (SOURCE_CLASS, CONSUMER_CLASS)
-
-# The ``canonical`` value of a switched-over entry: the pool copy is the
-# source of truth. Reserved, so no manifest series may take the name.
-POOL = "pool"
 
 # Per-series boilerplate: product pages, not pool content (M3 owns them).
 PRODUCT_PAGES = ("intro", "status", "troubleshooting", "zreferences")
@@ -179,9 +159,6 @@ LEDGER_HEADER = (
     "# embedded in its own `to` (e.g. an _admonition include) is applied\n"
     "# exactly once, never to a fixpoint. The drift-check applies exactly\n"
     "# this transform before comparing.\n"
-    "# `canonical: pool` with `switched_at:` (the series, its pin and the date\n"
-    "# of tools/promote --switch) marks a cut-over entry: the pool copy is the\n"
-    "# source of truth, and the entry's sources and rewrites are history.\n"
 )
 
 
@@ -390,11 +367,6 @@ def load_manifest():
     series_block = data.get("series") or {}
     if not isinstance(series_block, dict) or not series_block:
         raise SystemExit(f"error: {MANIFEST_PATH} has no `series:` mapping.")
-    if POOL in series_block:
-        raise SystemExit(
-            f"error: '{POOL}' is reserved (the canonical value of a switched "
-            f"entry) and cannot name a series in {MANIFEST_PATH}."
-        )
     consumers = set()
     for key, cfg in series_block.items():
         cls = (cfg or {}).get("class", SOURCE_CLASS)
@@ -946,16 +918,13 @@ def refresh_targets(ledger_lectures, state, considered, consumers):
     stale and stays a source (see ``resolve_sources``). Only
     the canonical pin is watched (per the refresh spec); ``sources``/
     ``divergent``/``superseded`` provenance is as of each entry's last
-    promotion. Switched entries have nothing upstream to follow and are
-    passed over.
+    promotion.
     """
     targets, skipped = [], []
     for key in sorted(ledger_lectures):
         entry = ledger_lectures[key]
         slug = slug_of(posixpath.basename(key))
         canonical = entry.get("canonical")
-        if canonical == POOL:
-            continue
         if canonical in consumers:
             skipped.append((
                 slug,
@@ -971,117 +940,6 @@ def refresh_targets(ledger_lectures, state, considered, consumers):
         if pinned != current:
             targets.append((slug, canonical))
     return targets, skipped
-
-
-# --------------------------------------------------------------------------- #
-# The switch (a series' cutover)                                               #
-# --------------------------------------------------------------------------- #
-def switched_entry(entry: dict, stamp: dict) -> dict:
-    """``entry`` led by ``canonical: pool`` and ``switched_at``; every other
-    field keeps its recorded order, as history of what was promoted."""
-    out = {"canonical": POOL, "switched_at": dict(stamp)}
-    for key, value in entry.items():
-        if key not in ("canonical", "switched_at"):
-            out[key] = value
-    return out
-
-
-def switch_series(series, state, ledger_lectures, ledger_assets, dry_run):
-    """Cut ``series`` over: every ledger entry it is canonical for becomes
-    ``canonical: pool``, stamped with the series pin and today's UTC date.
-
-    The switch freezes what the pool holds, so it is refused while any of
-    those entries was promoted at an older pin than the current one — a
-    pending refresh would otherwise be lost (``tools/promote --refresh``
-    first). Assets follow their lectures: an asset switches once EVERY
-    lecture referencing it is canonical in the pool, so an asset still used
-    by a guarded lecture stays guarded. Entries already switched are left
-    untouched, which makes a second run a zero-diff no-op.
-    """
-    pin = (state.get(series) or {}).get("sha") or ""
-    if not pin:
-        sys.stderr.write(
-            f"error: no pinned SHA for '{series}' in {STATE_PATH.name} — "
-            "the switch records the pin; run `tools/sync --update` first.\n"
-        )
-        return 1
-    to_switch = sorted(k for k, e in ledger_lectures.items() if e.get("canonical") == series)
-    already = sorted(
-        k
-        for k, e in ledger_lectures.items()
-        if e.get("canonical") == POOL and (e.get("switched_at") or {}).get("series") == series
-    )
-    stale = [
-        k for k in to_switch if (ledger_lectures[k].get("promoted_at") or {}).get(series) != pin
-    ]
-    if stale:
-        for key in stale:
-            old = (ledger_lectures[key].get("promoted_at") or {}).get(series) or ""
-            sys.stderr.write(
-                f"[{slug_of(posixpath.basename(key))}] FAILED: promoted at "
-                f"{series}@{old[:12]}, not the current pin {pin[:12]} — run "
-                "`tools/promote --refresh` first\n"
-            )
-        sys.stderr.write(
-            f"error: refusing to switch {series}: {len(stale)} of its "
-            f"{len(to_switch)} entries are behind its pin.\n"
-        )
-        return 1
-
-    stamp = {
-        "series": series,
-        "pin": pin,
-        "date": datetime.now(timezone.utc).date().isoformat(),
-    }
-    new_lectures = dict(ledger_lectures)
-    for key in to_switch:
-        new_lectures[key] = switched_entry(ledger_lectures[key], stamp)
-
-    in_pool = {k for k, e in new_lectures.items() if e.get("canonical") == POOL}
-    users = {}  # pool asset path -> ledger keys of the lectures referencing it
-    for key, entry in new_lectures.items():
-        for pool_path in entry.get("assets") or []:
-            users.setdefault(pool_path, set()).add(key)
-    new_assets = dict(ledger_assets)
-    assets_switched = []
-    for pool_path in sorted(ledger_assets):
-        meta = ledger_assets[pool_path]
-        if meta.get("canonical") == POOL:
-            continue
-        if users.get(pool_path) and users[pool_path] <= in_pool:
-            new_assets[pool_path] = switched_entry(meta, stamp)
-            assets_switched.append(pool_path)
-
-    verb = "would switch" if dry_run else "switched"
-    for key in to_switch:
-        print(
-            f"[{slug_of(posixpath.basename(key))}] {verb}: canonical {series} -> "
-            f"{POOL} ({series}@{pin[:12]}, {stamp['date']})"
-        )
-    for key in already:
-        prior = ledger_lectures[key].get("switched_at") or {}
-        print(
-            f"[{slug_of(posixpath.basename(key))}] already switched "
-            f"({series}@{(prior.get('pin') or '')[:12]}, {prior.get('date')})"
-        )
-    for pool_path in assets_switched:
-        print(f"[asset] {verb}: lectures/{pool_path}")
-    if not to_switch and not already:
-        print(f"nothing to switch — no ledger entry is canonical in {series}.")
-
-    if not dry_run and (to_switch or assets_switched):
-        body = dump_ledger(new_lectures, new_assets)
-        if not LEDGER_PATH.exists() or LEDGER_PATH.read_bytes() != body.encode("utf-8"):
-            atomic_write(LEDGER_PATH, body.encode("utf-8"))
-
-    print("\n" + "─" * 60)
-    print(
-        f"summary [switch {series}" + (", dry-run" if dry_run else "") + "]: "
-        f"{len(to_switch)} switched, {len(already)} already switched, "
-        f"{len(assets_switched)} assets switched"
-    )
-    print("─" * 60)
-    return 0
 
 
 # --------------------------------------------------------------------------- #
@@ -1118,12 +976,6 @@ def build_parser():
         help="re-promote pool files whose canonical series pin moved.",
     )
     parser.add_argument(
-        "--switch",
-        metavar="SERIES",
-        help="cut SERIES over: set canonical: pool on every ledger entry it "
-        "is canonical for.",
-    )
-    parser.add_argument(
         "--exclude",
         nargs="+",
         metavar="SERIES",
@@ -1144,9 +996,9 @@ def main(argv=None):
     parser = build_parser()
     args = parser.parse_args(argv)
 
-    modes = [bool(args.slugs), bool(args.toc), args.refresh, bool(args.switch)]
+    modes = [bool(args.slugs), bool(args.toc), args.refresh]
     if sum(modes) != 1:
-        parser.error("choose exactly one of: SLUG..., --toc SERIES, --refresh, --switch SERIES")
+        parser.error("choose exactly one of: SLUG..., --toc SERIES, --refresh")
 
     order, consumers = load_manifest()
     excluded = set(args.exclude)
@@ -1157,22 +1009,6 @@ def main(argv=None):
             + ", ".join(unknown)
             + "\nvalid keys: "
             + ", ".join(order)
-        )
-
-    # The switch only rewrites the ledger: it reads no mirror and no pool.
-    if args.switch:
-        if args.switch not in order:
-            parser.error(f"unknown series '{args.switch}' (valid: {', '.join(order)})")
-        if args.switch in consumers:
-            parser.error(
-                f"series '{args.switch}' is a consumer — it is never canonical, "
-                "so it has nothing to switch."
-            )
-        if args.exclude:
-            parser.error("--exclude has no effect with --switch.")
-        ledger_lectures, ledger_assets = load_ledger()
-        return switch_series(
-            args.switch, load_state(), ledger_lectures, ledger_assets, args.dry_run
         )
 
     considered = [s for s in order if s not in excluded]
@@ -1248,25 +1084,6 @@ def main(argv=None):
             else:
                 plan = Plan(slug, requested)
                 plan.error = f"refusing to promote a {reason}"
-                plans.append(plan)
-            continue
-        switched = ledger_lectures.get(f"lectures/{slug}.md") or {}
-        if switched.get("canonical") == POOL:
-            # Cut over: the pool copy is the source of truth and may have been
-            # edited — a mirror copy must never overwrite it. Met via --toc
-            # (a series' toc still lists its switched lectures) that is
-            # expected and skipped; named EXPLICITLY it is refused, as for
-            # product pages, so an operator never gets a silent success.
-            stamp = switched.get("switched_at") or {}
-            where = (
-                f"lectures/{slug}.md is canonical in the pool (switched from "
-                f"{stamp.get('series')} on {stamp.get('date')})"
-            )
-            if args.toc:
-                skips.append((slug, f"{where} — nothing to take from the mirror"))
-            else:
-                plan = Plan(slug, requested)
-                plan.error = f"{where} — promotion would overwrite the pool copy"
                 plans.append(plan)
             continue
         plans.append(Plan(slug, requested))
@@ -1499,11 +1316,7 @@ def main(argv=None):
             rewrites=[{"from": f, "to": t} for f, t in plan.rewrites],
         )
         for dest in plan.assets:
-            # A switched asset is canonical in the pool: its record (and its
-            # bytes, which the collision checks above have already compared)
-            # stay as they are when another lecture comes to share it.
-            if (ledger_assets.get(dest) or {}).get("canonical") != POOL:
-                new_assets[dest] = asset_provenance(dest)
+            new_assets[dest] = asset_provenance(dest)
 
     # Prune assets no longer referenced by any ledger entry (a re-promotion
     # may have moved them), so the pool never accretes dead weight.

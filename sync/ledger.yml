@@ -19,9 +19,6 @@
 # embedded in its own `to` (e.g. an _admonition include) is applied
 # exactly once, never to a fixpoint. The drift-check applies exactly
 # this transform before comparing.
-# `canonical: pool` with `switched_at:` (the series, its pin and the date
-# of tools/promote --switch) marks a cut-over entry: the pool copy is the
-# source of truth, and the entry's sources and rewrites are history.
 lectures/amss.md:
   canonical: advanced
   sources:

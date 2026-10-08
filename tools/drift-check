@@ -33,13 +33,10 @@ spell ``/_static/...`` and ``_static/...`` for the same file). That comparison
 is ``tools/promote``'s own ``normalised_text``, imported for the purpose, so
 the two tools cannot disagree about which copies are one lecture.
 
-Two kinds of copy are deliberately NOT watched. A consumer series' copies
+One kind of copy is deliberately NOT watched. A consumer series' copies
 (``class: consumer`` in ``sync/manifest.yml``, recorded under ``superseded:``
 in the ledger, or under ``sources``/``divergent`` by a ledger written before
-the class was declared) are stale by design and raise nothing. An entry or
-asset switched over by ``tools/promote --switch`` (``canonical: pool``) is
-canonical in the pool: the pool copy may be edited, no series copy of it is
-compared, and the only check left is that the pool file exists.
+the class was declared) are stale by design and raise nothing.
 
 Usage
 -----
@@ -99,8 +96,6 @@ TOC_STATE_PATH = ROOT / "sync" / "toc.yml"
 DRIFT_LABEL = "drift"
 DIFF_LINE_CAP = 300  # lines of unified diff kept in an issue body
 
-# The ledger's `canonical` value for a switched-over entry (tools/promote).
-POOL = "pool"
 CONSUMER_CLASS = "consumer"
 
 
@@ -258,8 +253,8 @@ class Finding:
 # The checks                                                                   #
 # --------------------------------------------------------------------------- #
 def series_in_ledger(ledger_lectures, ledger_assets, toc_state, consumers):
-    """Every series whose mirror the checks read. Switched entries and
-    consumer copies are never read, so they need no mirror."""
+    """Every series whose mirror the checks read. Consumer copies are never
+    read, so they need no mirror."""
     seen = []
 
     def add(s):
@@ -267,15 +262,11 @@ def series_in_ledger(ledger_lectures, ledger_assets, toc_state, consumers):
             seen.append(s)
 
     for entry in ledger_lectures.values():
-        if entry.get("canonical") == POOL:
-            continue
         add(entry.get("canonical"))
         for s in (entry.get("sources") or []) + (entry.get("divergent") or []):
             if s.get("series") not in consumers:
                 add(s.get("series"))
     for meta in ledger_assets.values():
-        if meta.get("canonical") == POOL:
-            continue
         add(meta.get("canonical"))
         for s in meta.get("sources") or []:
             if s.get("series") not in consumers:
@@ -296,11 +287,6 @@ def check_lecture(key: str, entry: dict, manifest: dict, consumers: set, finding
     pool_bytes = read_bytes(pool_path)
     if pool_bytes is None:
         findings.append(Finding("violation", "pool-missing", key, f"{key} is in the ledger but not in the pool"))
-        return
-
-    # Switched over: the pool copy is the source of truth and may be edited.
-    # Nothing upstream is compared any more.
-    if canonical == POOL:
         return
 
     can_src = next((s for s in sources if s.get("series") == canonical), None)
@@ -469,10 +455,6 @@ def check_asset(pool_rel: str, meta: dict, consumers: set, findings: list):
     pool_bytes = read_bytes(pool_path)
     if pool_bytes is None:
         findings.append(Finding("violation", "asset-missing", pool_rel, f"lectures/{pool_rel} is in the ledger but not in the pool"))
-        return
-
-    # Switched over with every lecture that uses it: the pool copy may be edited.
-    if canonical == POOL:
         return
 
     can_src = next((s for s in sources if s.get("series") == canonical), None)
