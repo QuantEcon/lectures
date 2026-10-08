@@ -145,3 +145,20 @@ def test_an_asset_shared_with_a_guarded_lecture_stays_guarded(make_repo):
     assert res.returncode == 0
     assert "1 assets switched" in res.stdout
     assert repo.ledger()["assets"][path]["canonical"] == "pool"
+
+
+def test_a_switched_lecture_met_via_toc_is_skipped_not_failed(make_repo):
+    repo = promoted_repo(make_repo)
+    repo.lecture("intermediate", "jv", lecture_text("JV"))
+    repo.toc("intermediate", ["mccall", "jv"])
+    assert repo.promote("--switch", "intermediate").returncode == 0
+
+    # jv is new and promotes; mccall is switched and is passed over, as a
+    # product page would be. Named explicitly it is still refused (above).
+    res = repo.promote("--toc", "intermediate")
+
+    assert res.returncode == 0, res.stderr
+    assert "[mccall] SKIP:" in res.stdout and "canonical in the pool" in res.stdout
+    assert "1 promoted, 0 unchanged, 2 skipped, 0 failed" in res.stdout  # intro + mccall
+    assert repo.entry("jv")["canonical"] == "intermediate"
+    assert repo.entry("mccall")["canonical"] == "pool"

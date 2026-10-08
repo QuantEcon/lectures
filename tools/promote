@@ -70,7 +70,8 @@ Flags
     --toc SERIES       take the slug list from mirror/SERIES/lectures/_toc.yml
                        (product pages — intro, status, troubleshooting,
                        zreferences — are skipped: they become products/<key>/
-                       pages in M3, not pool content). For a consumer series
+                       pages in M3, not pool content; so are lectures already
+                       switched over, see --switch). For a consumer series
                        each lecture comes from its canonical home instead.
     --refresh          re-run the promotion pipeline for every ledger entry
                        whose canonical series pin in sync/state.yml differs
@@ -646,7 +647,8 @@ def resolve_sources(plan: Plan, considered, consumers, canonical_map):
         else:
             differ.append(series)
     if differ and mapped is None:
-        detail = ", ".join(f"{s}:{digests[s][:12]}" for s in eligible)
+        detail = "same: " + ", ".join(f"{s}:{digests[s][:12]}" for s in same)
+        detail += "; different: " + ", ".join(f"{s}:{digests[s][:12]}" for s in differ)
         raise PromoteError(
             f"{rel} differs across series ({detail}) — a same-named file must "
             "be one lecture: reconcile or rename it upstream, or name the "
@@ -1222,6 +1224,25 @@ def main(argv=None):
                 plan.error = f"refusing to promote a {reason}"
                 plans.append(plan)
             continue
+        switched = ledger_lectures.get(f"lectures/{slug}.md") or {}
+        if switched.get("canonical") == POOL:
+            # Cut over: the pool copy is the source of truth and may have been
+            # edited — a mirror copy must never overwrite it. Met via --toc
+            # (a series' toc still lists its switched lectures) that is
+            # expected and skipped; named EXPLICITLY it is refused, as for
+            # product pages, so an operator never gets a silent success.
+            stamp = switched.get("switched_at") or {}
+            where = (
+                f"lectures/{slug}.md is canonical in the pool (switched from "
+                f"{stamp.get('series')} on {stamp.get('date')})"
+            )
+            if args.toc:
+                skips.append((slug, f"{where} — nothing to take from the mirror"))
+            else:
+                plan = Plan(slug, requested)
+                plan.error = f"{where} — promotion would overwrite the pool copy"
+                plans.append(plan)
+            continue
         plans.append(Plan(slug, requested))
 
     # ------------------------------------------------------------------ #
@@ -1231,17 +1252,6 @@ def main(argv=None):
     texts = {}
     for plan in plans:
         if plan.error is not None:
-            continue
-        switched = ledger_lectures.get(f"lectures/{plan.slug}.md") or {}
-        if switched.get("canonical") == POOL:
-            # Cut over: the pool copy is the source of truth and may have been
-            # edited — a mirror copy must never overwrite it.
-            stamp = switched.get("switched_at") or {}
-            plan.error = (
-                f"lectures/{plan.slug}.md is canonical in the pool (switched from "
-                f"{stamp.get('series')} on {stamp.get('date')}) — promotion would "
-                "overwrite the pool copy"
-            )
             continue
         try:
             text = resolve_sources(plan, considered, consumers, canonical_map)

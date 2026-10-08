@@ -63,6 +63,8 @@ def test_three_way_collision_names_every_series(make_repo):
     line = next(l for l in res.stderr.splitlines() if l.startswith("[mle] FAILED"))
     for series in ("intro:", "intermediate:", "jax:"):
         assert series in line
+    # The message groups the copies: which agree with the anchor, which do not.
+    assert "same: intro:" in line and "different: intermediate:" in line and ", jax:" in line
 
 
 def test_canonical_map_resolves_a_collision(make_repo):
