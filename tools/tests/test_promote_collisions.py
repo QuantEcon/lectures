@@ -346,7 +346,7 @@ def test_a_map_entry_naming_a_stale_copy_is_refused(make_repo):
     failed = [line for line in res.stderr.splitlines() if line.startswith("[amss] FAILED")]
     assert len(failed) == 1, res.stderr
     assert "names 'dp-test'" in failed[0] and "earlier promoted version" in failed[0]
-    assert "remove it" in failed[0]
+    assert "point the entry at 'advanced'" in failed[0] and "remove it" in failed[0]
     assert repo.ledger_path.read_bytes() == before
 
 
@@ -394,7 +394,7 @@ def test_a_map_slug_no_series_holds_is_reported(make_repo):
     res = repo.promote("career")
 
     assert res.returncode == 0, res.stderr
-    assert "[carrer] WARN: canonical.yml names carrer, but no series mirror holds carrer.md" in res.stdout
+    assert "[carrer] WARN: canonical.yml names carrer, but no canonical-eligible series mirror holds carrer.md" in res.stdout
 
 
 def test_a_map_entry_settling_an_excluded_series_is_not_called_removable(make_repo):
@@ -408,4 +408,200 @@ def test_a_map_entry_settling_an_excluded_series_is_not_called_removable(make_re
 
     assert res.returncode == 0, res.stderr
     assert "can be removed" not in res.stdout
-    assert "jax (excluded from this run) also holds it" in res.stdout
+    assert "jax (excluded from this run) holds a different copy" in res.stdout
+
+
+def test_toc_of_a_series_that_caught_up_then_lagged_takes_the_canonical_copy(make_repo):
+    # The canonical-digest half of the rule under a non-canonical anchor.
+    repo, _ = stale_pair(make_repo)
+    repo.toc("dp-test", ["amss"])
+    assert repo.promote("--refresh").returncode == 0  # advanced v2; dp-test stale at v1
+    repo.lecture("dp-test", "amss", lecture_text("AMSS", "A typo fixed upstream."))  # caught up to v2
+    repo.move_pin("dp-test")
+    repo.lecture("advanced", "amss", lecture_text("AMSS", "A second fix upstream."))  # v3
+    repo.move_pin("advanced", 3)
+
+    res = repo.promote("--toc", "dp-test")
+
+    assert res.returncode == 0, res.stderr
+    entry = repo.entry("amss")
+    assert entry["canonical"] == "advanced"
+    assert [s["series"] for s in entry["sources"]] == ["advanced", "dp-test"]
+    assert "A second fix upstream." in repo.pool("amss.md").read_text(encoding="utf-8")
+
+
+def test_a_stale_copy_is_divergent_when_the_map_names_a_different_lecture(make_repo):
+    # The map newly names an edited copy that is not the recorded canonical's
+    # lecture; a third copy stale against the recorded canonical is then not
+    # the mapped copy's lecture, so it is divergent, not a source.
+    repo = make_repo(["intermediate", "advanced", "dp-test"])
+    for series in ("intermediate", "advanced", "dp-test"):
+        repo.lecture(series, "amss", lecture_text("AMSS"))
+    assert repo.promote("amss").returncode == 0
+    repo.lecture("intermediate", "amss", lecture_text("AMSS", "Fixed in intermediate."))
+    repo.move_pin("intermediate")
+    repo.lecture("dp-test", "amss", lecture_text("AMSS", "Rewritten in dp-test."))
+    repo.move_pin("dp-test")
+    repo.write_canonical_map({"amss": "dp-test"})
+
+    res = repo.promote("--refresh")
+
+    assert res.returncode == 0, res.stderr
+    entry = repo.entry("amss")
+    assert entry["canonical"] == "dp-test"
+    assert [d["series"] for d in entry["divergent"]] == ["intermediate", "advanced"]
+
+
+def test_a_lagging_toc_re_anchors_on_the_recorded_canonical_not_on_priority(make_repo):
+    # intermediate, higher in priority, comes to hold advanced's current text
+    # after promotion; --toc of the lagging dp-test re-anchors on the
+    # recorded canonical (advanced), whose identity set includes intermediate.
+    repo, _ = stale_pair(make_repo)
+    repo.order = ["intermediate", "advanced", "dp-test"]
+    (repo.root / "mirror" / "intermediate" / "lectures").mkdir(parents=True)
+    repo.write_manifest()
+    repo.write_state({"intermediate": "1" * 40, "advanced": repo.pin("advanced"), "dp-test": repo.pin("dp-test")})
+    repo.lecture("intermediate", "amss", lecture_text("AMSS", "A typo fixed upstream."))
+    repo.toc("dp-test", ["amss"])
+
+    res = repo.promote("--toc", "dp-test")
+
+    assert res.returncode == 0, res.stderr
+    assert "A typo fixed upstream." in repo.pool("amss.md").read_text(encoding="utf-8")
+
+
+def three_holders_one_lagging(make_repo):
+    """intermediate (canonical) and advanced move in step; dp-test lags."""
+    repo = make_repo(["intermediate", "advanced", "dp-test"])
+    for series in ("intermediate", "advanced", "dp-test"):
+        repo.lecture(series, "amss", lecture_text("AMSS"))
+    repo.toc("advanced", ["amss"])
+    assert repo.promote("amss").returncode == 0
+    assert repo.entry("amss")["canonical"] == "intermediate"
+    for series in ("intermediate", "advanced"):
+        repo.lecture(series, "amss", lecture_text("AMSS", "Fixed in step."))
+        repo.move_pin(series)
+    return repo
+
+
+def test_toc_of_a_holder_in_step_with_the_canonical_keeps_a_third_copy_stale(make_repo):
+    repo = three_holders_one_lagging(make_repo)
+
+    res = repo.promote("--toc", "advanced")
+
+    assert res.returncode == 0, res.stderr
+    entry = repo.entry("amss")
+    assert entry["canonical"] == "intermediate"
+    assert [s["series"] for s in entry["sources"]] == ["intermediate", "advanced", "dp-test"]
+    assert "divergent" not in entry and "interim" not in entry
+
+
+def test_a_map_line_naming_a_holder_in_step_keeps_a_third_copy_stale(make_repo):
+    repo = three_holders_one_lagging(make_repo)
+    repo.write_canonical_map({"amss": "advanced"})
+
+    res = repo.promote("--refresh")
+
+    assert res.returncode == 0, res.stderr
+    assert "settles nothing" in res.stdout
+    entry = repo.entry("amss")
+    assert "divergent" not in entry and "interim" not in entry
+
+
+def test_settles_nothing_is_removable_when_the_excluded_series_lacks_the_lecture(make_repo):
+    repo = make_repo(["intro", "intermediate", "jax"])
+    text = lecture_text("Shared")
+    repo.lecture("intro", "shared", text)
+    repo.lecture("intermediate", "shared", text)
+    repo.write_canonical_map({"shared": "intermediate"})
+
+    res = repo.promote("shared", "--exclude", "jax")
+
+    assert res.returncode == 0, res.stderr
+    assert "can be removed" in res.stdout
+    assert "remove it now, since once intro's copy moves on" in res.stdout
+
+
+def test_settles_nothing_is_removable_when_the_excluded_copy_is_the_same_lecture(make_repo):
+    repo = make_repo(["intro", "intermediate", "jax"])
+    text = lecture_text("Shared")
+    for series in ("intro", "intermediate", "jax"):
+        repo.lecture(series, "shared", text)
+    repo.write_canonical_map({"shared": "intro"})
+
+    res = repo.promote("shared", "--exclude", "jax")
+
+    assert res.returncode == 0, res.stderr
+    assert "can be removed" in res.stdout and "remove it now" not in res.stdout
+
+
+def test_settles_nothing_is_removable_when_only_an_excluded_consumer_differs(make_repo):
+    repo = make_repo(["intro", "intermediate", "dp"], consumers=["dp"])
+    text = lecture_text("Shared")
+    repo.lecture("intro", "shared", text)
+    repo.lecture("intermediate", "shared", text)
+    repo.lecture("dp", "shared", lecture_text("Shared, dp's older copy"))
+    repo.write_canonical_map({"shared": "intermediate"})
+
+    res = repo.promote("shared", "--exclude", "dp")
+
+    assert res.returncode == 0, res.stderr
+    assert "can be removed" in res.stdout
+
+
+def test_an_excluded_series_without_a_mirror_is_not_called_settled(make_repo):
+    import shutil
+    repo = make_repo(["intermediate", "jax"])
+    repo.lecture("intermediate", "ifp_egm", lecture_text("IFP (intermediate)"))
+    repo.lecture("jax", "ifp_egm", lecture_text("IFP (jax)"))
+    repo.write_canonical_map({"ifp_egm": "intermediate"})
+    assert repo.promote("ifp_egm").returncode == 0
+    shutil.rmtree(repo.root / "mirror" / "jax")
+
+    res = repo.promote("ifp_egm", "--exclude", "jax")
+
+    assert res.returncode == 0, res.stderr
+    assert "can be removed" not in res.stdout
+    assert "jax (excluded, with no mirror on disk) could not be checked" in res.stdout
+
+
+def test_a_map_slug_held_only_by_an_excluded_series_is_not_reported(make_repo):
+    repo = make_repo(["intro", "intermediate", "jax"])
+    repo.lecture("intro", "career", lecture_text("Career"))
+    repo.lecture("jax", "jax_nn", lecture_text("NN (jax)"))
+    repo.write_canonical_map({"jax_nn": "jax"})
+
+    res = repo.promote("career", "--exclude", "jax")
+
+    assert res.returncode == 0, res.stderr
+    assert "[jax_nn] WARN" not in res.stdout
+
+
+def test_a_map_slug_only_a_consumer_holds_or_in_the_wrong_case_is_reported(make_repo):
+    repo = make_repo(["intermediate", "dp"], consumers=["dp"])
+    repo.lecture("intermediate", "career", lecture_text("Career"))
+    repo.lecture("dp", "only_dp", lecture_text("Only in dp"))
+    repo.write_canonical_map({"only_dp": "intermediate", "Career": "intermediate"})
+
+    res = repo.promote("career")
+
+    assert res.returncode == 0, res.stderr
+    assert "[only_dp] WARN: canonical.yml names only_dp" in res.stdout
+    assert "[Career] WARN: canonical.yml names Career" in res.stdout
+
+
+def test_canonical_map_accepts_merge_keys_and_refuses_unhashable_keys(make_repo):
+    repo = make_repo(["intro", "intermediate"])
+    repo.lecture("intro", "lake_model", lecture_text("Lake (intro)"))
+    repo.lecture("intermediate", "lake_model", lecture_text("Lake (intermediate)"))
+    path = repo.root / "sync" / "canonical.yml"
+
+    path.write_text("<<: {lake_model: intermediate}\n", encoding="utf-8")
+    res = repo.promote("lake_model")
+    assert res.returncode == 0, res.stderr
+    assert repo.entry("lake_model")["canonical"] == "intermediate"
+
+    path.write_text("? [lake_model, mle]\n: intermediate\n", encoding="utf-8")
+    res = repo.promote("lake_model")
+    assert res.returncode == 1
+    assert "found an unhashable key" in res.stderr and "Traceback" not in res.stderr

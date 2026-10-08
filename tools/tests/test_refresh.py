@@ -60,3 +60,36 @@ def test_a_consumer_canonical_entry_whose_pin_moved_fails_the_refresh(make_repo)
     res = repo.promote("--refresh")
     assert res.returncode == 1
     assert "[dp_only] FAILED: canonical series 'dp' is a consumer, but its pin moved" in res.stderr
+
+
+def test_a_canonical_series_that_left_the_manifest_is_named_as_such(make_repo):
+    repo = make_repo(["intro", "extra"])
+    repo.lecture("extra", "only_extra", lecture_text("Only in extra"))
+    assert repo.promote("only_extra").returncode == 0
+    # The series leaves the manifest; the next sync drops its pin.
+    repo.order = ["intro"]
+    repo.write_manifest()
+    repo.write_state({"intro": repo.pin("intro")})
+
+    res = repo.promote("--refresh")
+
+    assert res.returncode == 1
+    failed = [line for line in res.stderr.splitlines() if line.startswith("[only_extra] FAILED")]
+    assert len(failed) == 1, res.stderr
+    assert "canonical series 'extra' is not in sync/manifest.yml" in failed[0]
+    assert "-> none)" in failed[0] and "excluded" not in failed[0]
+
+
+def test_a_canonical_copy_gone_upstream_is_named_as_such(make_repo):
+    repo = make_repo(["advanced", "dp-test"])
+    for series in ("advanced", "dp-test"):
+        repo.lecture(series, "amss", lecture_text("AMSS"))
+    assert repo.promote("amss").returncode == 0
+    (repo.root / "mirror" / "advanced" / "lectures" / "amss.md").unlink()
+    repo.move_pin("advanced")
+
+    res = repo.promote("--refresh")
+
+    assert res.returncode == 1
+    assert "[amss] FAILED: the canonical copy of amss.md is gone from advanced upstream" in res.stderr
+    assert "canonical-removed" in res.stderr
