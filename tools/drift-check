@@ -26,6 +26,13 @@ same lecture. This script compares all of that against the reconstructed
   the canonical copy's last promoted version), an ``interim``
   entry whose divergent copy moved again, or a divergence that converged.
 
+A non-canonical copy is judged by the rule promotion admitted it under: it is
+the same lecture as the canonical copy when it is byte-identical, or identical
+once each copy's asset references are normalised to their pool paths (series
+spell ``/_static/...`` and ``_static/...`` for the same file). That comparison
+is ``tools/promote``'s own ``normalised_text``, imported for the purpose, so
+the two tools cannot disagree about which copies are one lecture.
+
 Two kinds of copy are deliberately NOT watched. A consumer series' copies
 (``class: consumer`` in ``sync/manifest.yml``, recorded under ``superseded:``
 in the ledger, or under ``sources``/``divergent`` by a ledger written before
@@ -168,6 +175,45 @@ def mirror_lectures(series: str) -> Path:
 def consumer_series(manifest: dict) -> set:
     """Series declared ``class: consumer``: never canonical, never watched."""
     return {k for k, v in manifest.items() if (v or {}).get("class") == CONSUMER_CLASS}
+
+
+PROMOTE_PATH = Path(__file__).resolve().parent / "promote"
+_promote = None
+
+
+def promote_module():
+    """``tools/promote`` imported as a module, once, on first use. Only its
+    ``normalised_text`` is wanted: the form two same-name copies are compared
+    in at promotion. Importing it (rather than copying the asset parser here)
+    keeps the drift-check's idea of "one lecture" identical to promote's."""
+    global _promote
+    if _promote is None:
+        import importlib.util
+        from importlib.machinery import SourceFileLoader
+
+        loader = SourceFileLoader("qe_promote", str(PROMOTE_PATH))
+        spec = importlib.util.spec_from_loader(loader.name, loader)
+        module = importlib.util.module_from_spec(spec)
+        loader.exec_module(module)
+        _promote = module
+    return _promote
+
+
+def same_lecture(series: str, canonical: str, path: str, cur: bytes, can_bytes: bytes) -> bool:
+    """Is the ``series`` copy at ``path`` the same lecture as ``canonical``'s,
+    by promotion's rule: byte-identical, or identical once each copy's asset
+    references are normalised to the pool paths promotion would give them.
+    A copy that is not UTF-8 text is never the same lecture."""
+    if cur == can_bytes:
+        return True
+    if not path.endswith(".md"):
+        return False
+    slug = path[:-3]
+    promote = promote_module()
+    try:
+        return promote.normalised_text(series, slug) == promote.normalised_text(canonical, slug)
+    except UnicodeDecodeError:
+        return False
 
 
 # --------------------------------------------------------------------------- #
@@ -349,11 +395,13 @@ def check_lecture(key: str, entry: dict, manifest: dict, consumers: set, finding
                     data={"series": series, "path": s["path"]},
                 ))
             continue
-        if cur == can_bytes:
+        if same_lecture(series, canonical, s["path"], cur, can_bytes):
+            exact = cur == can_bytes
             findings.append(Finding(
                 "info", "converged", key,
-                f"{key}: the {series} copy changed and now matches {canonical} exactly",
-                data={"series": series, "path": s["path"]},
+                f"{key}: the {series} copy changed and now matches {canonical}"
+                + (" exactly" if exact else " up to asset path spelling"),
+                data={"series": series, "path": s["path"], "exact": exact},
             ))
             continue
         if canonical_moved and sha256_bytes(cur) == can_src.get("digest"):
@@ -369,9 +417,10 @@ def check_lecture(key: str, entry: dict, manifest: dict, consumers: set, finding
             "drift", "diverged", key,
             f"{key}: the {series} copy lectures/{s['path']} no longer matches its canonical home in {canonical}",
             detail=(
-                f"At promotion the {series} copy was byte-identical to {canonical}'s. It has since been edited "
-                f"on its own. Under the upstream-first rule the fix belongs in {canonical} (and flows down); "
-                f"if the edit is a deliberate variant, record it as one rather than leaving a silent fork."
+                f"At promotion the {series} copy was the same lecture as {canonical}'s (byte-identical, or "
+                f"identical up to asset path spelling). It has since been edited on its own. Under the "
+                f"upstream-first rule the fix belongs in {canonical} (and flows down); if the edit is a "
+                f"deliberate variant, record it as one rather than leaving a silent fork."
             ),
             diff=unified_diff(can_bytes, cur, f"{canonical}/lectures/{can_src['path']}", f"{series}/lectures/{s['path']}"),
             issue_title=f"drift({series}): lectures/{s['path']} differs from its canonical copy in {canonical}",
@@ -394,11 +443,14 @@ def check_lecture(key: str, entry: dict, manifest: dict, consumers: set, finding
             continue
         if sha256_bytes(cur) == d.get("digest"):
             continue
-        if cur == can_bytes:
+        if same_lecture(series, canonical, d["path"], cur, can_bytes):
+            exact = cur == can_bytes
             findings.append(Finding(
                 "info", "converged", key,
-                f"{key}: the divergent {series} copy now matches {canonical} exactly — the interim entry can be re-promoted",
-                data={"series": series, "path": d["path"], "interim": interim},
+                f"{key}: the divergent {series} copy now matches {canonical}"
+                + (" exactly" if exact else " up to asset path spelling")
+                + " — the interim entry can be re-promoted",
+                data={"series": series, "path": d["path"], "interim": interim, "exact": exact},
             ))
         else:
             findings.append(Finding(
