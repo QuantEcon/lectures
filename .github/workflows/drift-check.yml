@@ -22,11 +22,15 @@ name: drift-check
 # writes every entry it could refresh, the pull request is opened with those
 # and lists each failure with promote's reason, and the run is marked RED.
 # Reasons include a same-name copy edited to differ (settled by
-# sync/canonical.yml or upstream), a canonical copy removed or renamed
-# upstream, an asset that cannot be moved or overwritten, and a canonical
-# series this run excludes. A merely stale copy stays a source and does not
-# fail. A refused entry is tried again whenever the refresh job next runs,
-# which is when a canonical copy next moves.
+# sync/canonical.yml or upstream), a sync/canonical.yml line naming a copy
+# that has fallen behind, a canonical copy removed or renamed upstream, an
+# asset that cannot be moved or overwritten, and a canonical series this run
+# excludes. A merely stale copy stays a source and does not fail.
+# A refused entry keeps its old ledger record, so while its canonical copy
+# differs from that record the drift-check asks for a refresh every night:
+# the run stays red until the entry is settled, and a settlement applies the
+# next night. An entry refused when only its series' pin moved (its canonical
+# copy unchanged) is retried only when some canonical copy next moves (#20).
 # PERMISSIONS: uses the default GITHUB_TOKEN. A PR opened with it does not
 # trigger this workflow's own pull_request run; once branch protection is on,
 # the push to `drift/refresh` still works (it is not a protected branch).
@@ -139,7 +143,13 @@ jobs:
           rc=${PIPESTATUS[0]}
           set -e
           echo "rc=$rc" >> "$GITHUB_OUTPUT"
-          echo "promote --refresh exit status: $rc (0 every entry refreshed, 1 some entries failed -- see the FAILED lines)"
+          if [ "$rc" = 0 ]; then
+            echo "promote --refresh exit status: 0 (every entry refreshed, or nothing to refresh)"
+          elif grep -q '^summary \[refresh\]' promote.log; then
+            echo "promote --refresh exit status: $rc (some entries were refused -- see the FAILED lines)"
+          else
+            echo "promote --refresh exit status: $rc (it stopped before its summary -- see the next step)"
+          fi
 
       - name: Open or update the refresh pull request
         env:
@@ -181,7 +191,7 @@ jobs:
             echo "| lectures re-copied | | $n |"
             if [ -n "$failed" ]; then
               echo
-              echo "**Not refreshed.** \`tools/promote\` refused these entries, so their pool copies stay at the previous pin and the run that opened this PR is red. Each line gives promote's reason. A same-name copy edited to differ is settled by naming the winning series in \`sync/canonical.yml\` or by reconciling the copies upstream; the other reasons (a canonical copy removed or renamed upstream, an asset that cannot be moved or overwritten, a canonical series this run excludes) name their own remedy. A refused entry is tried again the next time the refresh job runs, which is when a canonical copy next moves."
+              echo "**Not refreshed.** \`tools/promote\` refused these entries, so their pool copies stay at the previous pin and the run that opened this PR is red. Each line gives promote's reason. A same-name copy edited to differ is settled by naming the winning series in \`sync/canonical.yml\` or by reconciling the copies upstream. A \`sync/canonical.yml\` line that names a lagging copy is settled by pointing it at the recorded canonical series or removing it. A canonical copy removed or renamed upstream needs a decision, which the drift-check's \`canonical-removed\` issue tracks. The line itself explains the other reasons. An entry whose canonical copy moved is refused again every night, so the run stays red until it is settled; an entry refused when only its series' pin moved is retried when a canonical copy next moves."
               echo
               echo '```'
               echo "$failed"
