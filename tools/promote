@@ -342,12 +342,34 @@ def slug_of(name: str) -> str:
 # --------------------------------------------------------------------------- #
 # Manifest / state / ledger I/O                                                #
 # --------------------------------------------------------------------------- #
-def load_yaml(path: Path):
+class UniqueKeyLoader(yaml.SafeLoader):
+    """A SafeLoader that refuses a mapping with a repeated key, which plain
+    YAML loading silently resolves to the last value."""
+
+
+def _construct_unique_mapping(loader, node, deep=False):
+    seen = set()
+    for key_node, _ in node.value:
+        key = loader.construct_object(key_node, deep=deep)
+        if key in seen:
+            raise yaml.constructor.ConstructorError(
+                None, None, f"repeated key {key!r}", key_node.start_mark
+            )
+        seen.add(key)
+    return loader.construct_mapping(node, deep=deep)
+
+
+UniqueKeyLoader.add_constructor(
+    yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, _construct_unique_mapping
+)
+
+
+def load_yaml(path: Path, loader=yaml.SafeLoader):
     """Load a YAML mapping, tolerating an empty/None document (-> {})."""
     if not path.exists():
         return None
     try:
-        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        data = yaml.load(path.read_text(encoding="utf-8"), Loader=loader) or {}
     except yaml.YAMLError as exc:
         raise SystemExit(f"error: could not parse {path}:\n{exc}")
     if not isinstance(data, dict):
@@ -388,18 +410,24 @@ def load_canonical_map(order, consumers):
     """Return the committed canonical map: ``slug -> series``.
 
     ``sync/canonical.yml`` is HUMAN INTENT — the one way a same-name collision
-    is settled. It is validated up front, so a typo is an error before
-    anything is planned, never a silently ignored entry. A missing or empty
-    file is an empty map.
+    is settled. It is validated up front: a repeated key, two keys naming one
+    lecture (``slug`` and ``slug.md``), and an unknown or consumer series are
+    errors before anything is planned. A slug that no series holds cannot be
+    checked here (it needs the mirror); ``map_slugs_held_nowhere`` reports
+    it. A missing or empty file is an empty map.
     """
-    data = load_yaml(CANONICAL_MAP_PATH)
+    data = load_yaml(CANONICAL_MAP_PATH, loader=UniqueKeyLoader)
     if not data:
         return {}
-    bad = []
+    bad, named = [], {}
     for slug, series in data.items():
         if not isinstance(slug, str) or not isinstance(series, str):
             bad.append(f"{slug!r}: {series!r} (expected `<slug>: <series>`)")
-        elif series not in order:
+            continue
+        if slug_of(slug) in named:
+            bad.append(f"{slug}: names the same lecture as '{named[slug_of(slug)]}'")
+        named[slug_of(slug)] = slug
+        if series not in order:
             bad.append(f"{slug}: unknown series '{series}'")
         elif series in consumers:
             bad.append(f"{slug}: '{series}' is a consumer series and is never canonical")
@@ -409,6 +437,18 @@ def load_canonical_map(order, consumers):
             + "\n       ".join(bad)
         )
     return {slug_of(slug): series for slug, series in data.items()}
+
+
+def map_slugs_held_nowhere(canonical_map, order):
+    """Map slugs whose lecture no reconstructed series mirror holds: a typo,
+    or a lecture renamed or retired upstream. Reported, not refused — one
+    dead line must not stop every promotion."""
+    mirrors = [s for s in order if mirror_lectures(s).is_dir()]
+    return sorted(
+        slug
+        for slug in canonical_map
+        if not any((mirror_lectures(s) / f"{slug}.md").is_file() for s in mirrors)
+    )
 
 
 def load_state():
@@ -563,7 +603,7 @@ def normalised_text(series: str, slug: str) -> str:
     return text
 
 
-def resolve_sources(plan: Plan, considered, consumers, canonical_map, recorded=None):
+def resolve_sources(plan: Plan, considered, consumers, canonical_map, recorded=None, order=()):
     """Fill in canonical/sources/divergent/superseded by hashing across series.
 
     A same-named file is presumed to be ONE lecture. The anchor copy (the
@@ -687,11 +727,26 @@ def resolve_sources(plan: Plan, considered, consumers, canonical_map, recorded=N
             f"canonical series in sync/{CANONICAL_MAP_PATH.name}"
         )
     if mapped is not None and not differ:
-        plan.warnings.append(
-            f"{CANONICAL_MAP_PATH.name} names '{mapped}' for {plan.slug}, but "
-            "every copy is the same lecture — the map entry settles nothing "
-            "and can be removed"
-        )
+        # ``order`` is every manifest series: a holder excluded from this run
+        # may be what the entry settles, so it is never called removable then.
+        held_elsewhere = [
+            s for s in order
+            if s not in considered and s not in consumers
+            and (mirror_lectures(s) / rel).is_file()
+        ]
+        if held_elsewhere:
+            plan.warnings.append(
+                f"{CANONICAL_MAP_PATH.name} names '{mapped}' for {plan.slug}; "
+                "every copy this run considers is the same lecture, but "
+                f"{', '.join(held_elsewhere)} (excluded from this run) also "
+                "holds it, so keep the entry while it settles that collision"
+            )
+        else:
+            plan.warnings.append(
+                f"{CANONICAL_MAP_PATH.name} names '{mapped}' for {plan.slug}, but "
+                "every copy is the same lecture — the map entry settles nothing "
+                "and can be removed"
+            )
     plan.sources = [s for s in eligible if s in same or s in stale]
     plan.stale = stale
     plan.divergent = differ
@@ -1088,6 +1143,12 @@ def main(argv=None):
             + "` first (dedup must see every non-excluded series).\n"
         )
         return 1
+    for slug in map_slugs_held_nowhere(canonical_map, order):
+        print(
+            f"[{slug}] WARN: {CANONICAL_MAP_PATH.name} names {slug}, but no "
+            f"series mirror holds {slug}.md — a typo, or a lecture renamed or "
+            "retired upstream"
+        )
 
     state = load_state()
     for s in considered:
@@ -1159,7 +1220,7 @@ def main(argv=None):
         try:
             text = resolve_sources(
                 plan, considered, consumers, canonical_map,
-                ledger_lectures.get(f"lectures/{plan.slug}.md"),
+                ledger_lectures.get(f"lectures/{plan.slug}.md"), order,
             )
             collect_refs(plan, text)
             texts[plan.slug] = text

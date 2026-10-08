@@ -366,3 +366,46 @@ def test_a_map_entry_over_spelling_only_copies_is_not_refused(make_repo):
 
     assert res.returncode == 0, res.stderr
     assert "settles nothing" in res.stdout
+
+
+def test_canonical_map_rejects_repeated_keys_and_two_keys_for_one_lecture(make_repo):
+    repo = make_repo(["intro", "intermediate"])
+    repo.lecture("intro", "lake_model", lecture_text("Lake (intro)"))
+    repo.lecture("intermediate", "lake_model", lecture_text("Lake (intermediate)"))
+    path = repo.root / "sync" / "canonical.yml"
+
+    path.write_text("lake_model: intro\nlake_model: intermediate\n", encoding="utf-8")
+    res = repo.promote("lake_model")
+    assert res.returncode == 1
+    assert "repeated key 'lake_model'" in res.stderr
+
+    path.write_text("lake_model: intro\nlake_model.md: intermediate\n", encoding="utf-8")
+    res = repo.promote("lake_model")
+    assert res.returncode == 1
+    assert "lake_model.md: names the same lecture as 'lake_model'" in res.stderr
+    assert not repo.ledger_path.exists()
+
+
+def test_a_map_slug_no_series_holds_is_reported(make_repo):
+    repo = make_repo(["intro", "intermediate"])
+    repo.lecture("intermediate", "career", lecture_text("Career"))
+    repo.write_canonical_map({"carrer": "intermediate"})
+
+    res = repo.promote("career")
+
+    assert res.returncode == 0, res.stderr
+    assert "[carrer] WARN: canonical.yml names carrer, but no series mirror holds carrer.md" in res.stdout
+
+
+def test_a_map_entry_settling_an_excluded_series_is_not_called_removable(make_repo):
+    repo = make_repo(["intermediate", "jax"])
+    repo.lecture("intermediate", "ifp_egm", lecture_text("IFP (intermediate)"))
+    repo.lecture("jax", "ifp_egm", lecture_text("IFP (jax)"))
+    repo.write_canonical_map({"ifp_egm": "intermediate"})
+    assert repo.promote("ifp_egm").returncode == 0
+
+    res = repo.promote("ifp_egm", "--exclude", "jax")
+
+    assert res.returncode == 0, res.stderr
+    assert "can be removed" not in res.stdout
+    assert "jax (excluded from this run) also holds it" in res.stdout
