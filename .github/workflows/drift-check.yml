@@ -18,8 +18,9 @@ name: drift-check
 #
 # The refresh lands as a pull request rather than a push to main so a human
 # sees the ledger diff: a refresh can change which entries are `interim`.
-# An entry whose refresh fails (a same-name copy came to differ: tools/promote
-# refuses it until sync/canonical.yml or upstream settles it) does not hold
+# An entry whose refresh fails (a same-name copy was edited to differ:
+# tools/promote refuses it until sync/canonical.yml or upstream settles it; a
+# copy that is merely stale stays a source and does not fail) does not hold
 # the others back: promote still writes every entry it could refresh, the
 # pull request is opened with those and lists the failures, and the run is
 # then marked RED so the collision stays visible until it is resolved.
@@ -140,6 +141,14 @@ jobs:
         run: |
           git config user.name  'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          # A failing promote prints its summary only after every write, the
+          # ledger included. A non-zero exit without it means the run stopped
+          # part-way (a crash, not a refused entry), so what is on disk may be
+          # half-written: open nothing.
+          if [ "${{ steps.refresh.outputs.rc }}" != "0" ] && ! grep -q '^summary \[refresh\]' promote.log; then
+            echo "::error::tools/promote --refresh stopped before its summary (exit ${{ steps.refresh.outputs.rc }}); its writes may be partial, so no pull request is opened."
+            exit 1
+          fi
           failed=$(grep -E '^\[[^]]+\] FAILED: ' promote.log || true)
           git add lectures sync/ledger.yml
           if git diff --cached --quiet; then
@@ -166,7 +175,7 @@ jobs:
             echo "| lectures re-copied | | $n |"
             if [ -n "$failed" ]; then
               echo
-              echo "**Not refreshed.** \`tools/promote\` refused these entries, so their pool copies are still at the previous pin and the run that opened this PR is red. A same-name copy has come to differ: either name the winning series in \`sync/canonical.yml\` or reconcile the copies upstream, and the next run refreshes them."
+              echo "**Not refreshed.** \`tools/promote\` refused these entries, so their pool copies are still at the previous pin and the run that opened this PR is red. A same-name copy was edited to differ from its canonical copy: either name the winning series in \`sync/canonical.yml\` or reconcile the copies upstream, and the next run refreshes them."
               echo
               echo '```'
               echo "$failed"
