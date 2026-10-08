@@ -18,6 +18,11 @@ name: drift-check
 #
 # The refresh lands as a pull request rather than a push to main so a human
 # sees the ledger diff: a refresh can change which entries are `interim`.
+# An entry whose refresh fails (a same-name copy came to differ: tools/promote
+# refuses it until sync/canonical.yml or upstream settles it) does not hold
+# the others back: promote still writes every entry it could refresh, the
+# pull request is opened with those and lists the failures, and the run is
+# then marked RED so the collision stays visible until it is resolved.
 # PERMISSIONS: uses the default GITHUB_TOKEN. A PR opened with it does not
 # trigger this workflow's own pull_request run; once branch protection is on,
 # the push to `drift/refresh` still works (it is not a protected branch).
@@ -116,7 +121,18 @@ jobs:
         run: uv run --script tools/sync
 
       - name: Refresh the pool entries whose canonical source moved
-        run: uv run --script tools/promote --refresh --exclude $PROMOTE_EXCLUDE
+        id: refresh
+        # promote writes every entry it can refresh and exits 1 if any entry
+        # failed. The exit status is kept, not acted on here, so the entries
+        # that did refresh still reach the pull request below; the last step
+        # turns the run red.
+        run: |
+          set +e
+          uv run --script tools/promote --refresh --exclude $PROMOTE_EXCLUDE 2>&1 | tee promote.log
+          rc=${PIPESTATUS[0]}
+          set -e
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          echo "promote --refresh exit status: $rc (0 every entry refreshed, 1 some entries failed -- see the FAILED lines)"
 
       - name: Open or update the refresh pull request
         env:
@@ -124,9 +140,15 @@ jobs:
         run: |
           git config user.name  'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          failed=$(grep -E '^\[[^]]+\] FAILED: ' promote.log || true)
           git add lectures sync/ledger.yml
           if git diff --cached --quiet; then
-            echo 'promote --refresh changed nothing -- no pull request.'
+            if [ -n "$failed" ]; then
+              echo 'promote --refresh refreshed nothing; every entry it tried failed:'
+              echo "$failed"
+            else
+              echo 'promote --refresh changed nothing -- no pull request.'
+            fi
             exit 0
           fi
           before=$(git show HEAD:sync/ledger.yml | grep -c 'interim: true' || true)
@@ -142,6 +164,14 @@ jobs:
             echo "|---|---|---|"
             echo "| \`interim: true\` ledger entries | $before | $after |"
             echo "| lectures re-copied | | $n |"
+            if [ -n "$failed" ]; then
+              echo
+              echo "**Not refreshed.** \`tools/promote\` refused these entries, so their pool copies are still at the previous pin and the run that opened this PR is red. A same-name copy has come to differ: either name the winning series in \`sync/canonical.yml\` or reconcile the copies upstream, and the next run refreshes them."
+              echo
+              echo '```'
+              echo "$failed"
+              echo '```'
+            fi
             echo
             echo "Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}. The branch is force-pushed from \`${{ github.event.repository.default_branch }}\` on every run that still needs a refresh, so this PR always shows the current delta."
             echo
@@ -156,3 +186,9 @@ jobs:
           else
             gh pr create --head drift/refresh --title "promote: refresh $n pool lectures whose canonical source moved" --body-file pr-body.md
           fi
+
+      - name: Keep the run red while any entry could not be refreshed
+        if: steps.refresh.outputs.rc != '0'
+        run: |
+          echo "::error::tools/promote --refresh could not refresh every entry (exit ${{ steps.refresh.outputs.rc }}). The entries it did refresh are in the pull request; the FAILED lines above name the rest and what settles them."
+          exit 1
