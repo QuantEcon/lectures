@@ -153,8 +153,9 @@ LEDGER_HEADER = (
     "# baseline for telling fresh upstream movement from already-recorded\n"
     "# divergence. `superseded` items are consumer-series copies: provenance\n"
     "# only, never watched. A `sources` item whose digest differs from the\n"
-    "# canonical one is a STALE copy: still at an earlier promoted version\n"
-    "# while the canonical copy moved on.\n"
+    "# canonical one is either a STALE copy (still at an earlier promoted\n"
+    "# version while the canonical copy moved on) or a copy equal to the\n"
+    "# canonical one once asset paths are normalised.\n"
     "# `rewrites` is an ordered list of literal replacements: applying each\n"
     "# {from -> to} in turn to the canonical mirror copy reproduces the pool\n"
     "# copy byte-for-byte. Each pair is ONE non-rescanning pass with Python\n"
@@ -1089,7 +1090,8 @@ def build_parser():
         metavar="SERIES",
         default=[],
         help="series excluded from source/dedup consideration for this run "
-        "(none by default).",
+        "(none by default; CI excludes PROMOTE_EXCLUDE in "
+        ".github/workflows/drift-check.yml).",
     )
     parser.add_argument(
         "--dry-run",

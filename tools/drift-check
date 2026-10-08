@@ -12,10 +12,11 @@ same lecture. This script compares all of that against the reconstructed
 ``mirror/`` and sorts what it finds into four outcomes:
 
 * ``refresh`` — the canonical copy moved upstream. The pool copy is stale, not
-  wrong: ``tools/promote --refresh`` re-copies it. CI does this automatically
+  wrong: ``tools/promote --refresh`` re-copies it. CI does this automatically,
+  with the exclusions in PROMOTE_EXCLUDE (.github/workflows/drift-check.yml),
   and opens a pull request.
-* ``drift``   — a NON-canonical copy (today: the dp copy of an advanced or
-  intermediate lecture) no longer matches its canonical home, or a copy was
+* ``drift``   — a NON-canonical copy (today: the dp-test copy of an advanced
+  or intermediate lecture) no longer matches its canonical home, or a copy was
   removed upstream, or a watched ``_toc.yml`` changed. Each becomes a GitHub
   issue (``--issues``) that closes itself when the finding clears.
 * ``violation`` — the POOL itself no longer equals rewrites(canonical), or a
@@ -715,7 +716,7 @@ def default_repo():
 HEADINGS = {
     "violation": "VIOLATIONS — the pool no longer equals rewrites(canonical); fix before anything else",
     "drift": "DRIFT — a copy diverged from its canonical home (each becomes an issue under --issues)",
-    "refresh": "REFRESH — the canonical copy moved; `tools/promote --refresh` brings the pool up to date",
+    "refresh": "REFRESH — the canonical copy moved; `tools/promote --refresh` (CI adds --exclude $PROMOTE_EXCLUDE) brings the pool up to date",
     "info": "INFO — nothing to act on now",
 }
 

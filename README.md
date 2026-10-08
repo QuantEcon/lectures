@@ -65,7 +65,7 @@ The repository is organised around three layers. Only the first exists in a mean
 │   └── tests/        # pytest suite for promote and drift-check (scratch repos)
 └── .github/workflows/
     ├── sync.yml         # daily job that refreshes the pinned SHAs
-    ├── drift-check.yml  # runs after sync: drift issues, refresh PR, red on a pool edit
+    ├── drift-check.yml  # runs after sync: drift issues, refresh PR, red on a pool edit or a refused refresh
     └── tests.yml        # runs tools/tests on pull requests
 ```
 
@@ -98,7 +98,7 @@ A series' pin (and its timestamp) is only rewritten when the upstream `HEAD` has
 | `tools/drift-check --issues` | Open, update and close `drift` issues to match the findings (CI). |
 | `tools/drift-check --accept-toc dp-test` | Record a series' `_toc.yml` at its current pin as the watched baseline. |
 
-Four outcomes: **refresh** (the canonical copy moved upstream; CI runs `promote --refresh` and opens a pull request; an entry the refresh refuses, because a same-name copy was edited to differ, is listed in that pull request and keeps the run red until `sync/canonical.yml` or upstream settles it), **drift** (a non-canonical copy diverged from its canonical home, a copy was removed, or a watched toc changed; each becomes an issue that closes itself when the finding clears), **violation** (the pool itself was edited; the job goes red), and **info** (a copy is merely stale, or a divergence converged). [`drift-check.yml`](.github/workflows/drift-check.yml) runs it after every `sync`.
+Four outcomes: **refresh** (the canonical copy moved upstream; CI runs `promote --refresh --exclude $PROMOTE_EXCLUDE` and opens a pull request; an entry the refresh refuses is listed in that pull request with promote's reason, such as a same-name copy edited to differ, which `sync/canonical.yml` or upstream settles, and the run is red; a refused entry is tried again the next time the refresh runs), **drift** (a non-canonical copy diverged from its canonical home, a copy was removed, or a watched toc changed; each becomes an issue that closes itself when the finding clears), **violation** (the pool itself was edited; the job goes red), and **info** (a copy is merely stale, or a divergence converged). [`drift-check.yml`](.github/workflows/drift-check.yml) runs it after every `sync`.
 
 One kind of copy is never watched. A **consumer** series (`class: consumer` in `sync/manifest.yml`, today `dp`) only republishes other series' lectures, so its copies are recorded as `superseded` and are expected to go stale.
 

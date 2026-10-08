@@ -18,12 +18,15 @@ name: drift-check
 #
 # The refresh lands as a pull request rather than a push to main so a human
 # sees the ledger diff: a refresh can change which entries are `interim`.
-# An entry whose refresh fails (a same-name copy was edited to differ:
-# tools/promote refuses it until sync/canonical.yml or upstream settles it; a
-# copy that is merely stale stays a source and does not fail) does not hold
-# the others back: promote still writes every entry it could refresh, the
-# pull request is opened with those and lists the failures, and the run is
-# then marked RED so the collision stays visible until it is resolved.
+# An entry whose refresh fails does not hold the others back: promote still
+# writes every entry it could refresh, the pull request is opened with those
+# and lists each failure with promote's reason, and the run is marked RED.
+# Reasons include a same-name copy edited to differ (settled by
+# sync/canonical.yml or upstream), a canonical copy removed or renamed
+# upstream, an asset that cannot be moved or overwritten, and a canonical
+# series this run excludes. A merely stale copy stays a source and does not
+# fail. A refused entry is tried again whenever the refresh job next runs,
+# which is when a canonical copy next moves.
 # PERMISSIONS: uses the default GITHUB_TOKEN. A PR opened with it does not
 # trigger this workflow's own pull_request run; once branch protection is on,
 # the push to `drift/refresh` still works (it is not a protected branch).
@@ -50,14 +53,17 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  # M2 posture (PLAN.md): the real `dp` series is excluded from promotion while
-  # the `dp-test` sandbox stands in for it. Retired at the switch-over
-  # (QuantEcon/project-monorepo#24), when this becomes empty.
-  # `jax` used to be excluded inside tools/promote; it is now excluded here,
-  # by the same per-run flag, so the refresh keeps its posture. Two pool
-  # lectures (ifp_egm, short_path) share a name with a different jax lecture
-  # and would fail the refresh until jax's renames land; drop jax from this
-  # list then.
+  # Series every refresh leaves out (promote --exclude). `dp`: the real dp
+  # series is excluded while the dp-test sandbox stands in for it (M2 posture,
+  # PLAN.md); it leaves this list at QuantEcon/project-monorepo#24. `jax`: it
+  # used to be excluded inside tools/promote and is now excluded here, by the
+  # same per-run flag. With jax considered, short_path fails the refresh
+  # (intro's and jax's are different lectures), while ifp_egm's
+  # sync/canonical.yml line records jax's copy as divergent instead; drop jax
+  # when its renames land (QuantEcon/project-monorepo#76). A refresh fails an
+  # entry whose canonical series is excluded once that series' pin moves, so
+  # jax must leave this list before any jax-only lecture is promoted. An
+  # empty list is fine: the flag is then left off.
   PROMOTE_EXCLUDE: dp jax
 
 jobs:
@@ -129,7 +135,7 @@ jobs:
         # turns the run red.
         run: |
           set +e
-          uv run --script tools/promote --refresh --exclude $PROMOTE_EXCLUDE 2>&1 | tee promote.log
+          uv run --script tools/promote --refresh ${PROMOTE_EXCLUDE:+--exclude $PROMOTE_EXCLUDE} 2>&1 | tee promote.log
           rc=${PIPESTATUS[0]}
           set -e
           echo "rc=$rc" >> "$GITHUB_OUTPUT"
@@ -143,10 +149,10 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           # A failing promote prints its summary only after every write, the
           # ledger included. A non-zero exit without it means the run stopped
-          # part-way (a crash, not a refused entry), so what is on disk may be
-          # half-written: open nothing.
+          # before or during its writes (a configuration error, or a crash; not
+          # a refused entry), so what is on disk may be half-written: open nothing.
           if [ "${{ steps.refresh.outputs.rc }}" != "0" ] && ! grep -q '^summary \[refresh\]' promote.log; then
-            echo "::error::tools/promote --refresh stopped before its summary (exit ${{ steps.refresh.outputs.rc }}); its writes may be partial, so no pull request is opened."
+            echo "::error::tools/promote --refresh exited ${{ steps.refresh.outputs.rc }} before its summary: a configuration error (see the error line in the refresh step) or a crash part-way. Its writes may be partial, so no pull request is opened."
             exit 1
           fi
           failed=$(grep -E '^\[[^]]+\] FAILED: ' promote.log || true)
@@ -167,7 +173,7 @@ jobs:
           git commit -m "promote: refresh $n pool lectures whose canonical source moved"
           git push --force -u origin drift/refresh
           {
-            echo "\`tools/drift-check\` found pool entries whose **canonical copy moved upstream**; \`tools/promote --refresh --exclude $PROMOTE_EXCLUDE\` re-promoted them. Review the ledger diff, not just the lecture text: a refresh re-resolves every source, so an entry whose other copies went stale can change shape."
+            echo "\`tools/drift-check\` found pool entries whose **canonical copy moved upstream**; \`tools/promote --refresh${PROMOTE_EXCLUDE:+ --exclude $PROMOTE_EXCLUDE}\` re-promoted them. Review the ledger diff, not just the lecture text: a refresh re-resolves every source, so an entry whose other copies went stale can change shape."
             echo
             echo "| | before | after |"
             echo "|---|---|---|"
@@ -175,7 +181,7 @@ jobs:
             echo "| lectures re-copied | | $n |"
             if [ -n "$failed" ]; then
               echo
-              echo "**Not refreshed.** \`tools/promote\` refused these entries, so their pool copies are still at the previous pin and the run that opened this PR is red. A same-name copy was edited to differ from its canonical copy: either name the winning series in \`sync/canonical.yml\` or reconcile the copies upstream, and the next run refreshes them."
+              echo "**Not refreshed.** \`tools/promote\` refused these entries, so their pool copies stay at the previous pin and the run that opened this PR is red. Each line gives promote's reason. A same-name copy edited to differ is settled by naming the winning series in \`sync/canonical.yml\` or by reconciling the copies upstream; the other reasons (a canonical copy removed or renamed upstream, an asset that cannot be moved or overwritten, a canonical series this run excludes) name their own remedy. A refused entry is tried again the next time the refresh job runs, which is when a canonical copy next moves."
               echo
               echo '```'
               echo "$failed"
@@ -199,5 +205,5 @@ jobs:
       - name: Keep the run red while any entry could not be refreshed
         if: steps.refresh.outputs.rc != '0'
         run: |
-          echo "::error::tools/promote --refresh could not refresh every entry (exit ${{ steps.refresh.outputs.rc }}). The entries it did refresh are in the pull request; the FAILED lines above name the rest and what settles them."
+          echo "::error::tools/promote --refresh could not refresh every entry (exit ${{ steps.refresh.outputs.rc }}). The FAILED lines in the refresh step give each entry and promote's reason; any entries it did refresh are in the drift/refresh pull request."
           exit 1
