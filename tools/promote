@@ -14,10 +14,31 @@ assets enter the pool, so orphans are excluded by construction.
 Dedup happens at promotion time: the same-named copy is hashed across every
 non-excluded series in ``sync/manifest.yml``; the pool takes the copy from the
 CANONICAL series (the highest-priority series, in manifest order, whose copy is
-byte-identical to the requested source) and records every identical series as
-a source. Same-named copies that differ in bytes are recorded under
-``divergent:`` and the entry is marked ``interim: true`` (canonical pending
-human triage). ``jax`` is ALWAYS excluded (variant regime).
+identical to the requested source) and records every identical series as a
+source. "Identical" means byte-identical, or identical once each copy's asset
+references are normalised to the pool paths promotion would give them.
+
+A same-named copy that DIFFERS is treated as a different lecture under the same
+name, and promotion refuses it: the error names the lecture and every series
+involved. A copy that is merely STALE is not different: a series recorded as a
+source at the entry's last promotion whose copy is still at a version recorded
+then (its own, or the canonical copy's), while the canonical copy moved on,
+stays a source (the drift-check's ``stale-copy``, which is info). Only a copy
+edited to something else is refused, and a canonical-map entry that names a
+stale copy, since following it would take the pool back to the lagging text.
+Which copy the pool keeps never falls out of run order. The one exception is
+the committed canonical map, ``sync/canonical.yml`` (human intent), which
+names the winning series per slug; the losing copies are then recorded under
+``divergent:`` and the entry is marked ``interim: true`` until a rename or
+merge upstream retires the map entry.
+
+Series classes (``class:`` on a manifest stanza). The default class is
+canonical-eligible. A ``consumer`` series (one that republishes other series'
+lectures) is never canonical and contributes no lecture to the pool; its
+same-named copies, equal or not, are recorded under ``superseded:`` and are
+NOT watched by the drift-check. No series is excluded by default: ``jax``
+takes part like any other, so until its renames land its colliding names fail
+by the rule above. ``--exclude`` drops series for one run.
 
 Asset references are normalised into the pool ``_static`` conventions
 (``_static/<slug>/`` for per-lecture assets, ``_static/_shared/`` for assets
@@ -45,14 +66,19 @@ Flags
     --toc SERIES       take the slug list from mirror/SERIES/lectures/_toc.yml
                        (product pages — intro, status, troubleshooting,
                        zreferences — are skipped: they become products/<key>/
-                       pages in M3, not pool content).
+                       pages in M3, not pool content). For a consumer series
+                       each lecture comes from its canonical home instead.
     --refresh          re-run the promotion pipeline for every ledger entry
                        whose canonical series pin in sync/state.yml differs
                        from its recorded promoted_at pin; unchanged pins are a
-                       strict no-op.
+                       strict no-op. An entry whose canonical series this run
+                       cannot use (excluded, or a consumer) is skipped while
+                       its pin is unchanged and FAILS once the pin has moved.
+                       CI runs it with --exclude $PROMOTE_EXCLUDE (see
+                       .github/workflows/drift-check.yml).
     --exclude SERIES [SERIES...]
                        series excluded from source/dedup consideration for
-                       this run (jax is always excluded by default).
+                       this run (none is excluded by default).
     --dry-run          print the full plan (sources, closures, rewrites,
                        collisions, skips) without writing anything.
     -h/--help          show help and exit.
@@ -93,11 +119,16 @@ SYNC_DIR = REPO_ROOT / "sync"
 MANIFEST_PATH = SYNC_DIR / "manifest.yml"
 STATE_PATH = SYNC_DIR / "state.yml"
 LEDGER_PATH = SYNC_DIR / "ledger.yml"
+CANONICAL_MAP_PATH = SYNC_DIR / "canonical.yml"
 MIRROR_DIR = REPO_ROOT / "mirror"
 POOL_DIR = REPO_ROOT / "lectures"
 
-# Series that never participate as a source or in dedup (variant regime).
-ALWAYS_EXCLUDED = ("jax",)
+# Series classes (``class:`` on a manifest stanza). The default is canonical-
+# eligible; a consumer republishes other series' lectures, so it is never
+# canonical, contributes no lecture, and its copies are recorded as superseded.
+SOURCE_CLASS = "source"
+CONSUMER_CLASS = "consumer"
+SERIES_CLASSES = (SOURCE_CLASS, CONSUMER_CLASS)
 
 # Per-series boilerplate: product pages, not pool content (M3 owns them).
 PRODUCT_PAGES = ("intro", "status", "troubleshooting", "zreferences")
@@ -118,9 +149,14 @@ LEDGER_HEADER = (
     "# provenance for every pool asset. Asset/rewrite paths are relative to the\n"
     "# pool root (lectures/); source `path` values are relative to\n"
     "# mirror/<series>/lectures/.\n"
-    "# Every lecture `sources`/`divergent` item records the sha256 `digest` of\n"
-    "# that series' copy AS OF PROMOTION — the drift-check's baseline for\n"
-    "# telling fresh upstream movement from already-recorded divergence.\n"
+    "# Every lecture `sources`/`divergent`/`superseded` item records the sha256\n"
+    "# `digest` of that series' copy AS OF PROMOTION — the drift-check's\n"
+    "# baseline for telling fresh upstream movement from already-recorded\n"
+    "# divergence. `superseded` items are consumer-series copies: provenance\n"
+    "# only, never watched. A `sources` item whose digest differs from the\n"
+    "# canonical one is either a STALE copy (still at an earlier promoted\n"
+    "# version while the canonical copy moved on) or a copy equal to the\n"
+    "# canonical one once asset paths are normalised.\n"
     "# `rewrites` is an ordered list of literal replacements: applying each\n"
     "# {from -> to} in turn to the canonical mirror copy reproduces the pool\n"
     "# copy byte-for-byte. Each pair is ONE non-rescanning pass with Python\n"
@@ -308,12 +344,41 @@ def slug_of(name: str) -> str:
 # --------------------------------------------------------------------------- #
 # Manifest / state / ledger I/O                                                #
 # --------------------------------------------------------------------------- #
-def load_yaml(path: Path):
+class UniqueKeyLoader(yaml.SafeLoader):
+    """A SafeLoader that refuses a mapping with a repeated key, which plain
+    YAML loading silently resolves to the last value."""
+
+
+def _construct_unique_mapping(loader, node, deep=False):
+    loader.flatten_mapping(node)  # resolve merge keys first, as safe_load does
+    seen = set()
+    for key_node, _ in node.value:
+        key = loader.construct_object(key_node, deep=deep)
+        try:
+            hash(key)
+        except TypeError:
+            raise yaml.constructor.ConstructorError(
+                None, None, "found an unhashable key", key_node.start_mark
+            )
+        if key in seen:
+            raise yaml.constructor.ConstructorError(
+                None, None, f"repeated key {key!r}", key_node.start_mark
+            )
+        seen.add(key)
+    return loader.construct_mapping(node, deep=deep)
+
+
+UniqueKeyLoader.add_constructor(
+    yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, _construct_unique_mapping
+)
+
+
+def load_yaml(path: Path, loader=yaml.SafeLoader):
     """Load a YAML mapping, tolerating an empty/None document (-> {})."""
     if not path.exists():
         return None
     try:
-        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        data = yaml.load(path.read_text(encoding="utf-8"), Loader=loader) or {}
     except yaml.YAMLError as exc:
         raise SystemExit(f"error: could not parse {path}:\n{exc}")
     if not isinstance(data, dict):
@@ -321,8 +386,13 @@ def load_yaml(path: Path):
     return data
 
 
-def load_manifest_order():
-    """Return the series keys in manifest order (= dedup priority order)."""
+def load_manifest():
+    """Return ``(order, consumers)``: the series keys in manifest order (=
+    dedup priority order) and the set of series declared ``class: consumer``.
+
+    A stanza without ``class:`` is canonical-eligible. An unknown class is an
+    error, never a silent default — it decides what may become canonical.
+    """
     data = load_yaml(MANIFEST_PATH)
     if data is None:
         raise SystemExit(
@@ -332,7 +402,65 @@ def load_manifest_order():
     series_block = data.get("series") or {}
     if not isinstance(series_block, dict) or not series_block:
         raise SystemExit(f"error: {MANIFEST_PATH} has no `series:` mapping.")
-    return list(series_block.keys())
+    consumers = set()
+    for key, cfg in series_block.items():
+        cls = (cfg or {}).get("class", SOURCE_CLASS)
+        if cls not in SERIES_CLASSES:
+            raise SystemExit(
+                f"error: series '{key}' in {MANIFEST_PATH} has unknown "
+                f"class {cls!r} (valid: {', '.join(SERIES_CLASSES)})."
+            )
+        if cls == CONSUMER_CLASS:
+            consumers.add(key)
+    return list(series_block.keys()), consumers
+
+
+def load_canonical_map(order, consumers):
+    """Return the committed canonical map: ``slug -> series``.
+
+    ``sync/canonical.yml`` is HUMAN INTENT — the one way a same-name collision
+    is settled. It is validated up front: a repeated key, two keys naming one
+    lecture (``slug`` and ``slug.md``), and an unknown or consumer series are
+    errors before anything is planned. A slug that no series holds cannot be
+    checked here (it needs the mirror); ``map_slugs_held_nowhere`` reports
+    it. A missing or empty file is an empty map.
+    """
+    data = load_yaml(CANONICAL_MAP_PATH, loader=UniqueKeyLoader)
+    if not data:
+        return {}
+    bad, named = [], {}
+    for slug, series in data.items():
+        if not isinstance(slug, str) or not isinstance(series, str):
+            bad.append(f"{slug!r}: {series!r} (expected `<slug>: <series>`)")
+            continue
+        if slug_of(slug) in named:
+            bad.append(f"{slug}: names the same lecture as '{named[slug_of(slug)]}'")
+        named[slug_of(slug)] = slug
+        if series not in order:
+            bad.append(f"{slug}: unknown series '{series}'")
+        elif series in consumers:
+            bad.append(f"{slug}: '{series}' is a consumer series and is never canonical")
+    if bad:
+        raise SystemExit(
+            f"error: invalid entries in {CANONICAL_MAP_PATH}:\n       "
+            + "\n       ".join(bad)
+        )
+    return {slug_of(slug): series for slug, series in data.items()}
+
+
+def map_slugs_held_nowhere(canonical_map, order, consumers):
+    """Map slugs whose lecture no reconstructed canonical-eligible mirror
+    holds: a typo, or a lecture renamed or retired upstream. Names are matched
+    exactly, so a wrong-case key is caught on a case-insensitive file system
+    too. Reported, not refused — one dead line must not stop every
+    promotion."""
+    held = set()
+    for s in order:
+        root = mirror_lectures(s)
+        if s in consumers or not root.is_dir():
+            continue
+        held.update(p.relative_to(root).as_posix()[:-3] for p in root.rglob("*.md"))
+    return sorted(slug for slug in canonical_map if slug not in held)
 
 
 def load_state():
@@ -408,11 +536,13 @@ def dump_ledger(lectures: dict, assets: dict) -> str:
     return LEDGER_HEADER + body
 
 
-def ordered_entry(canonical, interim, sources, divergent, promoted_at, assets, rewrites):
+def ordered_entry(canonical, interim, sources, divergent, superseded, promoted_at, assets, rewrites):
     """A ledger lecture entry with a stable key order.
 
     ``interim`` is present only while ``divergent`` is non-empty — it marks
-    the canonical choice as pending human triage.
+    a canonical choice the canonical map made over differing copies, pending
+    the rename or merge upstream that retires the map entry. ``superseded``
+    is present only when a consumer series holds a copy.
     """
     entry = {"canonical": canonical}
     if interim:
@@ -420,6 +550,8 @@ def ordered_entry(canonical, interim, sources, divergent, promoted_at, assets, r
     entry["sources"] = sources
     if divergent:
         entry["divergent"] = divergent
+    if superseded:
+        entry["superseded"] = superseded
     entry["promoted_at"] = promoted_at
     entry["assets"] = assets
     entry["rewrites"] = rewrites
@@ -436,8 +568,10 @@ class Plan:
         self.slug = slug
         self.requested = requested_series  # None => resolve by priority
         self.canonical = None
-        self.sources = []  # series with byte-identical copies (manifest order)
-        self.divergent = []  # series with same-named, byte-different copies
+        self.sources = []  # series with identical or stale copies (manifest order)
+        self.divergent = []  # differing copies the canonical map overruled
+        self.superseded = []  # consumer series holding a copy (manifest order)
+        self.stale = []  # sources unchanged since promotion while the canonical moved
         self.digests = {}  # series -> sha256 of its copy at promotion time
         self.refs = []  # (kind, literal, src_rel, digest) — deduped, source order
         self.warnings = []
@@ -447,12 +581,72 @@ class Plan:
         self.assets = []  # pool-relative destinations (sorted)
 
 
-def resolve_sources(plan: Plan, considered):
-    """Fill in canonical/sources/divergent by hashing across series.
+def normalised_text(series: str, slug: str) -> str:
+    """A copy's text with each local asset reference replaced by the pool
+    path promotion would give it — the form two copies are COMPARED in.
 
-    The requested copy anchors the byte-identity set; the canonical series is
-    the highest-priority member of that set (manifest order). Series whose
-    same-named copy differs in bytes land in ``divergent`` for human triage.
+    Series spell the same reference differently (``/_static/...`` against
+    ``_static/...``, a ``lecture_specific/<slug>/`` dir against a new-style
+    ``_static/<slug>/`` one); promotion rewrites both to one pool path, so
+    copies that differ only there are one lecture. Comparison only: the pool
+    text is always built by ``build_rewrites`` from the canonical copy. A
+    reference that resolves to no file stays as written.
+    """
+    root = mirror_lectures(series)
+    text = read_text_exact(root / f"{slug}.md")
+    pairs = {}
+    for kind, written in extract_refs(text):
+        if kind == "url":
+            literal, src_rel = written, written[written.find("/_static/") + 1 :]
+        else:
+            literal = written.split("#", 1)[0]
+            if not literal or SCHEME_RE.match(literal):
+                continue
+            try:
+                src_rel = to_src_rel(literal)
+            except PromoteError:
+                continue
+        if kind == "link" and src_rel.endswith(".md"):
+            continue
+        if (root / src_rel).is_file():
+            pairs[literal] = plan_destination(src_rel, [slug])
+    for frm, to in sorted(pairs.items(), key=lambda kv: (-len(kv[0]), kv[0])):
+        text = text.replace(frm, to)
+    return text
+
+
+def resolve_sources(plan: Plan, considered, consumers, canonical_map, recorded=None, order=()):
+    """Fill in canonical/sources/divergent/superseded by hashing across series.
+
+    A same-named file is presumed to be ONE lecture. The anchor copy (the
+    canonical map's choice, else the requested copy, else the highest-priority
+    one) defines the identity set: every canonical-eligible copy that is
+    byte-identical to it, or identical after ``normalised_text``. The canonical
+    series is the highest-priority member of that set (manifest order).
+
+    A copy outside the set is a different lecture under the same name, and an
+    error naming the lecture and every series involved: which copy survives
+    must never fall out of run order. Only the committed canonical map settles
+    it — the map's copy anchors the set, and the differing copies land in
+    ``divergent`` (the entry is ``interim``). The map picks a COPY, never a
+    priority: among identical copies the highest-priority series is still
+    canonical, so deleting an entry that settles nothing changes nothing.
+    Consumer copies, equal or not, are recorded under ``superseded`` and
+    never anchor anything.
+
+    ``recorded`` is the slug's ledger entry, if any. A copy is STALE, not a
+    different lecture, when it is recorded under ``sources``, is not the
+    recorded canonical copy's lecture as that copy now stands, and is still
+    at a version the pool already took: its own recorded digest (it has not
+    moved) or the canonical copy's (it caught up, then the canonical copy
+    moved on).
+    Staleness is judged against the recorded canonical copy whatever anchors
+    the run: a stale requested copy (``--toc`` of a series that lags) gives
+    way to the canonical copy, and a canonical-map entry naming a stale copy
+    is refused, since it no longer settles a collision and following it
+    would keep the lagging text. A stale copy stays a source
+    (``plan.stale``) — the drift-check's ``stale-copy`` — and only a copy
+    edited to something else is a collision.
     """
     rel = f"{plan.slug}.md"
     digests = {}
@@ -460,20 +654,169 @@ def resolve_sources(plan: Plan, considered):
         f = mirror_lectures(series) / rel
         if f.is_file():
             digests[series] = sha256_file(f)
-    if not digests:
+    eligible = [s for s in considered if s in digests and s not in consumers]
+    if not eligible:
+        held = [s for s in considered if s in digests]
+        if held:
+            raise PromoteError(
+                f"{rel} is held only by consumer series ({', '.join(held)}) — "
+                "a consumer contributes no lecture to the pool"
+            )
+        if recorded:
+            raise PromoteError(
+                f"{rel} is in the pool, but no series this run considers holds "
+                "it any more (removed or renamed upstream?) — decide whether "
+                "the lecture was retired, renamed or moved; the drift-check "
+                "reports it as canonical-removed"
+            )
         raise PromoteError(
             f"{rel} not found in any non-excluded series "
             f"(searched: {', '.join(considered)})"
         )
-    requested = plan.requested
-    if requested is None:
-        requested = next(s for s in considered if s in digests)
-    elif requested not in digests:
+    requested = plan.requested if plan.requested not in consumers else None
+    if requested is not None and requested not in digests:
+        if recorded and recorded.get("canonical") == requested:
+            raise PromoteError(
+                f"the canonical copy of {rel} is gone from {requested} upstream "
+                "(removed or renamed) — decide whether the lecture was "
+                "retired, renamed or moved; the drift-check reports it as "
+                "canonical-removed"
+            )
         raise PromoteError(f"{rel} not found in mirror/{requested}/lectures/")
-    anchor = digests[requested]
-    plan.sources = [s for s in considered if digests.get(s) == anchor]
-    plan.divergent = [s for s in digests if digests[s] != anchor]
-    plan.canonical = plan.sources[0]
+    mapped = canonical_map.get(plan.slug)
+    if mapped is not None and mapped not in considered:
+        plan.warnings.append(
+            f"{CANONICAL_MAP_PATH.name} names '{mapped}' for {plan.slug}, but "
+            f"'{mapped}' is excluded from this run — the map entry is ignored"
+        )
+        mapped = None
+    if mapped is not None and mapped not in digests:
+        raise PromoteError(
+            f"{CANONICAL_MAP_PATH.name} names '{mapped}' for {plan.slug}, but "
+            f"{rel} is not in mirror/{mapped}/lectures/"
+        )
+    base = mapped or requested or eligible[0]
+
+    normalised = {}  # series -> normalised text, computed only when needed
+
+    def split(anchor):
+        """``(same, differ)``: the eligible copies that are, and are not, the
+        anchor's lecture (byte-identical, or identical once normalised)."""
+        same, differ = [], []
+        for series in eligible:
+            if digests[series] == digests[anchor]:
+                same.append(series)
+                continue
+            for s in (anchor, series):
+                if s not in normalised:
+                    normalised[s] = normalised_text(s, plan.slug)
+            (same if normalised[series] == normalised[anchor] else differ).append(series)
+        return same, differ
+
+    # Staleness is judged against the recorded canonical copy, whatever
+    # anchors this run, so a refresh and --toc of a lagging series agree.
+    recorded_canonical, stale_copies = None, []
+    if recorded and recorded.get("canonical") in eligible:
+        recorded_canonical = recorded.get("canonical")
+        was = {s.get("series"): s.get("digest") for s in recorded.get("sources") or []}
+        _, differ_c = split(recorded_canonical)
+        stale_copies = [
+            s for s in differ_c
+            if s in was and digests[s] in (was[s], was.get(recorded_canonical))
+        ]
+
+    anchor = base
+    if base in stale_copies:
+        if base == mapped:
+            if digests[recorded_canonical] != was.get(recorded_canonical):
+                why = (
+                    f"'{mapped}' holds an earlier promoted version, and the "
+                    f"recorded canonical copy in '{recorded_canonical}' has "
+                    "moved on"
+                )
+            else:
+                why = (
+                    f"'{mapped}' no longer matches the recorded canonical copy "
+                    f"in '{recorded_canonical}' (it is an earlier version, or "
+                    "a file it references changed upstream)"
+                )
+            raise PromoteError(
+                f"{CANONICAL_MAP_PATH.name} names '{mapped}' for {plan.slug}, "
+                f"but {why}: point the entry at '{recorded_canonical}', remove "
+                f"it if no other copy differs, or bring {mapped}'s copy up to "
+                "date upstream"
+            )
+        anchor = recorded_canonical
+
+    same, differ = split(anchor)
+    stale = []
+    if recorded_canonical is not None and recorded_canonical in same:
+        stale = [s for s in differ if s in stale_copies]
+        differ = [s for s in differ if s not in stale]
+    if differ and mapped is None:
+        detail = "same: " + ", ".join(f"{s}:{digests[s][:12]}" for s in same)
+        detail += "; different: " + ", ".join(f"{s}:{digests[s][:12]}" for s in differ)
+        if stale:
+            detail += "; stale (at an earlier promoted version): " + ", ".join(stale)
+        raise PromoteError(
+            f"{rel} differs across series ({detail}) — a same-named file must "
+            "be one lecture: reconcile or rename it upstream, or name the "
+            f"canonical series in sync/{CANONICAL_MAP_PATH.name}"
+        )
+    if mapped is not None and not differ:
+        # ``order`` is every manifest series. A canonical-eligible series this
+        # run excludes may hold the copy the entry settles, so its copy is
+        # compared too; without its mirror the run cannot tell.
+        differing, unchecked = [], []
+        for s in order:
+            if s in considered or s in consumers:
+                continue
+            if not mirror_lectures(s).is_dir():
+                unchecked.append(s)
+                continue
+            f = mirror_lectures(s) / rel
+            if not f.is_file() or sha256_file(f) == digests[anchor]:
+                continue
+            for x in (anchor, s):
+                if x not in normalised:
+                    normalised[x] = normalised_text(x, plan.slug)
+            if normalised[s] != normalised[anchor]:
+                differing.append(s)
+        head = (
+            f"{CANONICAL_MAP_PATH.name} names '{mapped}' for {plan.slug}; "
+            "every copy this run considers is the same lecture"
+        )
+        if differing:
+            plan.warnings.append(
+                f"{head}, but {', '.join(differing)} (excluded from this run) "
+                + ("holds a different copy" if len(differing) == 1 else "hold different copies")
+                + ", so keep the entry while it settles that collision"
+            )
+        elif unchecked:
+            plan.warnings.append(
+                f"{head}, but {', '.join(unchecked)} (excluded, with no mirror "
+                f"on disk) could not be checked: run `tools/sync "
+                f"{' '.join(unchecked)}` and a run that considers "
+                + ("it" if len(unchecked) == 1 else "them")
+                + " before removing the entry"
+            )
+        else:
+            note = (
+                f"{CANONICAL_MAP_PATH.name} names '{mapped}' for {plan.slug}, but "
+                "every copy is the same lecture — the map entry settles nothing "
+                "and can be removed"
+            )
+            if mapped != same[0]:
+                note += (
+                    f"; remove it now, since once {same[0]}'s copy moves on, "
+                    f"an entry naming {mapped}'s lagging copy is refused"
+                )
+            plan.warnings.append(note)
+    plan.sources = [s for s in eligible if s in same or s in stale]
+    plan.stale = stale
+    plan.divergent = differ
+    plan.superseded = [s for s in considered if s in digests and s in consumers]
+    plan.canonical = same[0]
     plan.digests = digests
     return read_text_exact(mirror_lectures(plan.canonical) / rel)
 
@@ -624,11 +967,12 @@ def plan_destination(src_rel: str, consumers) -> str:
     return f"_static/{only}/{src_rel}"
 
 
-def check_admonition_identity(src_rel: str, considered):
+def check_admonition_identity(src_rel: str, eligible):
     """Rule 4 guard: an ``_admonition/`` include merges into ``_shared`` only
-    if every non-excluded series that carries the file agrees byte-for-byte."""
+    if every non-excluded, canonical-eligible series that carries the file
+    agrees byte-for-byte (a consumer's copy is never a source)."""
     digests = {}
-    for series in considered:
+    for series in eligible:
         f = mirror_lectures(series) / src_rel
         if f.is_file():
             digests[series] = sha256_file(f)
@@ -719,29 +1063,66 @@ def toc_slugs(series: str):
     return ordered
 
 
-def refresh_targets(ledger_lectures, state, considered):
+def refresh_targets(ledger_lectures, state, considered, consumers, order=None):
     """Ledger entries whose canonical series pin moved since promotion.
 
     Design note: refresh deliberately re-anchors each entry on its RECORDED
     canonical series (``requested=canonical``), not on a fresh priority
     resolution — refresh tracks the canonical copy's movement, so the entry's
-    identity stays stable even when a higher-priority series' copy has since
-    diverged. Only the canonical pin is watched (per the refresh spec);
-    ``sources``/``divergent`` provenance is as of each entry's last promotion.
+    identity stays stable. A copy edited since its last promotion is refused
+    like any other same-name collision (the canonical map settles it); one
+    still at a version recorded then, while the canonical copy moved on, is
+    stale and stays a source (see ``resolve_sources``). Only
+    the canonical pin is watched (per the refresh spec); ``sources``/
+    ``divergent``/``superseded`` provenance is as of each entry's last
+    promotion.
+
+    Returns ``(targets, skipped, refused)``. An entry this run cannot refresh
+    (its canonical series is excluded, or is a consumer) is skipped while its
+    pin has not moved, and REFUSED once it has: a silent skip would leave the
+    pool copy behind upstream with a clean exit and a green run.
     """
-    targets, skipped = [], []
+    targets, skipped, refused = [], [], []
     for key in sorted(ledger_lectures):
         entry = ledger_lectures[key]
         slug = slug_of(posixpath.basename(key))
         canonical = entry.get("canonical")
-        if canonical not in considered:
-            skipped.append((slug, f"canonical series '{canonical}' is excluded"))
-            continue
         pinned = (entry.get("promoted_at") or {}).get(canonical)
         current = (state.get(canonical) or {}).get("sha") or ""
+        if order is not None and canonical not in order:
+            why = f"canonical series '{canonical}' is not in sync/manifest.yml"
+            remedy = (
+                f"promote {slug} by name to re-home it to a series that holds "
+                "it, or restore the series' stanza"
+            )
+            skip = f"{why} — {remedy}"
+        elif canonical in consumers:
+            why = f"canonical series '{canonical}' is a consumer"
+            remedy = (
+                f"promote {slug} by name to re-home it to a series that holds "
+                "it, or decide whether to retire it"
+            )
+            skip = f"{why} — {remedy}"
+        elif canonical not in considered:
+            why = f"canonical series '{canonical}' is excluded"
+            remedy = (
+                "refresh without excluding it (CI's exclusions are "
+                "PROMOTE_EXCLUDE in .github/workflows/drift-check.yml)"
+            )
+            skip = why
+        else:
+            if pinned != current:
+                targets.append((slug, canonical))
+            continue
         if pinned != current:
-            targets.append((slug, canonical))
-    return targets, skipped
+            refused.append((
+                slug, canonical,
+                f"{why}, but its pin moved since promotion "
+                f"({(pinned or 'none')[:12]} -> {current[:12] or 'none'}): {remedy}",
+            ))
+        else:
+            skipped.append((slug, skip))
+    return targets, skipped, refused
 
 
 # --------------------------------------------------------------------------- #
@@ -756,7 +1137,10 @@ def build_parser():
             "and every rewrite in sync/ledger.yml."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="Series keys are defined in sync/manifest.yml; jax is always excluded.",
+        epilog=(
+            "Series keys and classes are defined in sync/manifest.yml; the "
+            "canonical map is sync/canonical.yml."
+        ),
     )
     parser.add_argument(
         "slugs",
@@ -779,8 +1163,9 @@ def build_parser():
         nargs="+",
         metavar="SERIES",
         default=[],
-        help="series excluded from source/dedup consideration "
-        "(jax is always excluded).",
+        help="series excluded from source/dedup consideration for this run "
+        "(none by default; CI excludes PROMOTE_EXCLUDE in "
+        ".github/workflows/drift-check.yml).",
     )
     parser.add_argument(
         "--dry-run",
@@ -799,8 +1184,8 @@ def main(argv=None):
     if sum(modes) != 1:
         parser.error("choose exactly one of: SLUG..., --toc SERIES, --refresh")
 
-    order = load_manifest_order()
-    excluded = set(ALWAYS_EXCLUDED) | set(args.exclude)
+    order, consumers = load_manifest()
+    excluded = set(args.exclude)
     unknown = [s for s in args.exclude if s not in order]
     if unknown:
         parser.error(
@@ -809,13 +1194,18 @@ def main(argv=None):
             + "\nvalid keys: "
             + ", ".join(order)
         )
+
     considered = [s for s in order if s not in excluded]
-    if not considered:
-        parser.error("every series is excluded — nothing can be promoted.")
+    eligible = [s for s in considered if s not in consumers]
+    if not eligible:
+        parser.error(
+            "every canonical-eligible series is excluded — nothing can be promoted."
+        )
     if args.toc and args.toc not in order:
         parser.error(f"unknown series '{args.toc}' (valid: {', '.join(order)})")
     if args.toc and args.toc in excluded:
         parser.error(f"series '{args.toc}' is excluded from consideration.")
+    canonical_map = load_canonical_map(order, consumers)
 
     # Dedup hashes across every considered series, so all their mirrors must
     # exist — a missing mirror would silently change canonical decisions.
@@ -829,6 +1219,12 @@ def main(argv=None):
             + "` first (dedup must see every non-excluded series).\n"
         )
         return 1
+    for slug in map_slugs_held_nowhere(canonical_map, order, consumers):
+        print(
+            f"[{slug}] WARN: {CANONICAL_MAP_PATH.name} names {slug}, but no "
+            f"canonical-eligible series mirror holds {slug}.md — a typo, or a "
+            "lecture renamed or retired upstream"
+        )
 
     state = load_state()
     for s in considered:
@@ -846,13 +1242,18 @@ def main(argv=None):
     # ------------------------------------------------------------------ #
     skips = []  # (slug, reason)
     if args.refresh:
-        targets, refresh_skips = refresh_targets(ledger_lectures, state, considered)
+        targets, refresh_skips, refresh_refused = refresh_targets(
+            ledger_lectures, state, considered, consumers, order
+        )
         skips.extend(refresh_skips)
-        if not targets and not refresh_skips:
+        if not targets and not refresh_skips and not refresh_refused:
             print("nothing to refresh — every canonical pin matches its ledger entry.")
             return 0
     elif args.toc:
-        targets = [(slug, args.toc) for slug in toc_slugs(args.toc)]
+        # A consumer's toc names lectures it republishes: each comes from its
+        # canonical home, resolved by priority, never from the consumer.
+        requested = None if args.toc in consumers else args.toc
+        targets = [(slug, requested) for slug in toc_slugs(args.toc)]
     else:
         targets = [(slug_of(s), None) for s in args.slugs]
 
@@ -878,6 +1279,11 @@ def main(argv=None):
                 plans.append(plan)
             continue
         plans.append(Plan(slug, requested))
+    if args.refresh:
+        for slug, canonical, reason in refresh_refused:
+            plan = Plan(slug, canonical)
+            plan.error = reason
+            plans.append(plan)
 
     # ------------------------------------------------------------------ #
     # Phase 1 — resolve sources and parse closures (per-lecture errors    #
@@ -888,7 +1294,10 @@ def main(argv=None):
         if plan.error is not None:
             continue
         try:
-            text = resolve_sources(plan, considered)
+            text = resolve_sources(
+                plan, considered, consumers, canonical_map,
+                ledger_lectures.get(f"lectures/{plan.slug}.md"), order,
+            )
             collect_refs(plan, text)
             texts[plan.slug] = text
         except PromoteError as exc:
@@ -968,7 +1377,7 @@ def main(argv=None):
             try:
                 for _, _, src_rel, digest in plan.refs:
                     if src_rel.startswith("_admonition/"):
-                        check_admonition_identity(src_rel, considered)
+                        check_admonition_identity(src_rel, eligible)
                     dest = dest_map[(src_rel, digest)]
                     src_file = mirror_lectures(plan.canonical) / src_rel
                     prior = planned.get(dest)
@@ -1054,14 +1463,15 @@ def main(argv=None):
         break  # a full pass with no culls: the plan set is stable
 
     def asset_provenance(dest):
-        """Sources for a pool asset: every considered series whose copy at ANY
-        of the contributing relative paths is byte-identical to the promoted
-        bytes. Multiple paths per destination arise when different written
-        forms normalise to the same pool file (same-bytes dedup) — each is
-        recorded so the drift-check watches every upstream copy."""
+        """Sources for a pool asset: every considered, canonical-eligible
+        series whose copy at ANY of the contributing relative paths is
+        byte-identical to the promoted bytes. Multiple paths per destination
+        arise when different written forms normalise to the same pool file
+        (same-bytes dedup) — each is recorded so the drift-check watches every
+        upstream copy. A consumer's copy is never a source."""
         rec = planned[dest]
         sources = []
-        for series in considered:
+        for series in eligible:
             for src_rel in sorted(rec["src_rels"]):
                 f = mirror_lectures(series) / src_rel
                 if f.is_file() and sha256_file(f) == rec["digest"]:
@@ -1075,7 +1485,7 @@ def main(argv=None):
     new_lectures = dict(ledger_lectures)
     new_assets = dict(ledger_assets)
     for plan in ok:
-        pin_series = plan.sources + [s for s in plan.divergent if s not in plan.sources]
+        pin_series = set(plan.sources) | set(plan.divergent) | set(plan.superseded)
         promoted_at = {
             s: (state.get(s) or {}).get("sha") or ""
             for s in order
@@ -1092,6 +1502,11 @@ def main(argv=None):
                 {"series": s, "path": f"{plan.slug}.md", "digest": plan.digests[s]}
                 for s in order
                 if s in plan.divergent
+            ],
+            superseded=[
+                {"series": s, "path": f"{plan.slug}.md", "digest": plan.digests[s]}
+                for s in order
+                if s in plan.superseded
             ],
             promoted_at=promoted_at,
             assets=plan.assets,
@@ -1124,8 +1539,12 @@ def main(argv=None):
     if args.dry_run:
         for plan in ok:
             line = f"[{plan.slug}] plan: canonical={plan.canonical} sources={plan.sources}"
+            if plan.stale:
+                line += f" stale={plan.stale}"
             if plan.divergent:
                 line += f" divergent={plan.divergent} (interim)"
+            if plan.superseded:
+                line += f" superseded={plan.superseded}"
             print(line)
             for _, _, src_rel, digest in sorted(set(plan.refs), key=lambda r: (r[2], r[0], r[1])):
                 dest = dest_map[(src_rel, digest)]
@@ -1167,7 +1586,8 @@ def main(argv=None):
                 f"[{plan.slug}] {state_word} -> lectures/{plan.slug}.md "
                 f"(canonical {plan.canonical}, {len(plan.assets)} assets, "
                 f"{len(plan.rewrites)} rewrites"
-                + (", interim: divergent copies pending triage" if plan.divergent else "")
+                + (f", stale: {', '.join(plan.stale)} at an earlier promoted version" if plan.stale else "")
+                + (", interim: canonical map over differing copies" if plan.divergent else "")
                 + ")"
             )
         # The ledger is written BEFORE stale assets are unlinked: a crash in

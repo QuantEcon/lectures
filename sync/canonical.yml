@@ -1,0 +1,55 @@
+# sync/canonical.yml — HUMAN INTENT
+#
+# The canonical map: which series' copy the pool takes when two or more
+# canonical-eligible series hold DIFFERENT files under one lecture name.
+#
+# tools/promote treats a same-named file as one lecture, so a copy that
+# differs from the rest (after asset paths are normalised) is refused with an
+# error naming the lecture and every series involved. Which copy survives must
+# never fall out of run order. An entry here is the one exception: it names
+# the winning series for that slug. The losing copies are recorded under
+# `divergent:` in sync/ledger.yml, the entry is marked `interim: true`, and
+# the drift-check reports their movement as info.
+#
+# An entry is a stop-gap. The fix is a rename or a merge upstream, after
+# which the entry must be deleted promptly: promote warns when an entry
+# settles nothing, and once the copy it names falls behind the canonical
+# copy, the entry is refused rather than followed.
+# A consumer series (`class: consumer` in sync/manifest.yml) is never
+# canonical and cannot appear here; its copies are recorded as superseded.
+#
+# Format: one `<slug>: <series>` line per lecture, series keys as in
+# sync/manifest.yml.
+#
+# Seeded 2026-10-06 (QuantEcon/project-monorepo#74) from the 24 entries that
+# were `interim: true` in sync/ledger.yml: each keeps the canonical copy that
+# promotion had picked by run order before this map existed, so the pool is
+# unchanged. Every one is a dp-test collision, retired with dp-test itself.
+# An entry covers the slug, not a pair of series: `ifp_egm` below also
+# settles jax's different ifp_egm whenever jax takes part (the CI refresh
+# excludes jax), recording jax's copy as divergent instead of failing.
+
+career: intermediate                        # over dp-test
+cons_news: dp-test                          # over advanced
+ifp_advanced: intermediate                  # over dp-test
+ifp_egm: intermediate                       # over dp-test (and jax, see above)
+ifp_egm_transient_shocks: intermediate      # over dp-test
+inventory_q: intermediate                   # over dp-test
+jv: intermediate                            # over dp-test
+lagrangian_lqdp: dp-test                    # over intermediate
+lqcontrol: dp-test                          # over intermediate
+mccall_fitted_vfi: intermediate             # over dp-test
+mccall_model: intermediate                  # over dp-test
+mccall_model_with_sep_markov: dp-test       # over intermediate
+mccall_persist_trans: intermediate          # over dp-test
+mccall_q: intermediate                      # over dp-test
+odu: dp-test                                # over intermediate
+opt_tax_recur: advanced                     # over dp-test
+os: dp-test                                 # over intermediate
+os_egm: dp-test                             # over intermediate
+os_egm_jax: dp-test                         # over intermediate
+os_stochastic: intermediate                 # over dp-test
+os_time_iter: intermediate                  # over dp-test
+perm_income: dp-test                        # over intermediate
+perm_income_cons: dp-test                   # over intermediate
+rs_inventory_q: intermediate                # over dp-test

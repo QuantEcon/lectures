@@ -12,18 +12,32 @@ same lecture. This script compares all of that against the reconstructed
 ``mirror/`` and sorts what it finds into four outcomes:
 
 * ``refresh`` — the canonical copy moved upstream. The pool copy is stale, not
-  wrong: ``tools/promote --refresh`` re-copies it. CI does this automatically
+  wrong: ``tools/promote --refresh`` re-copies it. CI does this automatically,
+  with the exclusions in PROMOTE_EXCLUDE (.github/workflows/drift-check.yml),
   and opens a pull request.
-* ``drift``   — a NON-canonical copy (today: the dp copy of an advanced or
-  intermediate lecture) no longer matches its canonical home, or a copy was
+* ``drift``   — a NON-canonical copy (today: the dp-test copy of an advanced
+  or intermediate lecture) no longer matches its canonical home, or a copy was
   removed upstream, or a watched ``_toc.yml`` changed. Each becomes a GitHub
   issue (``--issues``) that closes itself when the finding clears.
 * ``violation`` — the POOL itself no longer equals rewrites(canonical), or a
   pool asset changed: someone edited the pool directly, which the upstream-
   first rule forbids. Exit code 2; a red run is the alarm.
 * ``info``    — nothing to act on now, but worth reading: a non-canonical copy
-  that is merely stale (canonical moved, the copy did not), an ``interim``
+  that is merely stale (canonical moved, the copy did not, or the copy is at
+  the canonical copy's last promoted version), an ``interim``
   entry whose divergent copy moved again, or a divergence that converged.
+
+A non-canonical copy is judged by the rule promotion admitted it under: it is
+the same lecture as the canonical copy when it is byte-identical, or identical
+once each copy's asset references are normalised to their pool paths (series
+spell ``/_static/...`` and ``_static/...`` for the same file). That comparison
+is ``tools/promote``'s own ``normalised_text``, imported for the purpose, so
+the two tools cannot disagree about which copies are one lecture.
+
+One kind of copy is deliberately NOT watched. A consumer series' copies
+(``class: consumer`` in ``sync/manifest.yml``, recorded under ``superseded:``
+in the ledger, or under ``sources``/``divergent`` by a ledger written before
+the class was declared) are stale by design and raise nothing.
 
 Usage
 -----
@@ -82,6 +96,8 @@ TOC_STATE_PATH = ROOT / "sync" / "toc.yml"
 
 DRIFT_LABEL = "drift"
 DIFF_LINE_CAP = 300  # lines of unified diff kept in an issue body
+
+CONSUMER_CLASS = "consumer"
 
 
 # --------------------------------------------------------------------------- #
@@ -152,6 +168,50 @@ def mirror_lectures(series: str) -> Path:
     return MIRROR_DIR / series / "lectures"
 
 
+def consumer_series(manifest: dict) -> set:
+    """Series declared ``class: consumer``: never canonical, never watched."""
+    return {k for k, v in manifest.items() if (v or {}).get("class") == CONSUMER_CLASS}
+
+
+PROMOTE_PATH = Path(__file__).resolve().parent / "promote"
+_promote = None
+
+
+def promote_module():
+    """``tools/promote`` imported as a module, once, on first use. Only its
+    ``normalised_text`` is wanted: the form two same-name copies are compared
+    in at promotion. Importing it (rather than copying the asset parser here)
+    keeps the drift-check's idea of "one lecture" identical to promote's."""
+    global _promote
+    if _promote is None:
+        import importlib.util
+        from importlib.machinery import SourceFileLoader
+
+        loader = SourceFileLoader("qe_promote", str(PROMOTE_PATH))
+        spec = importlib.util.spec_from_loader(loader.name, loader)
+        module = importlib.util.module_from_spec(spec)
+        loader.exec_module(module)
+        _promote = module
+    return _promote
+
+
+def same_lecture(series: str, canonical: str, path: str, cur: bytes, can_bytes: bytes) -> bool:
+    """Is the ``series`` copy at ``path`` the same lecture as ``canonical``'s,
+    by promotion's rule: byte-identical, or identical once each copy's asset
+    references are normalised to the pool paths promotion would give them.
+    A copy that is not UTF-8 text is never the same lecture."""
+    if cur == can_bytes:
+        return True
+    if not path.endswith(".md"):
+        return False
+    slug = path[:-3]
+    promote = promote_module()
+    try:
+        return promote.normalised_text(series, slug) == promote.normalised_text(canonical, slug)
+    except UnicodeDecodeError:
+        return False
+
+
 # --------------------------------------------------------------------------- #
 # Findings                                                                     #
 # --------------------------------------------------------------------------- #
@@ -193,8 +253,9 @@ class Finding:
 # --------------------------------------------------------------------------- #
 # The checks                                                                   #
 # --------------------------------------------------------------------------- #
-def series_in_ledger(ledger_lectures, ledger_assets, toc_state):
-    """Every series whose mirror the checks read."""
+def series_in_ledger(ledger_lectures, ledger_assets, toc_state, consumers):
+    """Every series whose mirror the checks read. Consumer copies are never
+    read, so they need no mirror."""
     seen = []
 
     def add(s):
@@ -203,20 +264,20 @@ def series_in_ledger(ledger_lectures, ledger_assets, toc_state):
 
     for entry in ledger_lectures.values():
         add(entry.get("canonical"))
-        for s in entry.get("sources") or []:
-            add(s.get("series"))
-        for s in entry.get("divergent") or []:
-            add(s.get("series"))
+        for s in (entry.get("sources") or []) + (entry.get("divergent") or []):
+            if s.get("series") not in consumers:
+                add(s.get("series"))
     for meta in ledger_assets.values():
         add(meta.get("canonical"))
         for s in meta.get("sources") or []:
-            add(s.get("series"))
+            if s.get("series") not in consumers:
+                add(s.get("series"))
     for s in toc_state:
         add(s)
     return seen
 
 
-def check_lecture(key: str, entry: dict, manifest: dict, findings: list):
+def check_lecture(key: str, entry: dict, manifest: dict, consumers: set, findings: list):
     canonical = entry.get("canonical")
     sources = entry.get("sources") or []
     divergent = entry.get("divergent") or []
@@ -297,9 +358,10 @@ def check_lecture(key: str, entry: dict, manifest: dict, findings: list):
         ))
 
     # Non-canonical copies: did any of them stop matching their canonical home?
+    # A consumer's copy is stale by design and is never watched.
     for s in sources:
         series = s.get("series")
-        if series == canonical:
+        if series == canonical or series in consumers:
             continue
         p = mirror_lectures(series) / s["path"]
         cur = read_bytes(p)
@@ -320,10 +382,21 @@ def check_lecture(key: str, entry: dict, manifest: dict, findings: list):
                     data={"series": series, "path": s["path"]},
                 ))
             continue
-        if cur == can_bytes:
+        if same_lecture(series, canonical, s["path"], cur, can_bytes):
+            exact = cur == can_bytes
             findings.append(Finding(
                 "info", "converged", key,
-                f"{key}: the {series} copy changed and now matches {canonical} exactly",
+                f"{key}: the {series} copy changed and now matches {canonical}"
+                + (" exactly" if exact else " up to asset path spelling"),
+                data={"series": series, "path": s["path"], "exact": exact},
+            ))
+            continue
+        if canonical_moved and sha256_bytes(cur) == can_src.get("digest"):
+            # It caught up with the canonical copy as last promoted, and the
+            # canonical copy has since moved on: stale, not drift.
+            findings.append(Finding(
+                "info", "stale-copy", key,
+                f"{key}: the {series} copy is at {canonical}'s last promoted version while {canonical} moved — {series} is now stale",
                 data={"series": series, "path": s["path"]},
             ))
             continue
@@ -331,9 +404,10 @@ def check_lecture(key: str, entry: dict, manifest: dict, findings: list):
             "drift", "diverged", key,
             f"{key}: the {series} copy lectures/{s['path']} no longer matches its canonical home in {canonical}",
             detail=(
-                f"At promotion the {series} copy was byte-identical to {canonical}'s. It has since been edited "
-                f"on its own. Under the upstream-first rule the fix belongs in {canonical} (and flows down); "
-                f"if the edit is a deliberate variant, record it as one rather than leaving a silent fork."
+                f"At promotion the {series} copy was the same lecture as {canonical}'s (byte-identical, or "
+                f"identical up to asset path spelling). It has since been edited on its own. Under the "
+                f"upstream-first rule the fix belongs in {canonical} (and flows down); if the edit is a "
+                f"deliberate variant, record it as one rather than leaving a silent fork."
             ),
             diff=unified_diff(can_bytes, cur, f"{canonical}/lectures/{can_src['path']}", f"{series}/lectures/{s['path']}"),
             issue_title=f"drift({series}): lectures/{s['path']} differs from its canonical copy in {canonical}",
@@ -343,6 +417,8 @@ def check_lecture(key: str, entry: dict, manifest: dict, findings: list):
     # Already-divergent copies (interim entries): did they move again, or converge?
     for d in divergent:
         series = d.get("series")
+        if series in consumers:
+            continue
         p = mirror_lectures(series) / d["path"]
         cur = read_bytes(p)
         if cur is None:
@@ -354,11 +430,14 @@ def check_lecture(key: str, entry: dict, manifest: dict, findings: list):
             continue
         if sha256_bytes(cur) == d.get("digest"):
             continue
-        if cur == can_bytes:
+        if same_lecture(series, canonical, d["path"], cur, can_bytes):
+            exact = cur == can_bytes
             findings.append(Finding(
                 "info", "converged", key,
-                f"{key}: the divergent {series} copy now matches {canonical} exactly — the interim entry can be re-promoted",
-                data={"series": series, "path": d["path"], "interim": interim},
+                f"{key}: the divergent {series} copy now matches {canonical}"
+                + (" exactly" if exact else " up to asset path spelling")
+                + " — the interim entry can be re-promoted",
+                data={"series": series, "path": d["path"], "interim": interim, "exact": exact},
             ))
         else:
             findings.append(Finding(
@@ -368,7 +447,7 @@ def check_lecture(key: str, entry: dict, manifest: dict, findings: list):
             ))
 
 
-def check_asset(pool_rel: str, meta: dict, findings: list):
+def check_asset(pool_rel: str, meta: dict, consumers: set, findings: list):
     canonical = meta.get("canonical")
     sources = meta.get("sources") or []
     recorded = meta.get("digest")
@@ -415,7 +494,7 @@ def check_asset(pool_rel: str, meta: dict, findings: list):
 
     for s in sources:
         series = s.get("series")
-        if series == canonical:
+        if series == canonical or series in consumers:
             continue
         cur = read_bytes(mirror_lectures(series) / s["path"])
         if cur is None:
@@ -637,7 +716,7 @@ def default_repo():
 HEADINGS = {
     "violation": "VIOLATIONS — the pool no longer equals rewrites(canonical); fix before anything else",
     "drift": "DRIFT — a copy diverged from its canonical home (each becomes an issue under --issues)",
-    "refresh": "REFRESH — the canonical copy moved; `tools/promote --refresh` brings the pool up to date",
+    "refresh": "REFRESH — the canonical copy moved; `tools/promote --refresh` (CI adds --exclude $PROMOTE_EXCLUDE) brings the pool up to date",
     "info": "INFO — nothing to act on now",
 }
 
@@ -697,6 +776,7 @@ def main(argv=None):
     ledger_lectures = {k: v for k, v in ledger.items() if isinstance(v, dict)}
     state = load_yaml(STATE_PATH)
     manifest = (load_yaml(MANIFEST_PATH).get("series")) or {}
+    consumers = consumer_series(manifest)
     toc_state = load_yaml(TOC_STATE_PATH)
 
     try:
@@ -709,7 +789,7 @@ def main(argv=None):
             accept_tocs(args.accept_toc, state, toc_state)
             return 0
 
-        needed = series_in_ledger(ledger_lectures, ledger_assets, toc_state)
+        needed = series_in_ledger(ledger_lectures, ledger_assets, toc_state, consumers)
         if args.reconstruct:
             reconstruct(needed)
         missing = [s for s in needed if not mirror_lectures(s).exists()]
@@ -721,9 +801,9 @@ def main(argv=None):
 
         findings = []
         for key in sorted(ledger_lectures):
-            check_lecture(key, ledger_lectures[key], manifest, findings)
+            check_lecture(key, ledger_lectures[key], manifest, consumers, findings)
         for pool_rel in sorted(ledger_assets):
-            check_asset(pool_rel, ledger_assets[pool_rel], findings)
+            check_asset(pool_rel, ledger_assets[pool_rel], consumers, findings)
         check_tocs(toc_state, manifest, findings)
         findings.sort(key=lambda f: (SEVERITY_ORDER[f.severity], f.subject, f.kind))
 

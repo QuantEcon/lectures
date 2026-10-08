@@ -10,7 +10,14 @@
 #
 # Series are ordered by curriculum progression: intro -> programming ->
 # intermediate -> advanced -> dp -> jax. (dp-test is a temporary test double,
-# not part of the progression.)
+# not part of the progression.) The order is also tools/promote's dedup
+# priority among identical copies.
+#
+# `class:` is optional. A series without it (or with `class: source`) is
+# canonical-eligible. `class: consumer` marks a series that republishes other
+# series' lectures: it is never canonical, contributes no lecture to the pool,
+# and tools/promote records its copies as superseded, which tools/drift-check
+# never watches.
 
 defaults:
   branch: main
@@ -29,10 +36,15 @@ series:
     repo: QuantEcon/lecture-python-advanced.myst
   dp:
     repo: QuantEcon/lecture-dp
+    # Every dp lecture is a copy of one in another series (often an older
+    # one), so dp consumes the pool rather than feeding it.
+    class: consumer
   # TEST DOUBLE (M2 development only): a disposable public copy of lecture-dp
   # that we deliberately edit to exercise promotion/drift tooling — the live
-  # repos stay read-only. Excluded from canonical-home consideration when the
-  # real dp set is promoted; removed at the M3 switch-over. See its README.
+  # repos stay read-only. Canonical-eligible like any series, so its edited
+  # copies collide with their originals: sync/canonical.yml settles each one
+  # for now, and both go when dp-test is removed at the M3 switch-over
+  # (QuantEcon/project-monorepo#24). See its README.
   dp-test:
     repo: QuantEcon/lecture-dp.monorepo
   jax:
