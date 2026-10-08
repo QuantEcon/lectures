@@ -8,7 +8,9 @@
 # `digest` of that series' copy AS OF PROMOTION — the drift-check's
 # baseline for telling fresh upstream movement from already-recorded
 # divergence. `superseded` items are consumer-series copies: provenance
-# only, never watched.
+# only, never watched. A `sources` item whose digest differs from the
+# canonical one is a STALE copy: still at an earlier promoted version
+# while the canonical copy moved on.
 # `rewrites` is an ordered list of literal replacements: applying each
 # {from -> to} in turn to the canonical mirror copy reproduces the pool
 # copy byte-for-byte. Each pair is ONE non-rescanning pass with Python

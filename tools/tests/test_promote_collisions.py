@@ -1,5 +1,7 @@
 """Same-name collisions, the canonical map, jax by default, byte stability."""
 
+import hashlib
+
 from conftest import lecture_text
 
 
@@ -203,3 +205,65 @@ def test_ledger_write_is_byte_stable(make_repo):
     assert res.returncode == 0
     assert "nothing to refresh" in res.stdout
     assert repo.ledger_path.read_bytes() == first
+
+
+def stale_pair(make_repo):
+    """advanced and dp-test hold ``amss`` identically; advanced then edits it
+    upstream and dp-test does not move — dp-test's copy is stale."""
+    repo = make_repo(["advanced", "dp-test"])
+    repo.lecture("advanced", "amss", lecture_text("AMSS"))
+    repo.lecture("dp-test", "amss", lecture_text("AMSS"))
+    assert repo.promote("amss").returncode == 0
+    recorded = {s["series"]: s["digest"] for s in repo.entry("amss")["sources"]}
+    repo.lecture("advanced", "amss", lecture_text("AMSS", "A typo fixed upstream."))
+    repo.move_pin("advanced")
+    return repo, recorded
+
+
+def test_a_stale_copy_stays_a_source_and_the_refresh_goes_through(make_repo):
+    repo, recorded = stale_pair(make_repo)
+
+    res = repo.promote("--refresh")
+
+    assert res.returncode == 0, res.stderr
+    assert "stale: dp-test at an earlier promoted version" in res.stdout
+    entry = repo.entry("amss")
+    assert entry["canonical"] == "advanced"
+    assert "divergent" not in entry and "interim" not in entry
+    digests = {s["series"]: s["digest"] for s in entry["sources"]}
+    assert digests["dp-test"] == recorded["dp-test"]
+    assert digests["advanced"] != recorded["advanced"]
+    assert "A typo fixed upstream." in repo.pool("amss.md").read_text(encoding="utf-8")
+    # The drift-check agrees: a stale copy is not drift.
+    assert repo.drift_check().returncode == 0
+
+
+def test_a_copy_edited_since_promotion_still_fails_the_refresh(make_repo):
+    repo, _ = stale_pair(make_repo)
+    repo.lecture("dp-test", "amss", lecture_text("AMSS", "Edited on its own."))
+    before = repo.ledger_path.read_bytes()
+
+    res = repo.promote("--refresh")
+
+    assert res.returncode == 1
+    assert "[amss] FAILED: amss.md differs across series" in res.stderr
+    assert "different: dp-test:" in res.stderr
+    assert repo.ledger_path.read_bytes() == before
+
+
+def test_a_copy_that_caught_up_then_fell_behind_again_is_still_stale(make_repo):
+    repo, _ = stale_pair(make_repo)
+    assert repo.promote("--refresh").returncode == 0
+    caught_up = lecture_text("AMSS", "A typo fixed upstream.")
+    repo.lecture("dp-test", "amss", caught_up)
+    repo.move_pin("dp-test")
+    repo.lecture("advanced", "amss", lecture_text("AMSS", "A second fix upstream."))
+    repo.move_pin("advanced", 3)
+
+    dc = repo.drift_check()
+
+    assert "[stale-copy]" in dc.stdout and "[diverged]" not in dc.stdout, dc.stdout
+    res = repo.promote("--refresh")
+    assert res.returncode == 0, res.stderr
+    digests = {s["series"]: s["digest"] for s in repo.entry("amss")["sources"]}
+    assert digests["dp-test"] == hashlib.sha256(caught_up.encode("utf-8")).hexdigest()

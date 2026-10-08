@@ -22,7 +22,8 @@ same lecture. This script compares all of that against the reconstructed
   pool asset changed: someone edited the pool directly, which the upstream-
   first rule forbids. Exit code 2; a red run is the alarm.
 * ``info``    — nothing to act on now, but worth reading: a non-canonical copy
-  that is merely stale (canonical moved, the copy did not), an ``interim``
+  that is merely stale (canonical moved, the copy did not, or the copy is at
+  the canonical copy's last promoted version), an ``interim``
   entry whose divergent copy moved again, or a divergence that converged.
 
 Two kinds of copy are deliberately NOT watched. A consumer series' copies
@@ -352,6 +353,15 @@ def check_lecture(key: str, entry: dict, manifest: dict, consumers: set, finding
             findings.append(Finding(
                 "info", "converged", key,
                 f"{key}: the {series} copy changed and now matches {canonical} exactly",
+                data={"series": series, "path": s["path"]},
+            ))
+            continue
+        if canonical_moved and sha256_bytes(cur) == can_src.get("digest"):
+            # It caught up with the canonical copy as last promoted, and the
+            # canonical copy has since moved on: stale, not drift.
+            findings.append(Finding(
+                "info", "stale-copy", key,
+                f"{key}: the {series} copy is at {canonical}'s last promoted version while {canonical} moved — {series} is now stale",
                 data={"series": series, "path": s["path"]},
             ))
             continue

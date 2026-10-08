@@ -20,7 +20,11 @@ references are normalised to the pool paths promotion would give them.
 
 A same-named copy that DIFFERS is treated as a different lecture under the same
 name, and promotion refuses it: the error names the lecture and every series
-involved.
+involved. A copy that is merely STALE is not different: a series recorded as a
+source at the entry's last promotion whose copy is still at a version recorded
+then (its own, or the canonical copy's), while the canonical copy moved on,
+stays a source (the drift-check's ``stale-copy``, which is info). Only a copy
+edited to something else is refused.
 Which copy the pool keeps never falls out of run order. The one exception is
 the committed canonical map, ``sync/canonical.yml`` (human intent), which
 names the winning series per slug; the losing copies are then recorded under
@@ -164,7 +168,9 @@ LEDGER_HEADER = (
     "# `digest` of that series' copy AS OF PROMOTION — the drift-check's\n"
     "# baseline for telling fresh upstream movement from already-recorded\n"
     "# divergence. `superseded` items are consumer-series copies: provenance\n"
-    "# only, never watched.\n"
+    "# only, never watched. A `sources` item whose digest differs from the\n"
+    "# canonical one is a STALE copy: still at an earlier promoted version\n"
+    "# while the canonical copy moved on.\n"
     "# `rewrites` is an ordered list of literal replacements: applying each\n"
     "# {from -> to} in turn to the canonical mirror copy reproduces the pool\n"
     "# copy byte-for-byte. Each pair is ONE non-rescanning pass with Python\n"
@@ -534,9 +540,10 @@ class Plan:
         self.slug = slug
         self.requested = requested_series  # None => resolve by priority
         self.canonical = None
-        self.sources = []  # series with identical copies (manifest order)
+        self.sources = []  # series with identical or stale copies (manifest order)
         self.divergent = []  # differing copies the canonical map overruled
         self.superseded = []  # consumer series holding a copy (manifest order)
+        self.stale = []  # sources unchanged since promotion while the canonical moved
         self.digests = {}  # series -> sha256 of its copy at promotion time
         self.refs = []  # (kind, literal, src_rel, digest) — deduped, source order
         self.warnings = []
@@ -580,7 +587,7 @@ def normalised_text(series: str, slug: str) -> str:
     return text
 
 
-def resolve_sources(plan: Plan, considered, consumers, canonical_map):
+def resolve_sources(plan: Plan, considered, consumers, canonical_map, recorded=None):
     """Fill in canonical/sources/divergent/superseded by hashing across series.
 
     A same-named file is presumed to be ONE lecture. The anchor copy (the
@@ -598,6 +605,15 @@ def resolve_sources(plan: Plan, considered, consumers, canonical_map):
     canonical, so deleting an entry that settles nothing changes nothing.
     Consumer copies, equal or not, are recorded under ``superseded`` and
     never anchor anything.
+
+    ``recorded`` is the slug's ledger entry, if any. When the anchor is that
+    entry's canonical series, a differing copy recorded under ``sources``
+    whose digest equals its own recorded digest (it has not moved) or the
+    canonical copy's recorded digest (it caught up, then the canonical copy
+    moved on) is STALE, not a different lecture: it is still at a version
+    the pool already took. It stays a source (``plan.stale``) — the
+    drift-check's ``stale-copy`` — and only a copy edited to something else
+    is refused.
     """
     rel = f"{plan.slug}.md"
     digests = {}
@@ -646,9 +662,16 @@ def resolve_sources(plan: Plan, considered, consumers, canonical_map):
             same.append(series)
         else:
             differ.append(series)
+    stale = []
+    if recorded and recorded.get("canonical") == anchor:
+        was = {s.get("series"): s.get("digest") for s in recorded.get("sources") or []}
+        stale = [s for s in differ if s in was and digests[s] in (was[s], was.get(anchor))]
+        differ = [s for s in differ if s not in stale]
     if differ and mapped is None:
         detail = "same: " + ", ".join(f"{s}:{digests[s][:12]}" for s in same)
         detail += "; different: " + ", ".join(f"{s}:{digests[s][:12]}" for s in differ)
+        if stale:
+            detail += "; stale (at an earlier promoted version): " + ", ".join(stale)
         raise PromoteError(
             f"{rel} differs across series ({detail}) — a same-named file must "
             "be one lecture: reconcile or rename it upstream, or name the "
@@ -660,7 +683,8 @@ def resolve_sources(plan: Plan, considered, consumers, canonical_map):
             "every copy is the same lecture — the map entry settles nothing "
             "and can be removed"
         )
-    plan.sources = same
+    plan.sources = [s for s in eligible if s in same or s in stale]
+    plan.stale = stale
     plan.divergent = differ
     plan.superseded = [s for s in considered if s in digests and s in consumers]
     plan.canonical = same[0]
@@ -916,8 +940,10 @@ def refresh_targets(ledger_lectures, state, considered, consumers):
     Design note: refresh deliberately re-anchors each entry on its RECORDED
     canonical series (``requested=canonical``), not on a fresh priority
     resolution — refresh tracks the canonical copy's movement, so the entry's
-    identity stays stable. A copy that has since come to differ is refused
-    like any other same-name collision (the canonical map settles it). Only
+    identity stays stable. A copy edited since its last promotion is refused
+    like any other same-name collision (the canonical map settles it); one
+    still at a version recorded then, while the canonical copy moved on, is
+    stale and stays a source (see ``resolve_sources``). Only
     the canonical pin is watched (per the refresh spec); ``sources``/
     ``divergent``/``superseded`` provenance is as of each entry's last
     promotion. Switched entries have nothing upstream to follow and are
@@ -1254,7 +1280,10 @@ def main(argv=None):
         if plan.error is not None:
             continue
         try:
-            text = resolve_sources(plan, considered, consumers, canonical_map)
+            text = resolve_sources(
+                plan, considered, consumers, canonical_map,
+                ledger_lectures.get(f"lectures/{plan.slug}.md"),
+            )
             collect_refs(plan, text)
             texts[plan.slug] = text
         except PromoteError as exc:
@@ -1500,6 +1529,8 @@ def main(argv=None):
     if args.dry_run:
         for plan in ok:
             line = f"[{plan.slug}] plan: canonical={plan.canonical} sources={plan.sources}"
+            if plan.stale:
+                line += f" stale={plan.stale}"
             if plan.divergent:
                 line += f" divergent={plan.divergent} (interim)"
             if plan.superseded:
@@ -1545,6 +1576,7 @@ def main(argv=None):
                 f"[{plan.slug}] {state_word} -> lectures/{plan.slug}.md "
                 f"(canonical {plan.canonical}, {len(plan.assets)} assets, "
                 f"{len(plan.rewrites)} rewrites"
+                + (f", stale: {', '.join(plan.stale)} at an earlier promoted version" if plan.stale else "")
                 + (", interim: canonical map over differing copies" if plan.divergent else "")
                 + ")"
             )
