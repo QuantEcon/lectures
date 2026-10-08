@@ -70,7 +70,11 @@ Flags
     --refresh          re-run the promotion pipeline for every ledger entry
                        whose canonical series pin in sync/state.yml differs
                        from its recorded promoted_at pin; unchanged pins are a
-                       strict no-op.
+                       strict no-op. An entry whose canonical series this run
+                       cannot use (excluded, or a consumer) is skipped while
+                       its pin is unchanged and FAILS once the pin has moved.
+                       CI runs it with --exclude $PROMOTE_EXCLUDE (see
+                       .github/workflows/drift-check.yml).
     --exclude SERIES [SERIES...]
                        series excluded from source/dedup consideration for
                        this run (none is excluded by default).
@@ -919,27 +923,43 @@ def refresh_targets(ledger_lectures, state, considered, consumers):
     the canonical pin is watched (per the refresh spec); ``sources``/
     ``divergent``/``superseded`` provenance is as of each entry's last
     promotion.
+
+    Returns ``(targets, skipped, refused)``. An entry this run cannot refresh
+    (its canonical series is excluded, or is a consumer) is skipped while its
+    pin has not moved, and REFUSED once it has: a silent skip would leave the
+    pool copy behind upstream with a clean exit and a green run.
     """
-    targets, skipped = [], []
+    targets, skipped, refused = [], [], []
     for key in sorted(ledger_lectures):
         entry = ledger_lectures[key]
         slug = slug_of(posixpath.basename(key))
         canonical = entry.get("canonical")
-        if canonical in consumers:
-            skipped.append((
-                slug,
-                f"canonical series '{canonical}' is a consumer — promote "
-                f"{slug} by name to re-home it",
-            ))
-            continue
-        if canonical not in considered:
-            skipped.append((slug, f"canonical series '{canonical}' is excluded"))
-            continue
         pinned = (entry.get("promoted_at") or {}).get(canonical)
         current = (state.get(canonical) or {}).get("sha") or ""
+        if canonical in consumers:
+            why = f"canonical series '{canonical}' is a consumer"
+            remedy = f"promote {slug} by name to re-home it"
+            skip = f"{why} — {remedy}"
+        elif canonical not in considered:
+            why = f"canonical series '{canonical}' is excluded"
+            remedy = (
+                "refresh without excluding it (CI's exclusions are "
+                "PROMOTE_EXCLUDE in .github/workflows/drift-check.yml)"
+            )
+            skip = why
+        else:
+            if pinned != current:
+                targets.append((slug, canonical))
+            continue
         if pinned != current:
-            targets.append((slug, canonical))
-    return targets, skipped
+            refused.append((
+                slug, canonical,
+                f"{why}, but its pin moved since promotion "
+                f"({(pinned or '')[:12]} -> {current[:12]}): {remedy}",
+            ))
+        else:
+            skipped.append((slug, skip))
+    return targets, skipped, refused
 
 
 # --------------------------------------------------------------------------- #
@@ -1052,9 +1072,11 @@ def main(argv=None):
     # ------------------------------------------------------------------ #
     skips = []  # (slug, reason)
     if args.refresh:
-        targets, refresh_skips = refresh_targets(ledger_lectures, state, considered, consumers)
+        targets, refresh_skips, refresh_refused = refresh_targets(
+            ledger_lectures, state, considered, consumers
+        )
         skips.extend(refresh_skips)
-        if not targets and not refresh_skips:
+        if not targets and not refresh_skips and not refresh_refused:
             print("nothing to refresh — every canonical pin matches its ledger entry.")
             return 0
     elif args.toc:
@@ -1087,6 +1109,11 @@ def main(argv=None):
                 plans.append(plan)
             continue
         plans.append(Plan(slug, requested))
+    if args.refresh:
+        for slug, canonical, reason in refresh_refused:
+            plan = Plan(slug, canonical)
+            plan.error = reason
+            plans.append(plan)
 
     # ------------------------------------------------------------------ #
     # Phase 1 — resolve sources and parse closures (per-lecture errors    #
