@@ -5,11 +5,11 @@ intro:
   sha: 530ede2b348321d3924f7c900691b7daf165757c
   synced_at: '2026-10-09T06:50:11Z'
 programming:
-  sha: b0b0b566336b9ffde258936bd77c78370d02bc0d
-  synced_at: '2026-09-19T06:39:45Z'
+  sha: 85586e6dee83ed0f91df72d6f703dbd91cdb2e99
+  synced_at: '2026-10-12T07:08:08Z'
 intermediate:
-  sha: 35832b12104bc80c57365157a55f2c1eedc11460
-  synced_at: '2026-10-10T06:45:46Z'
+  sha: f8d7e33de62f48ee0b25053fdc944065a9bc6614
+  synced_at: '2026-10-12T07:08:09Z'
 advanced:
   sha: d1f6ec29646329ff77fb53173effb20a8df641da
   synced_at: '2026-09-20T06:40:16Z'
@@ -20,5 +20,5 @@ dp-test:
   sha: 8d26b9349f55f6f185395c82279518bd3ba6a51c
   synced_at: '2026-09-07T04:47:46Z'
 jax:
-  sha: 6e303af2be0aa313d4e5f45447e00ead87d615f9
-  synced_at: '2026-10-09T06:50:13Z'
+  sha: 4b939ec49a7f1901245f68749c1b1e18e3454d34
+  synced_at: '2026-10-12T07:08:10Z'
