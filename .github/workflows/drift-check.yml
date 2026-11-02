@@ -31,9 +31,11 @@ name: drift-check
 # the run stays red until the entry is settled, and a settlement applies the
 # next night. An entry refused when only its series' pin moved (its canonical
 # copy unchanged) is retried only when some canonical copy next moves (#20).
-# PERMISSIONS: uses the default GITHUB_TOKEN. A PR opened with it does not
-# trigger this workflow's own pull_request run; once branch protection is on,
-# the push to `drift/refresh` still works (it is not a protected branch).
+# PERMISSIONS: uses the default GITHUB_TOKEN. A PR opened with it does start
+# this workflow's own pull_request run, but the repository's approval policy
+# (all external contributors) holds that run until a maintainer approves it:
+# approve it when reviewing the refresh PR. Once branch protection is on, the
+# push to `drift/refresh` still works (it is not a protected branch).
 
 on:
   workflow_run:
