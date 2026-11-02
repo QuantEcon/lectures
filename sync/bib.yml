@@ -249,10 +249,6 @@ rulings:
     take: intermediate
     because: 'rule: one copy has more fields (#10): intermediate''s has the title''s capitals; advanced''s extra field is "publisher = JSTOR", which an article does not print'
     seal: {intermediate: 44dd7bf9d6e7aea0, advanced: 1716a52a47cec2a2}
-  SimsZha2006:
-    take: intermediate
-    because: 'owner''s ruling of 2026-11-02 (QuantEcon/project-monorepo#10): the AER paper, which phillips_drifts_volatilities cites; advanced''s Macroeconomic Dynamics paper became SimsZha2006b (QuantEcon/lecture-python-advanced.myst#402)'
-    seal: {intermediate: d7b8e5d78e8ffa74, advanced: 6280cb4cfbc81e5c}
   SmetsWouters2007:
     take: advanced
     because: 'rule: one copy has more fields (#10): advanced''s adds the DOI'
