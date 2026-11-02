@@ -10,6 +10,7 @@ It sits **downstream** of six live lecture repositories until each one deliberat
 - **The mirror:** every series' lectures, reconstructed on demand from commits pinned in [`sync/state.yml`](sync/state.yml), which a daily job keeps current.
 - **The drift-check:** run after every sync, it proves each pool lecture still equals its source, opens a pull request to refresh the pool when a source moves, and opens an issue when another series' copy diverges.
 - **The promote tool:** it brings lectures into the pool and refuses a lecture name that two series use for different lectures.
+- **The merged bibliography:** one [`lectures/_static/quant-econ.bib`](lectures/_static/quant-econ.bib), generated from the series' own files and the rulings in [`sync/bib.yml`](sync/bib.yml), and refreshed with the pool.
 
 See [The plan](#the-plan) for what comes next.
 
@@ -58,13 +59,15 @@ The repository is organised around three layers. The first two exist today.
 .
 ├── _base/            # (later) shared toolchain defaults — placeholder
 ├── lectures/         # the pool: every canonical lecture once
-│   └── _static/      #   their assets: _static/<slug>/ per lecture, _static/_shared/ for shared files
+│   └── _static/      #   their assets: _static/<slug>/ per lecture, _static/_shared/ for shared files,
+│                     #   and quant-econ.bib, the merged bibliography (bib-merge-written)
 ├── products/         # (later) one configuration per published product — empty
 ├── mirror/           # reconstructed, verbatim, GITIGNORED — never committed
 ├── docs/tech/        # the technology register (see below)
 ├── sync/
 │   ├── manifest.yml  # human intent: which repos feed the mirror, and each series' class
 │   ├── canonical.yml # human intent: the winning series for a same-name collision
+│   ├── bib.yml       # human intent: the rulings that settle the bibliographies' conflicts
 │   ├── state.yml     # machine state: pinned SHAs (sync-written)
 │   ├── ledger.yml    # machine state: provenance of every pool lecture and asset (promote-written)
 │   └── toc.yml       # machine state: the watched _toc.yml baselines (drift-check-written)
@@ -72,10 +75,11 @@ The repository is organised around three layers. The first two exist today.
 │   ├── sync          # reconstructs the mirror from pinned SHAs
 │   ├── promote       # promotes lectures + their asset closure into the pool; writes the ledger
 │   ├── drift-check   # proves the pool still equals its sources; issues, refresh PR
-│   └── tests/        # pytest suite for promote and drift-check (scratch repos)
+│   ├── bib-merge     # merges the series' bibliographies into the pool's one file; checks it
+│   └── tests/        # pytest suite for promote, drift-check and bib-merge (scratch repos)
 └── .github/workflows/
     ├── sync.yml         # daily job that refreshes the pinned SHAs (pin-only)
-    ├── drift-check.yml  # runs after sync: drift issues, refresh PR, red on a pool edit or a refused refresh
+    ├── drift-check.yml  # runs after sync: drift issues, refresh PR (pool and bibliography), red on a pool edit or a refused refresh
     └── tests.yml        # runs tools/tests on pull requests
 ```
 
@@ -125,6 +129,20 @@ A series' pin (and its timestamp) is only rewritten when the upstream `HEAD` has
 Four outcomes: **refresh** (the canonical copy moved upstream; CI runs `promote --refresh --exclude $PROMOTE_EXCLUDE` and opens a pull request; an entry the refresh refuses is listed with promote's reason, in that pull request when one is opened and always in the red run's refresh step; the usual reason is a same-name copy edited to differ, which `sync/canonical.yml` or upstream settles; while the entry's canonical copy differs from its ledger record the run stays red every night until it is settled, and a settlement applies the next night), **drift** (a non-canonical copy diverged from its canonical home, a copy was removed, or a watched toc changed; each becomes an issue that closes itself when the finding clears), **violation** (the pool itself was edited; the job goes red), and **info** (a copy is merely stale, or a divergence converged). [`drift-check.yml`](.github/workflows/drift-check.yml) runs it after every `sync`.
 
 One kind of copy is never watched. A **consumer** series (`class: consumer` in `sync/manifest.yml`, today `dp`) only republishes other series' lectures, so its copies are recorded as `superseded` and are expected to go stale.
+
+## Running the bibliography merge
+
+[`tools/bib-merge`](tools/bib-merge) builds the pool's one bibliography, `lectures/_static/quant-econ.bib`, from the `quant-econ.bib` of each series listed in [`sync/bib.yml`](sync/bib.yml). Each series' copy of an entry is normalised to the house style's mechanical rules ([Writing a bibliography entry](https://manual.quantecon.org/styleguide/references.html#writing-a-bibliography-entry)): page ranges with `--`, no `month`, a bare DOI, no fields a reader never sees, one field per line. Nothing else in a value changes. Copies that then agree are merged into one entry. Copies that still differ are a conflict, and `sync/bib.yml` must rule on it: which series' copy to take, any fields to set or drop, why, and a seal recording each copy as it was. If a series later edits a sealed copy, the copy the ruling takes included, the ruling reopens; the change is never folded in silently. The file is generated, never edited by hand: its header records digests of the series' entries, of `sync/bib.yml` and of its own entries, so the check tells a series that moved (a refresh) from a hand edit or a ruling that was not regenerated (a violation).
+
+| Command | What it does |
+| --- | --- |
+| `tools/bib-merge` | Regenerate in memory and check. Exit 0 clean, 1 the series' files moved (run `--write`), 2 a refused key, a failed check, or a committed file that differs from what the same inputs generate. |
+| `tools/bib-merge --write` | Write `lectures/_static/quant-econ.bib`. |
+| `tools/bib-merge --report` | Print every conflict side by side, with its ruling or why it was refused. |
+| `tools/bib-merge --propose` | Print a `sync/bib.yml` stub, sealed against the current copies, for every refused key. |
+| `tools/bib-merge --reconstruct` | Rebuild `mirror/` for every series first. |
+
+Its checks: every key a pool lecture cites resolves; the entries keep the house-style rules the normalising cannot apply (the fields each entry type needs, names joined by `and`, keys unique when case is ignored); and pybtex, the reader Jupyter Book 1 uses, reads every merged entry as it reads the series copy it came from. It reads the series' files exactly or refuses them: a syntax error, a duplicate key or field, `@string`, a `#` concatenation, or a file in which bibtexparser and pybtex find different keys stops the run, and nothing is written that does not read back as the same entries. [`drift-check.yml`](.github/workflows/drift-check.yml) runs it after every sync and refreshes the file into the same pull request as the pool; anything it fails on turns that workflow's `bibliography` job red, which never holds back the pool's refresh.
 
 ## The technology register
 
