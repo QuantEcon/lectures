@@ -2,8 +2,8 @@
 
 Each test builds a small repository in a temp dir — ``mirror/<series>/
 lectures/``, ``sync/manifest.yml``, ``sync/state.yml``, an empty pool — and
-copies the real ``tools/promote`` and ``tools/drift-check`` into it. The tools
-resolve every path from their own location, so a copy runs against the
+copies the real ``tools/promote``, ``tools/drift-check`` and ``tools/bib-merge``
+into it. The tools resolve every path from their own location, so a copy runs against the
 scratch repository and never touches the real mirror, pool or ledger. They are
 run as subprocesses, exactly as CI runs them.
 """
@@ -11,6 +11,7 @@ run as subprocesses, exactly as CI runs them.
 from __future__ import annotations
 
 import hashlib
+import os
 import shutil
 import subprocess
 import sys
@@ -42,7 +43,7 @@ class ScratchRepo:
         self.root = root
         self.order = list(series)
         (root / "tools").mkdir(parents=True)
-        for name in ("promote", "drift-check"):
+        for name in ("promote", "drift-check", "bib-merge"):
             shutil.copy(TOOLS_DIR / name, root / "tools" / name)
         (root / "sync").mkdir()
         (root / "lectures").mkdir()
@@ -92,14 +93,26 @@ class ScratchRepo:
         chapters = "".join(f"  - file: {slug}\n" for slug in slugs)
         self.mirror_file(series, "_toc.yml", f"format: jb-book\nroot: intro\nchapters:\n{chapters}")
 
+    def bib(self, series, text):
+        """A series' own bibliography, as tools/bib-merge reads it."""
+        return self.mirror_file(series, "_static/quant-econ.bib", text)
+
+    def bib_rulings(self, series, rulings=None):
+        data = {"series": list(series), "rulings": rulings or {}}
+        (self.root / "sync" / "bib.yml").write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True), encoding="utf-8")
+
     # -- running ----------------------------------------------------------- #
-    def run(self, tool, *args):
+    def run(self, tool, *args, env=None):
         return subprocess.run(
             [sys.executable, str(self.root / "tools" / tool), *args],
             capture_output=True,
             text=True,
             cwd=str(self.root),
+            env=None if env is None else {**os.environ, **env},
         )
+
+    def bib_merge(self, *args, env=None):
+        return self.run("bib-merge", *args, env=env)
 
     def promote(self, *args):
         return self.run("promote", *args)

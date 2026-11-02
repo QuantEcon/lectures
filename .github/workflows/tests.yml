@@ -31,4 +31,4 @@ jobs:
         uses: astral-sh/setup-uv@v6
 
       - name: Run the tools' tests
-        run: uv run --no-project --with pytest --with pyyaml pytest tools/tests -v
+        run: uv run --no-project --with pytest --with pyyaml --with 'bibtexparser==2.1.0' --with 'pybtex==0.26.1' pytest tools/tests -v

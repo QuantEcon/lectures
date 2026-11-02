@@ -16,6 +16,16 @@ name: drift-check
 # demand, and on pull requests that touch the pool, the ledger or the tools
 # (report only — no issues, no refresh PR).
 #
+# The merged bibliography rides the same path. tools/bib-merge regenerates
+# lectures/_static/quant-econ.bib in memory and compares it with the committed
+# file: one that is behind the series' bibliographies is refreshed into the
+# same pull request (written after promote, so its citation check sees the
+# refreshed pool). A key it refuses (a conflict without a ruling in
+# sync/bib.yml, or a ruling a copy has reopened) keeps its committed entry, is
+# listed in the pull request, and keeps the run RED until it is ruled. A
+# committed file that a refresh would not fix (a hand edit, or a ruling or tool
+# change that was not regenerated) turns the check job RED instead.
+#
 # The refresh lands as a pull request rather than a push to main so a human
 # sees the ledger diff: a refresh can change which entries are `interim`.
 # An entry whose refresh fails does not hold the others back: promote still
@@ -80,6 +90,7 @@ jobs:
       violations: ${{ steps.check.outputs.violations }}
       drift: ${{ steps.check.outputs.drift }}
       refresh: ${{ steps.check.outputs.refresh }}
+      bib_refresh: ${{ steps.bib.outputs.bib_refresh }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -115,9 +126,26 @@ jobs:
           path: drift-report.json
           if-no-files-found: ignore
 
+      - name: Check the merged bibliography
+        id: bib
+        # Runs whatever the drift-check found, so both reports are in the log.
+        # Exit 1 (behind the series' files) is a refresh for the job below; a
+        # problem it would carry into that refresh (a refused key, a failed
+        # check) is reported and kept red there. Only what a refresh cannot
+        # fix turns this job red.
+        if: success() || failure()
+        run: |
+          set +e
+          uv run --script tools/bib-merge --reconstruct
+          rc=$?
+          set -e
+          echo "bib-merge exit status: $rc (0 clean, 1 behind the series' files, 2 refused or failed)"
+          state=$(grep '^bib_state=' "$GITHUB_OUTPUT" | tail -n 1 | cut -d= -f2)
+          if [ "$rc" = 2 ] && [ "$state" != refresh ]; then exit 1; fi
+
   refresh:
     needs: check
-    if: needs.check.outputs.refresh_needed == 'true' && github.event_name != 'pull_request'
+    if: (needs.check.outputs.refresh_needed == 'true' || needs.check.outputs.bib_refresh == 'true') && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -151,6 +179,18 @@ jobs:
             echo "promote --refresh exit status: $rc (it stopped before its summary -- see the next step)"
           fi
 
+      - name: Regenerate the merged bibliography
+        id: bib
+        # After promote, so the citation check sees the refreshed pool. A
+        # refused key keeps its committed entry; the exit status is kept, not
+        # acted on here, and the last step turns the run red.
+        run: |
+          set +e
+          uv run --script tools/bib-merge --write 2>&1 | tee bib.log
+          rc=${PIPESTATUS[0]}
+          set -e
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+
       - name: Open or update the refresh pull request
         env:
           GH_TOKEN: ${{ github.token }}
@@ -166,29 +206,55 @@ jobs:
             exit 1
           fi
           failed=$(grep -E '^\[[^]]+\] FAILED: ' promote.log || true)
+          bibfail=$(grep -E '^\[(refused|style|closure|equivalence|violation)\]' bib.log || true)
           git add lectures sync/ledger.yml
           if git diff --cached --quiet; then
             if [ -n "$failed" ]; then
               echo 'promote --refresh refreshed nothing; every entry it tried failed:'
               echo "$failed"
-            else
-              echo 'promote --refresh changed nothing -- no pull request.'
             fi
+            if [ -n "$bibfail" ]; then
+              echo 'bib-merge --write changed nothing it could write; it found:'
+              echo "$bibfail"
+            fi
+            [ -n "$failed$bibfail" ] || echo 'promote --refresh and bib-merge --write changed nothing -- no pull request.'
             exit 0
           fi
           before=$(git show HEAD:sync/ledger.yml | grep -c 'interim: true' || true)
           after=$(grep -c 'interim: true' sync/ledger.yml || true)
           n=$(git diff --cached --name-only -- lectures | grep -c '\.md$' || true)
+          bib=$(git diff --cached --name-only -- lectures/_static/quant-econ.bib | grep -c . || true)
+          if [ "$n" -gt 0 ] && [ "$bib" -gt 0 ]; then
+            title="promote: refresh $n pool lectures and the merged bibliography"
+          elif [ "$n" -gt 0 ]; then
+            title="promote: refresh $n pool lectures whose canonical source moved"
+          else
+            title="bib-merge: refresh the merged bibliography from the series' files"
+          fi
           git switch -c drift/refresh
-          git commit -m "promote: refresh $n pool lectures whose canonical source moved"
+          git commit -m "$title"
           git push --force -u origin drift/refresh
           {
+            if [ "$n" -gt 0 ] || [ -n "$failed" ]; then
             echo "\`tools/drift-check\` found pool entries whose **canonical copy moved upstream**; \`tools/promote --refresh${PROMOTE_EXCLUDE:+ --exclude $PROMOTE_EXCLUDE}\` re-promoted them. Review the ledger diff, not just the lecture text: a refresh re-resolves every source, so an entry whose other copies went stale can change shape."
             echo
             echo "| | before | after |"
             echo "|---|---|---|"
             echo "| \`interim: true\` ledger entries | $before | $after |"
             echo "| lectures re-copied | | $n |"
+            fi
+            if [ "$bib" -gt 0 ] || [ -n "$bibfail" ]; then
+              echo
+              echo "**The merged bibliography.** \`tools/bib-merge --write\` regenerated \`lectures/_static/quant-econ.bib\` from the series' own files and the rulings in \`sync/bib.yml\` ($(grep -m1 '^keys ' bib.log || true)). Review the entries it changed: each comes from a series' file, normalised to the house style, or from a ruling."
+              if [ -n "$bibfail" ]; then
+                echo
+                echo "**Not settled.** \`tools/bib-merge\` found the problems below, so the run that opened this PR is red. A refused key keeps the entry the committed file already had. A conflict without a ruling, or a ruling a copy has reopened, is settled by a ruling in \`sync/bib.yml\`: \`tools/bib-merge --propose\` prints a stub, sealed against the current copies. A citation that does not resolve, or an entry that breaks the house style, is settled upstream or by a ruling that fixes the entry."
+                echo
+                echo '```'
+                echo "$bibfail"
+                echo '```'
+              fi
+            fi
             if [ -n "$failed" ]; then
               echo
               echo "**Not refreshed.** \`tools/promote\` refused these entries, so their pool copies stay at the previous pin and the run that opened this PR is red. Each line gives promote's reason. A same-name copy edited to differ is settled by naming the winning series in \`sync/canonical.yml\` or by reconciling the copies upstream. A \`sync/canonical.yml\` line that names a lagging copy is settled by pointing it at the recorded canonical series or removing it. A canonical copy removed or renamed upstream needs a decision, which the drift-check's \`canonical-removed\` issue tracks. The line itself explains the other reasons. An entry whose canonical copy moved is refused again every night, so the run stays red until it is settled; an entry refused when only its series' pin moved is retried when a canonical copy next moves."
@@ -206,14 +272,20 @@ jobs:
           } > pr-body.md
           existing=$(gh pr list --head drift/refresh --state open --json number --jq '.[0].number')
           if [ -n "$existing" ]; then
-            gh pr edit "$existing" --title "promote: refresh $n pool lectures whose canonical source moved" --body-file pr-body.md
+            gh pr edit "$existing" --title "$title" --body-file pr-body.md
             echo "updated PR #$existing"
           else
-            gh pr create --head drift/refresh --title "promote: refresh $n pool lectures whose canonical source moved" --body-file pr-body.md
+            gh pr create --head drift/refresh --title "$title" --body-file pr-body.md
           fi
 
       - name: Keep the run red while any entry could not be refreshed
         if: steps.refresh.outputs.rc != '0'
         run: |
           echo "::error::tools/promote --refresh could not refresh every entry (exit ${{ steps.refresh.outputs.rc }}). The FAILED lines in the refresh step give each entry and promote's reason; any entries it did refresh are in the drift/refresh pull request."
+          exit 1
+
+      - name: Keep the run red while the merged bibliography is not settled
+        if: steps.bib.outputs.rc != '0'
+        run: |
+          echo "::error::tools/bib-merge --write exited ${{ steps.bib.outputs.rc }}. The [refused], [style], [closure] and [equivalence] lines in the bibliography step give each key and the reason; every key it could merge is in the drift/refresh pull request."
           exit 1
