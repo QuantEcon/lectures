@@ -22,9 +22,10 @@ are compared. Normalising applies the house style's mechanical rules
 * ``month`` and the fields a reader never sees (``abstract``, ``keywords``,
   ``file``, ``date-added``, ``date-modified``, ``issn``) dropped, and any
   empty field;
-* page ranges written with a double hyphen (``1 - 68``, ``225–287`` and
-  ``S1-S20`` become ``1--68``, ``225--287`` and ``S1--S20``);
-* a DOI written as a URL reduced to the bare DOI.
+* a page range written with a double hyphen (``1 - 68``, ``225–287`` and
+  ``S1-S20`` become ``1--68``, ``225--287`` and ``S1--S20``); a value that is
+  not plainly one range per comma-separated part is left as it is;
+* a DOI written as a URL or with a ``doi:`` prefix reduced to the bare DOI.
 
 Values are otherwise kept byte for byte: no LaTeX is decoded or encoded, no
 title re-cased, no name reformatted. A key held by one series is taken as it
@@ -44,33 +45,50 @@ taken once. A key whose copies differ is a CONFLICT, and needs a ruling in
           intro: 8e9f0a1b2c3d4e5f
 
 The SEAL is the digest of each series' normalised copy at ruling time. A
-ruling holds while every copy is either its sealed version or already equal
-to the result; a copy edited to anything else REOPENS the ruling, so a change
-upstream is never folded in silently. A ruling may also fix a key held by one
-series (a style fix the normalising cannot make). ``--propose`` prints a stub,
-seal included, for every conflict without a ruling.
+ruling holds while the copy it takes is exactly its sealed version and every
+other copy is its sealed version or already equal to the result. Any other
+edit, or a series that starts holding the key with a different copy, REOPENS
+the ruling, so a change upstream is never folded in silently. A ruling may
+also fix a key held by one series (a style fix the normalising cannot make).
+``--propose`` prints a stub, sealed against the current copies, for every
+refused key, keeping a reopened ruling's take, set, drop and type.
 
 What it refuses
 ---------------
-Anything it cannot read exactly, rather than guess: a syntax error, a
-duplicate key or field within one file, ``@string`` or ``@preamble``, a bare
-macro other than a month, a ``#`` concatenation. A refused FILE stops the
-run (exit 2) and nothing is written. A refused KEY (a conflict without a
-ruling, or a reopened ruling) does not hold the others back: it keeps the
-entry the committed file already has, if any, and the run exits 2 with the
-key and the reason.
+Anything it cannot read exactly, rather than guess: a file that is not UTF-8,
+a syntax error, a duplicate key, a field repeated in one entry (ignoring
+case), a field name that is not one, ``@string`` or ``@preamble``, a bare
+macro other than a month, a ``#`` concatenation, an unbalanced quoted value,
+or a file in which bibtexparser and pybtex (the reader Jupyter Book 1 uses)
+find different keys. A refused FILE stops the run (exit 2) and nothing is
+written. A refused KEY (a conflict without a ruling, or a reopened ruling)
+does not hold the others back: it keeps the entry the committed file already
+has, if any, and the run exits 2 with the key and the reason. Nothing is ever
+written that does not read back as the same entries, in both readers.
+
+The committed file
+------------------
+Its header records a digest of each series' normalised entries, of
+``sync/bib.yml``, and of the file's own entries. The check uses them to tell
+the outcomes apart: a file whose entries no longer match their recorded digest
+was edited by hand, and a recorded ``sync/bib.yml`` digest that is not the
+current one is a ruling change that was not regenerated (both violations,
+whatever else moved); a series whose entries moved is a refresh. A byte change
+upstream that the normalising removes moves nothing.
 
 Checks
 ------
 * citation closure: every key a pool lecture cites resolves in the merged
   file (an error); keys no lecture of any series cites are listed (info);
 * style: the non-mechanical rules the normalising cannot apply — the fields
-  each entry type needs, names joined by ``and``, keys unique when case is
-  ignored (errors); LaTeX escapes (rule 11) and unknown fields (info);
-* equivalence: pybtex, the reader Jupyter Book 1 uses, reads every merged
-  entry as it reads the series copy the entry came from, apart from the
-  normalising and the entry's ruling (an error otherwise). bibtexparser only
-  splits the files; pybtex is an independent reader of both sides.
+  each entry type needs, names joined by ``and`` (no ``&`` or ``;``, no stray
+  or extra commas), a DOI that starts ``10.``, keys unique when case is
+  ignored (errors); LaTeX escapes (rule 11), unknown fields, and names that
+  look like two people separated by a comma (info);
+* equivalence: pybtex reads every merged entry as it reads the series copy the
+  entry came from, apart from the normalising and the entry's ruling (an error
+  otherwise). bibtexparser only splits the files; pybtex is an independent
+  reader of both sides.
 
 Usage
 -----
@@ -78,16 +96,16 @@ Usage
                                      # the committed file, run the checks
     tools/bib-merge --write          # write lectures/_static/quant-econ.bib
     tools/bib-merge --report [PATH]  # the conflicts, side by side (markdown)
-    tools/bib-merge --propose        # sync/bib.yml stubs for unsettled conflicts
+    tools/bib-merge --propose        # sync/bib.yml stubs for every refused key
     tools/bib-merge --reconstruct    # rebuild mirror/ for every series first
 
-Exit status: 0 clean (info only); 1 the committed file is behind its sources
-(the series' files moved: run --write); 2 a refused file or key, a failed
-check, or a committed file that differs from what the same inputs generate
-(a hand edit, or a ruling or tool change that was not regenerated). Under
-GitHub Actions the outcome is also written to ``$GITHUB_OUTPUT``:
-``bib_state`` (clean, refresh, violation, missing or error), ``bib_failed``
-and ``bib_refresh`` (true or false).
+With ``--report`` to stdout or ``--propose``, the check's own lines go to
+stderr. Exit status: 0 clean (info only); 1 the committed file is behind the
+series' entries (run --write); 2 anything else: a refused file or key, a
+failed check, a violation, a missing file, or an internal error. Under GitHub
+Actions the outcome is also written to ``$GITHUB_OUTPUT``: ``bib_state``
+(clean, refresh, violation, missing or error), ``bib_failed`` and
+``bib_refresh`` (true or false).
 """
 
 from __future__ import annotations
@@ -100,6 +118,7 @@ import re
 import shutil
 import subprocess
 import sys
+import traceback
 from pathlib import Path
 
 import bibtexparser
@@ -136,10 +155,13 @@ REQUIRED = {
 }
 REQUIRED_INFO = {"techreport": ("number",), "misc": ("url",)}
 
+FIELD_NAME_RE = re.compile(r"[a-z][a-z0-9_-]*")
+ENTRY_TYPE_RE = re.compile(r"[a-z]+")
 NUMBER_RE = re.compile(r"[0-9]+")
 MACRO_RE = re.compile(r"[^\s\"#%'(),={}0-9][^\s\"#%'(),={}]*")
-PAGES_DASH_RE = re.compile(r"(?<=\S)\s*(?:-{1,3}|[\u2013\u2014])\s*(?=\S)")
-DOI_URL_RE = re.compile(r"^(?:https?://(?:dx\.)?doi\.org/|doi:\s*)", re.IGNORECASE)
+DASHES = "\u2010\u2012\u2013\u2014\u2212"  # hyphen, figure dash, en dash, em dash, minus
+PAGE_RANGE_RE = re.compile(rf"([^\s\-{DASHES}]+)\s*(?:-{{1,3}}|[{DASHES}])\s*([^\s\-{DASHES}]+)")
+DOI_PREFIX_RE = re.compile(r"^(?:(?:https?://)?(?:www\.)?(?:dx\.)?doi\.org/|doi:\s*)", re.IGNORECASE)
 # An accented or special letter written as LaTeX (\'e, \"{a}, \v{c}, \H{o}, \o,
 # \ss), not a formatting command such as \emph or \textit.
 LATEX_ESCAPE_RE = re.compile(
@@ -157,6 +179,8 @@ HEADER = (
     "% conflicts settled by the rulings in sync/bib.yml.\n"
 )
 INPUTS_PREFIX = "% inputs: "
+RULINGS_PREFIX = "% rulings: "
+BODY_PREFIX = "% body: "
 
 
 class Refused(Exception):
@@ -165,6 +189,10 @@ class Refused(Exception):
 
 class ConfigError(Exception):
     """sync/bib.yml or sync/manifest.yml is malformed. Stops the run."""
+
+
+def sha16(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()[:16]
 
 
 # --------------------------------------------------------------------------- #
@@ -189,6 +217,8 @@ def _match_quote(s: str) -> int:
             depth += 1
         elif c == "}":
             depth -= 1
+            if depth < 0:
+                return -1
         elif c == '"' and depth == 0:
             return i
     return -1
@@ -215,32 +245,49 @@ def raw_content(where: str, field: str, raw: str):
     raise Refused(f"{where}: field `{field}` is a concatenation or cannot be read: {raw[:60]!r}")
 
 
+def normalise_pages(value: str) -> str:
+    parts = [p.strip() for p in value.split(",")]
+    out = []
+    for part in parts:
+        m = PAGE_RANGE_RE.fullmatch(part)
+        out.append(f"{m.group(1)}--{m.group(2)}" if m else part)
+    return ", ".join(out) if out != parts else value
+
+
 def normalise_value(field: str, value: str) -> str:
     value = re.sub(r"\s+", " ", value).strip()
     if field == "pages":
-        value = PAGES_DASH_RE.sub("--", value)
+        value = normalise_pages(value)
     elif field == "doi":
-        value = DOI_URL_RE.sub("", value).strip()
+        value = DOI_PREFIX_RE.sub("", value).strip()
     return value
 
 
-def read_bib(series: str, path: Path) -> dict:
-    """{key: (entry_type, {field: value})} for one series, normalised."""
-    lib = bibtexparser.parse_file(str(path), parse_stack=[])
+def parse_bib_text(label: str, text: str) -> dict:
+    """{key: (entry_type, {field: value})}, normalised; refuses what it cannot read exactly."""
+    lib = bibtexparser.parse_string(text, parse_stack=[])
     if lib.failed_blocks:
         problems = "; ".join(
             f"{type(b).__name__} at line {b.start_line + 1}: {str(b.error).strip() or 'a syntax error'}"
             for b in lib.failed_blocks
         )
-        raise Refused(f"{series}: {path.relative_to(ROOT)} cannot be read exactly: {problems}")
+        raise Refused(f"{label} cannot be read exactly: {problems}")
     if lib.strings or lib.preambles:
-        raise Refused(f"{series}: {path.relative_to(ROOT)} has @string or @preamble, which the house style does not use")
+        raise Refused(f"{label} has @string or @preamble, which the house style does not use")
     out = {}
     for entry in lib.entries:
-        where = f"{series}:{entry.key}"
-        fields = {}
+        where = f"{label}:{entry.key}"
+        etype = entry.entry_type.lower()
+        if not ENTRY_TYPE_RE.fullmatch(etype):
+            raise Refused(f"{where}: {entry.entry_type!r} is not an entry type")
+        fields, seen = {}, set()
         for f in entry.fields:
             name = f.key.lower()
+            if not FIELD_NAME_RE.fullmatch(name):
+                raise Refused(f"{where}: {f.key!r} is not a field name (a commented-out line inside an entry?)")
+            if name in seen:
+                raise Refused(f"{where}: field `{name}` appears twice (case is ignored)")
+            seen.add(name)
             if name in DROP_FIELDS:
                 continue
             value = raw_content(where, name, f.value)
@@ -249,18 +296,46 @@ def read_bib(series: str, path: Path) -> dict:
             value = normalise_value(name, value)
             if value:
                 fields[name] = value
-        out[entry.key] = (entry.entry_type.lower(), fields)
+        out[entry.key] = (etype, fields)
     return out
+
+
+def pybtex_entries(label: str, text: str):
+    from pybtex.database import parse_string
+
+    try:
+        return parse_string(text, "bibtex").entries
+    except Exception as exc:
+        raise Refused(f"{label}: pybtex cannot read it: {exc}") from exc
+
+
+def read_bib(series: str, path: Path):
+    """(entries, pybtex entries) for one series' file, both readers agreeing on its keys."""
+    label = f"{series}: {path.relative_to(ROOT)}"
+    try:
+        text = path.read_bytes().decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise Refused(f"{label} is not UTF-8: {exc}") from exc
+    entries = parse_bib_text(series, text)
+    pyb = pybtex_entries(label, text)
+    ours, theirs = set(entries), set(pyb.keys())
+    if ours != theirs:
+        only_ours = ", ".join(sorted(ours - theirs)) or "none"
+        only_theirs = ", ".join(sorted(theirs - ours)) or "none"
+        raise Refused(f"{label}: bibtexparser and pybtex find different keys (only bibtexparser: {only_ours}; "
+                      f"only pybtex: {only_theirs}); an @comment that hides an entry?")
+    return entries, pyb
 
 
 def digest(entry) -> str:
     etype, fields = entry
     payload = json.dumps([etype, sorted(fields.items())], ensure_ascii=False, separators=(",", ":"))
-    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+    return sha16(payload.encode("utf-8"))
 
 
-def file_digest(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()[:16]
+def entries_digest(entries) -> str:
+    payload = json.dumps(sorted((k, digest(e)) for k, e in entries.items()), separators=(",", ":"))
+    return sha16(payload.encode("utf-8"))
 
 
 # --------------------------------------------------------------------------- #
@@ -270,10 +345,16 @@ RULING_KEYS = {"take", "set", "drop", "type", "because", "seal"}
 
 
 def load_rulings(path: Path = RULINGS_PATH):
-    """(series list, {key: ruling}) from sync/bib.yml, validated."""
+    """(series list, {key: ruling}, digest of the file) from sync/bib.yml, validated."""
     if not path.exists():
         raise ConfigError(f"{path.relative_to(ROOT)} is missing")
-    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    raw = path.read_bytes()
+    try:
+        data = yaml.safe_load(raw.decode("utf-8")) or {}
+    except (yaml.YAMLError, UnicodeDecodeError) as exc:
+        raise ConfigError(f"sync/bib.yml cannot be read: {exc}") from exc
+    if not isinstance(data, dict):
+        raise ConfigError("sync/bib.yml must be a mapping with `series` and `rulings`")
     series = data.get("series")
     if not isinstance(series, list) or not series or not all(isinstance(s, str) for s in series):
         raise ConfigError("sync/bib.yml: `series` must be a non-empty list of series keys")
@@ -282,28 +363,38 @@ def load_rulings(path: Path = RULINGS_PATH):
         raise ConfigError("sync/bib.yml: `rulings` must be a mapping of key to ruling")
     for key, r in rulings.items():
         where = f"sync/bib.yml: ruling `{key}`"
+        if not isinstance(key, str):
+            raise ConfigError(f"{where}: the key must be a string (quote it)")
         if not isinstance(r, dict):
             raise ConfigError(f"{where} must be a mapping")
         unknown = set(r) - RULING_KEYS
         if unknown:
-            raise ConfigError(f"{where} has unknown fields: {', '.join(sorted(unknown))}")
+            raise ConfigError(f"{where} has unknown fields: {', '.join(sorted(map(str, unknown)))}")
         for required in ("take", "because", "seal"):
             if required not in r:
                 raise ConfigError(f"{where} needs `{required}`")
         if r["take"] not in series:
             raise ConfigError(f"{where} takes `{r['take']}`, which is not in `series`")
-        if not isinstance(r["seal"], dict) or not r["seal"]:
+        because = r["because"]
+        if not isinstance(because, str) or not because.strip() or because.strip().upper().startswith("TODO"):
+            raise ConfigError(f"{where}: `because` must say why, with its source (not TODO)")
+        seal = r["seal"]
+        if not isinstance(seal, dict) or not seal:
             raise ConfigError(f"{where}: `seal` must map each series to its copy's digest")
-        for s, d in r["seal"].items():
+        for s, d in seal.items():
             if s not in series or not isinstance(d, str) or not re.fullmatch(r"[0-9a-f]{16}", d):
-                raise ConfigError(f"{where}: seal entry {s}: {d!r} is not a known series with a 16-hex digest")
-        if not isinstance(r.get("set", {}), dict) or not all(isinstance(v, str) for v in r.get("set", {}).values()):
+                raise ConfigError(f"{where}: seal entry {s}: {d!r} is not a known series with a 16-hex digest (quote it)")
+        sets = r.get("set", {})
+        if not isinstance(sets, dict) or not all(
+            isinstance(k, str) and FIELD_NAME_RE.fullmatch(k.lower()) and isinstance(v, str) for k, v in sets.items()
+        ):
             raise ConfigError(f"{where}: `set` must map field names to string values")
-        if not isinstance(r.get("drop", []), list):
+        drops = r.get("drop", [])
+        if not isinstance(drops, list) or not all(isinstance(d, str) and FIELD_NAME_RE.fullmatch(d.lower()) for d in drops):
             raise ConfigError(f"{where}: `drop` must be a list of field names")
-        if "type" in r and not isinstance(r["type"], str):
+        if "type" in r and not (isinstance(r["type"], str) and ENTRY_TYPE_RE.fullmatch(r["type"].lower())):
             raise ConfigError(f"{where}: `type` must be an entry type")
-    return series, rulings
+    return series, rulings, sha16(raw)
 
 
 def manifest_series():
@@ -331,6 +422,10 @@ def apply_ruling(base, ruling):
         else:
             fields.pop(name, None)
     return (ruling.get("type", etype).lower(), fields)
+
+
+def modifies(ruling) -> bool:
+    return bool(ruling.get("set") or ruling.get("drop") or "type" in ruling)
 
 
 class Merge:
@@ -364,11 +459,21 @@ class Merge:
                 self._refuse(key, f"its ruling takes `{take}`, which no longer holds it (held by {', '.join(held) or 'none'})", committed)
                 continue
             result = apply_ruling(held[take], ruling)
-            reopened = [s for s, e in held.items() if ruling["seal"].get(s) != digest(e) and e != result]
-            if reopened:
-                self._refuse(key, f"reopened: the copy in {', '.join(reopened)} changed since the ruling (re-seal it with --propose)", committed)
+            seal = ruling["seal"]
+            reasons = []
+            if seal.get(take) != digest(held[take]):
+                reasons.append(f"the copy it takes, {take}'s, changed since the ruling")
+            for s, e in held.items():
+                if s == take or e == result:
+                    continue
+                if s not in seal:
+                    reasons.append(f"{s} now holds it, with a copy that differs from the result")
+                elif seal[s] != digest(e):
+                    reasons.append(f"the copy in {s} changed since the ruling")
+            if reasons:
+                self._refuse(key, "reopened: " + "; ".join(reasons) + " (re-seal it with --propose)", committed)
                 continue
-            if len({digest(e) for e in held.values()}) == 1 and not ruling.get("set") and not ruling.get("drop") and "type" not in ruling:
+            if len({digest(e) for e in held.values()}) == 1 and not modifies(ruling):
                 self.info.append(("ruling-unneeded", f"{key}: every copy now agrees; its ruling can be removed"))
             self.entries[key] = result
         for key in sorted(set(self.rulings) - set(self.copies)):
@@ -382,32 +487,56 @@ class Merge:
 
 
 def collect_copies(series):
-    copies, inputs = {}, {}
+    """(copies, per-series digest of its normalised entries, per-series pybtex entries)."""
+    copies, inputs, pyb = {}, {}, {}
     for s in series:
         path = series_bib(s)
         if not path.exists():
             raise Refused(f"{s}: {path.relative_to(ROOT)} is missing (run tools/sync {s}, or pass --reconstruct)")
-        inputs[s] = file_digest(path)
-        for key, entry in read_bib(s, path).items():
+        entries, pyb[s] = read_bib(s, path)
+        inputs[s] = entries_digest(entries)
+        for key, entry in entries.items():
             copies.setdefault(key, {})[s] = entry
-    return copies, inputs
+    return copies, inputs, pyb
 
 
-def read_committed():
-    """(entries, recorded input digests) of the committed pool file."""
-    if not POOL_BIB.exists():
-        return {}, None
-    text = POOL_BIB.read_text(encoding="utf-8")
-    recorded = None
-    for line in text.splitlines():
-        if line.startswith(INPUTS_PREFIX):
-            recorded = dict(p.split("=", 1) for p in line[len(INPUTS_PREFIX):].split())
-            break
-    try:
-        entries = read_bib("pool", POOL_BIB)
-    except Refused:
-        entries = {}
-    return entries, recorded
+class Committed:
+    """The committed pool file: its text, entries and recorded header."""
+
+    def __init__(self):
+        self.text = None
+        self.entries = {}
+        self.inputs = self.rulings = self.body = None
+        self.problem = None               # why it cannot be trusted, if it cannot
+        if not POOL_BIB.exists():
+            return
+        try:
+            self.text = POOL_BIB.read_bytes().decode("utf-8")
+        except UnicodeDecodeError as exc:
+            self.problem = f"it is not UTF-8 ({exc})"
+            return
+        header, sep, body = self.text.partition("\n" + BODY_PREFIX)
+        try:
+            for line in header.splitlines():
+                if line.startswith(INPUTS_PREFIX):
+                    self.inputs = dict(p.split("=", 1) for p in line[len(INPUTS_PREFIX):].split())
+                elif line.startswith(RULINGS_PREFIX):
+                    self.rulings = line[len(RULINGS_PREFIX):].strip()
+            recorded_body, _, entries_text = body.partition("\n")
+        except ValueError:
+            self.problem = "its header is not one tools/bib-merge wrote"
+            return
+        if not sep or self.inputs is None or self.rulings is None:
+            self.problem = "its header is not one tools/bib-merge wrote"
+            return
+        self.body = recorded_body.strip()
+        if sha16(entries_text.encode("utf-8")) != self.body:
+            self.problem = "its entries are not the ones it was generated with (a hand edit)"
+        try:
+            self.entries = parse_bib_text("pool", entries_text)
+        except Refused as exc:
+            self.problem = f"it cannot be read: {exc}"
+            self.entries = {}
 
 
 # --------------------------------------------------------------------------- #
@@ -419,15 +548,37 @@ def ordered_fields(fields):
     return known + rest
 
 
-def render(entries, inputs) -> str:
-    out = [HEADER, INPUTS_PREFIX + " ".join(f"{s}={inputs[s]}" for s in sorted(inputs)) + "\n"]
+def render(entries, inputs, rulings_digest) -> str:
+    chunks = []
     for key in sorted(entries, key=lambda k: (k.lower(), k)):
         etype, fields = entries[key]
         names = ordered_fields(fields)
         width = max((len(n) for n in names), default=0)
         body = ",\n".join(f"  {n:<{width}} = {{{fields[n]}}}" for n in names)
-        out.append("\n" + (f"@{etype}{{{key},\n{body}\n}}\n" if names else f"@{etype}{{{key},\n}}\n"))
-    return "".join(out)
+        chunks.append("\n" + (f"@{etype}{{{key},\n{body}\n}}\n" if names else f"@{etype}{{{key},\n}}\n"))
+    entries_text = "".join(chunks)
+    return (
+        HEADER
+        + INPUTS_PREFIX + " ".join(f"{s}={inputs[s]}" for s in sorted(inputs)) + "\n"
+        + RULINGS_PREFIX + rulings_digest + "\n"
+        + BODY_PREFIX + sha16(entries_text.encode("utf-8")) + "\n"
+        + entries_text
+    )
+
+
+def render_problem(text, entries):
+    """Why ``text`` must not be written, or None: it must read back as ``entries`` in both readers."""
+    _, _, rest = text.partition("\n" + BODY_PREFIX)
+    _, _, entries_text = rest.partition("\n")
+    try:
+        back = parse_bib_text("the merged text", entries_text)
+        pybtex_entries("the merged text", text)
+    except Refused as exc:
+        return str(exc)
+    if back != entries:
+        changed = sorted(k for k in set(back) | set(entries) if back.get(k) != entries.get(k))
+        return f"the merged text reads back differently for {', '.join(changed[:10])}"
+    return None
 
 
 # --------------------------------------------------------------------------- #
@@ -466,6 +617,28 @@ def top_level(text: str) -> str:
     return "".join(out)
 
 
+def name_findings(key, role, value):
+    """(errors, infos) for one author or editor list (rule 3)."""
+    errors, infos = [], []
+    for name in split_top(value, " and "):
+        bare = name.strip()
+        outside = top_level(bare.replace("\\&", ""))
+        parts = [p.strip() for p in split_top(bare, ",")]
+        if "&" in outside or ";" in outside:
+            errors.append(f"{key}: {role} `{bare}` joins names with `&` or `;`, not `and` (rule 3)")
+        elif not bare or any(not p for p in parts):
+            errors.append(f"{key}: {role} `{value}` has an empty name or a stray comma (rule 3)")
+        elif len(parts) > 3:
+            errors.append(f"{key}: {role} `{bare}` separates names with commas, not `and` (rule 3)")
+        elif len(parts) == 2 and len(parts[1].split()) >= 2 and any(re.fullmatch(r"[A-Z]\.?", w) for w in parts[0].split()[1:]):
+            # "John Y. Campbell, Robert J. Shiller": a middle initial before the comma
+            infos.append(("style-name", f"{key}: {role} `{bare}` may be two people separated by a comma (rule 3)"))
+        else:
+            continue
+        break
+    return errors, infos
+
+
 def style_findings(entries):
     """(errors, infos): the house-style rules the normalising cannot apply."""
     errors, infos = [], []
@@ -477,17 +650,12 @@ def style_findings(entries):
             if need not in fields:
                 infos.append(("style-field", f"{key}: @{etype} has no `{need}` (rule 2)"))
         for role in ("author", "editor"):
-            if role not in fields:
-                continue
-            for name in split_top(fields[role], " and "):
-                bare = name.strip()
-                outside = top_level(bare.replace("\\&", ""))
-                if "&" in outside or ";" in outside:
-                    errors.append(f"{key}: {role} `{bare}` joins names with `&` or `;`, not `and` (rule 3)")
-                    break
-                if len(split_top(bare, ",")) > 3:
-                    errors.append(f"{key}: {role} `{bare}` separates names with commas, not `and` (rule 3)")
-                    break
+            if role in fields:
+                e, i = name_findings(key, role, fields[role])
+                errors += e
+                infos += i
+        if "doi" in fields and not fields["doi"].startswith("10."):
+            errors.append(f"{key}: doi `{fields['doi']}` is not a bare DOI starting `10.` (rule 9)")
         for name in sorted(set(fields) - KNOWN_FIELDS):
             infos.append(("style-field", f"{key}: unknown field `{name}`"))
         if any(LATEX_ESCAPE_RE.search(v) for v in fields.values()):
@@ -539,15 +707,14 @@ def _pybtex_view(entry):
     return entry.type.lower(), fields, persons
 
 
-def equivalence_findings(text, merge):
+def equivalence_findings(text, merge, sources):
     """Errors where pybtex reads a merged entry differently from its source."""
-    from pybtex.database import parse_file, parse_string
+    from pybtex.database import parse_string
 
     try:
-        merged = parse_string(text, "bibtex").entries
-        sources = {s: parse_file(str(series_bib(s)), "bibtex").entries for s in merge.series}
-    except Exception as exc:  # pybtex refuses, e.g., two keys equal when case is ignored
-        return [f"pybtex cannot read the merged file or a series' file: {exc}"]
+        merged = pybtex_entries("the merged text", text)
+    except Refused as exc:
+        return [str(exc)]
     errors = []
     for key in sorted(merge.entries, key=str.lower):
         if key in merge.carried:
@@ -595,7 +762,7 @@ def report(merge) -> str:
         held = merge.copies[key]
         status = "refused: " + merge.refused[key] if key in merge.refused else f"ruled: takes {merge.rulings[key]['take']}"
         lines += [f"### `{key}`: {status}", "", "| field | " + " | ".join(merge.series) + " | result |", "|---" * (len(merge.series) + 2) + "|"]
-        result = merge.entries.get(key)
+        result = None if key in merge.refused else merge.entries.get(key)
         names = sorted({f for _, fs in held.values() for f in fs} | set(result[1] if result else ()))
         rows = [("(type)", lambda e: e[0])] + [(n, lambda e, n=n: e[1].get(n, "—")) for n in names]
         for label, get in rows:
@@ -610,20 +777,25 @@ def report(merge) -> str:
 
 
 def propose(merge) -> str:
-    out = []
+    """sync/bib.yml stubs for the refused keys, sealed against the current copies."""
+    stubs = {}
     for key in sorted(merge.refused, key=str.lower):
         held = merge.copies.get(key)
         if not held:
             continue
-        take, why = proposal(held, merge.series)
-        out.append(f"  {key}:")
-        out.append(f"    take: {take}    # {why}")
-        out.append("    because: TODO")
-        out.append("    seal:")
-        for s in merge.series:
-            if s in held:
-                out.append(f"      {s}: {digest(held[s])}")
-    return "\n".join(out) + ("\n" if out else "")
+        old = merge.rulings.get(key)
+        if old and old["take"] in held:
+            stub = {k: old[k] for k in ("take", "set", "drop", "type") if k in old}
+            stub["because"] = f"TODO (re-sealed; it was: {old['because']})"
+        else:
+            take, why = proposal(held, merge.series)
+            stub = {"take": take, "because": f"TODO ({why})"}
+        stub["seal"] = {s: digest(held[s]) for s in merge.series if s in held}
+        stubs[key] = stub
+    if not stubs:
+        return ""
+    text = yaml.safe_dump(stubs, sort_keys=False, allow_unicode=True, width=10_000, default_flow_style=None)
+    return "".join(f"  {line}\n" for line in text.splitlines())
 
 
 def proposal(held, order):
@@ -631,8 +803,8 @@ def proposal(held, order):
     items = [(s, held[s]) for s in order if s in held]
     for s, (etype, fields) in items:
         if all(e[0] == etype and all(fields.get(k) == v for k, v in e[1].items()) for _, e in items):
-            return s, "its fields include every other copy's (one copy has more fields)"
-    return items[0][0], "PICK: no copy contains the others"
+            return s, "proposal: its fields include every other copy's (one copy has more fields)"
+    return items[0][0], "proposal: no copy contains the others; pick one"
 
 
 # --------------------------------------------------------------------------- #
@@ -641,7 +813,7 @@ def proposal(held, order):
 def reconstruct(series_list):
     sync = ROOT / "tools" / "sync"
     cmd = ["uv", "run", "--quiet", "--script", str(sync), *series_list] if shutil.which("uv") else [str(sync), *series_list]
-    print("reconstructing mirror/ for:", " ".join(series_list))
+    print("reconstructing mirror/ for:", " ".join(series_list), file=sys.stderr)
     if subprocess.call(cmd, cwd=str(ROOT)) != 0:
         raise Refused("tools/sync failed")
 
@@ -654,39 +826,34 @@ def github_output(**values):
                 fh.write(f"{k}={v}\n")
 
 
-def main(argv=None):
-    p = argparse.ArgumentParser(prog="tools/bib-merge", description=__doc__.split("\n\n")[0])
-    p.add_argument("--write", action="store_true", help="write lectures/_static/quant-econ.bib")
-    p.add_argument("--report", nargs="?", const="-", metavar="PATH", help="write the conflict report (markdown) to PATH, or stdout")
-    p.add_argument("--propose", action="store_true", help="print sync/bib.yml stubs for every refused key")
-    p.add_argument("--reconstruct", action="store_true", help="rebuild mirror/ for every manifest series first")
-    args = p.parse_args(argv)
-
+def run(args):
     try:
-        series, rulings = load_rulings()
+        series, rulings, rulings_digest = load_rulings()
         if args.reconstruct:
             reconstruct(manifest_series())
         missing = [s for s in series if s not in manifest_series()]
         if missing:
             raise ConfigError(f"sync/bib.yml: series {', '.join(missing)} are not in sync/manifest.yml")
-        copies, inputs = collect_copies(series)
+        copies, inputs, sources = collect_copies(series)
     except (Refused, ConfigError) as exc:
         print(f"bib-merge: {exc}", file=sys.stderr)
         github_output(bib_state="error", bib_failed="true", bib_refresh="false")
         return 2
 
-    committed, recorded = read_committed()
-    merge = Merge(series, rulings, copies, committed)
-    text = render(merge.entries, inputs)
+    log = sys.stderr if (args.report == "-" or args.propose) else sys.stdout
+    committed = Committed()
+    merge = Merge(series, rulings, copies, committed.entries)
+    text = render(merge.entries, inputs, rulings_digest)
 
-    unlisted = [s for s in manifest_series() if s not in series and series_bib(s).exists()]
-    for s in unlisted:
-        merge.info.append(("series-unlisted", f"{s} has a {BIB_BASENAME} but is not in sync/bib.yml's `series`"))
+    for s in manifest_series():
+        if s not in series and series_bib(s).exists():
+            merge.info.append(("series-unlisted", f"{s} has a {BIB_BASENAME} but is not in sync/bib.yml's `series`"))
 
     style_errors, style_infos = style_findings(merge.entries)
     closure_errors, closure_infos = closure_findings(merge.entries)
-    equivalence_errors = equivalence_findings(text, merge)
+    equivalence_errors = equivalence_findings(text, merge, sources)
     merge.info += style_infos + closure_infos
+    write_problem = render_problem(text, merge.entries)
 
     if args.report:
         body = report(merge)
@@ -697,49 +864,81 @@ def main(argv=None):
     if args.propose:
         print(propose(merge), end="")
 
-    current = POOL_BIB.read_text(encoding="utf-8") if POOL_BIB.exists() else None
-    if args.write:
-        if current != text:
-            POOL_BIB.parent.mkdir(parents=True, exist_ok=True)
-            with open(POOL_BIB, "w", encoding="utf-8", newline="\n") as fh:
-                fh.write(text)
-            print(f"wrote {POOL_BIB.relative_to(ROOT)} ({len(merge.entries)} entries)")
+    if committed.text == text:
         state = "clean"
-    elif current == text:
-        state = "clean"
-    elif current is None:
+    elif committed.text is None:
         state = "missing"
-    elif recorded is not None and recorded != inputs:
+    elif committed.problem or committed.rulings != rulings_digest:
+        state = "violation"
+    elif committed.inputs != inputs:
         state = "refresh"
     else:
         state = "violation"
 
+    wrote = False
+    if args.write:
+        if write_problem:
+            pass
+        elif committed.problem and merge.carried:
+            write_problem = (f"{POOL_BIB.relative_to(ROOT)} cannot be trusted ({committed.problem}), so the committed "
+                             f"entries of the refused keys cannot be carried; settle them first")
+        elif committed.text != text:
+            POOL_BIB.parent.mkdir(parents=True, exist_ok=True)
+            with open(POOL_BIB, "w", encoding="utf-8", newline="\n") as fh:
+                fh.write(text)
+            wrote = True
+        if not write_problem:
+            state = "clean"
+
     print(f"keys {len(merge.copies)} · held by two or more series {sum(1 for h in merge.copies.values() if len(h) > 1)} · "
-          f"conflicts {len(merge.conflicts())} · rulings {len(rulings)} · merged {len(merge.entries)}")
+          f"conflicts {len(merge.conflicts())} · rulings {len(rulings)} · merged {len(merge.entries)}", file=log)
+    if wrote:
+        print(f"wrote {POOL_BIB.relative_to(ROOT)} ({len(merge.entries)} entries)", file=log)
     for key, reason in sorted(merge.refused.items(), key=lambda kv: kv[0].lower()):
         kept = " (the committed entry is kept)" if key in merge.carried else ""
-        print(f"[refused] {key}: {reason}{kept}")
+        print(f"[refused] {key}: {reason}{kept}", file=log)
     for e in style_errors:
-        print(f"[style] {e}")
+        print(f"[style] {e}", file=log)
     for e in closure_errors:
-        print(f"[closure] {e}")
+        print(f"[closure] {e}", file=log)
     for e in equivalence_errors:
-        print(f"[equivalence] {e}")
+        print(f"[equivalence] {e}", file=log)
+    if write_problem:
+        print(f"[write-refused] nothing was written: {write_problem}", file=log)
+    rel = POOL_BIB.relative_to(ROOT)
     if state == "refresh":
-        print(f"[refresh] the series' files moved since {POOL_BIB.relative_to(ROOT)} was generated: run tools/bib-merge --write")
-    elif state == "violation":
-        print(f"[violation] {POOL_BIB.relative_to(ROOT)} is not what the same inputs generate: "
-              "a hand edit, or a ruling or tool change that was not regenerated (run tools/bib-merge --write)")
+        print(f"[refresh] the series' entries moved since {rel} was generated: run tools/bib-merge --write", file=log)
     elif state == "missing":
-        print(f"[violation] {POOL_BIB.relative_to(ROOT)} is missing (run tools/bib-merge --write)")
+        print(f"[violation] {rel} is missing (run tools/bib-merge --write)", file=log)
+    elif state == "violation":
+        why = (committed.problem or ("sync/bib.yml changed and the file was not regenerated"
+               if committed.rulings != rulings_digest else "it is not what the same inputs generate (a tool change that was not regenerated?)"))
+        print(f"[violation] {rel}: {why} (run tools/bib-merge --write)", file=log)
     for kind, message in merge.info:
-        print(f"[info:{kind}] {message}")
+        print(f"[info:{kind}] {message}", file=log)
 
-    failed = bool(merge.refused or style_errors or closure_errors or equivalence_errors or state in ("violation", "missing"))
+    failed = bool(merge.refused or style_errors or closure_errors or equivalence_errors or write_problem
+                  or state in ("violation", "missing"))
     github_output(bib_state=state, bib_failed=str(failed).lower(), bib_refresh=str(state == "refresh").lower())
     if failed:
         return 2
     return 1 if state == "refresh" else 0
+
+
+def main(argv=None):
+    p = argparse.ArgumentParser(prog="tools/bib-merge", description=__doc__.split("\n\n")[0])
+    p.add_argument("--write", action="store_true", help="write lectures/_static/quant-econ.bib")
+    p.add_argument("--report", nargs="?", const="-", metavar="PATH", help="write the conflict report (markdown) to PATH, or stdout")
+    p.add_argument("--propose", action="store_true", help="print sync/bib.yml stubs for every refused key")
+    p.add_argument("--reconstruct", action="store_true", help="rebuild mirror/ for every manifest series first")
+    args = p.parse_args(argv)
+    try:
+        return run(args)
+    except Exception as exc:  # anything unforeseen must fail loudly, never read as "behind"
+        traceback.print_exc()
+        print(f"bib-merge: internal error: {type(exc).__name__}: {exc}", file=sys.stderr)
+        github_output(bib_state="error", bib_failed="true", bib_refresh="false")
+        return 2
 
 
 if __name__ == "__main__":

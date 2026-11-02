@@ -84,7 +84,8 @@ rulings:
     seal: {intro: 70b33e1b07b635c9, intermediate: 19112a1c34fdb4fb, advanced: 70b33e1b07b635c9, jax: 70b33e1b07b635c9, dp: 70b33e1b07b635c9}
   hamburger1967computation:
     take: advanced
-    because: 'rule: the same fact written two ways (#10): the journal''s own name, Econometrica'
+    drop: [publisher]
+    because: 'rule: the same fact written two ways (#10): the journal''s own name, Econometrica; "publisher = JSTOR" is left out, as an article does not print it and the manual says to remove it'
     seal: {intro: b036b143f82511bd, intermediate: b036b143f82511bd, advanced: 1ac1e05eda8c0cb9, jax: b036b143f82511bd, dp: b036b143f82511bd}
   hansen1983stochastic:
     take: advanced
@@ -139,7 +140,8 @@ rulings:
     seal: {intro: b593289d330f9b36, intermediate: 58d7bb94f20286e0, advanced: b593289d330f9b36, jax: b593289d330f9b36, dp: b593289d330f9b36}
   kemeny1956generalization:
     take: advanced
-    because: 'rule: the same fact written two ways (#10): the journal''s own name, Econometrica'
+    drop: [publisher]
+    because: 'rule: the same fact written two ways (#10): the journal''s own name, Econometrica; "publisher = JSTOR" is left out, as an article does not print it and the manual says to remove it'
     seal: {intro: ec40c4a35c10aeb7, intermediate: ec40c4a35c10aeb7, advanced: 6f763ea2a15a7bd9, jax: ec40c4a35c10aeb7, dp: ec40c4a35c10aeb7}
   Koopmans:
     take: intermediate
@@ -214,7 +216,8 @@ rulings:
     seal: {intro: e4e1b93ce8162660, intermediate: 6a229841f500a9b4, advanced: e4e1b93ce8162660, jax: e4e1b93ce8162660, dp: e4e1b93ce8162660}
   Phelan_Townsend_91:
     take: advanced
-    because: 'rule: one copy has more fields (#10): advanced''s adds the DOI'
+    drop: [url]
+    because: 'rule: one copy has more fields (#10): advanced''s adds the DOI; its RePEc url is left out because the DOI exists (rule 9)'
     seal: {intro: 61014964c2276bc7, intermediate: 61014964c2276bc7, advanced: 4013dae8eba610c4, jax: 61014964c2276bc7, dp: 61014964c2276bc7}
   piazzesi2015trend:
     take: advanced
@@ -232,6 +235,11 @@ rulings:
     take: intermediate
     because: 'owner''s ruling of 2026-11-02 (QuantEcon/project-monorepo#10): JME 5(1):133--143'
     seal: {intro: 5738a3daa6bad3c8, intermediate: 1b1ec01408ad8500, advanced: 5738a3daa6bad3c8, jax: 5738a3daa6bad3c8, dp: 5738a3daa6bad3c8}
+  sargent1989least:
+    take: intro
+    set: {editor: William Barnett and John Geweke and Karl Shell}
+    because: 'style fix (#10, decision D3): the editors were separated by commas and a stray comma before "and", so BibTeX read one malformed name; the same three names, joined by "and" (rule 3)'
+    seal: {intro: b5017575cd6e8580}
   Sargent_Stachurski_2025:
     take: advanced
     because: 'rule: one copy has more fields (#10): advanced''s adds the DOI; the others'' extra field, place, is one neither reader prints'
@@ -250,7 +258,8 @@ rulings:
     seal: {intermediate: 2c5c192316c59b67, advanced: 1de6a545cc8962c1}
   Spear_Srivastava_87:
     take: advanced
-    because: 'rule: one copy has more fields (#10): advanced''s adds the DOI'
+    drop: [url]
+    because: 'rule: one copy has more fields (#10): advanced''s adds the DOI; its RePEc url is left out because the DOI exists (rule 9)'
     seal: {intro: c59395ec8e29abba, intermediate: c59395ec8e29abba, advanced: e941cb15275c5de1, jax: c59395ec8e29abba, dp: c59395ec8e29abba}
   SvenssonWilliams2009:
     take: intermediate

@@ -21,10 +21,11 @@ name: drift-check
 # file: one that is behind the series' bibliographies is refreshed into the
 # same pull request (written after promote, so its citation check sees the
 # refreshed pool). A key it refuses (a conflict without a ruling in
-# sync/bib.yml, or a ruling a copy has reopened) keeps its committed entry, is
-# listed in the pull request, and keeps the run RED until it is ruled. A
-# committed file that a refresh would not fix (a hand edit, or a ruling or tool
-# change that was not regenerated) turns the check job RED instead.
+# sync/bib.yml, or a ruling a copy has reopened) keeps its committed entry and
+# is listed in that pull request. Anything bib-merge fails on (a refused key,
+# a failed check, a hand edit, a ruling not regenerated) turns the separate
+# `bibliography` job RED, never the check job, so it cannot hold back the
+# refresh of the pool lectures.
 #
 # The refresh lands as a pull request rather than a push to main so a human
 # sees the ledger diff: a refresh can change which entries are `interim`.
@@ -91,6 +92,8 @@ jobs:
       drift: ${{ steps.check.outputs.drift }}
       refresh: ${{ steps.check.outputs.refresh }}
       bib_refresh: ${{ steps.bib.outputs.bib_refresh }}
+      bib_failed: ${{ steps.bib.outputs.bib_failed }}
+      bib_state: ${{ steps.bib.outputs.bib_state }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -129,19 +132,32 @@ jobs:
       - name: Check the merged bibliography
         id: bib
         # Runs whatever the drift-check found, so both reports are in the log.
-        # Exit 1 (behind the series' files) is a refresh for the job below; a
-        # problem it would carry into that refresh (a refused key, a failed
-        # check) is reported and kept red there. Only what a refresh cannot
-        # fix turns this job red.
+        # Its outcome travels as outputs: bib_refresh starts the refresh job,
+        # bib_failed turns the `bibliography` job red. It fails this job only
+        # when bib-merge reported nothing at all (it could not start).
         if: success() || failure()
         run: |
           set +e
           uv run --script tools/bib-merge --reconstruct
           rc=$?
           set -e
-          echo "bib-merge exit status: $rc (0 clean, 1 behind the series' files, 2 refused or failed)"
-          state=$(grep '^bib_state=' "$GITHUB_OUTPUT" | tail -n 1 | cut -d= -f2)
-          if [ "$rc" = 2 ] && [ "$state" != refresh ]; then exit 1; fi
+          echo "bib-merge exit status: $rc (0 clean, 1 behind the series' files, 2 refused, failed or an error)"
+          if ! grep -q '^bib_state=' "$GITHUB_OUTPUT"; then
+            echo "::error::tools/bib-merge exited $rc without reporting a state: it did not start."
+            exit 1
+          fi
+
+  bibliography:
+    # Red while the merged bibliography is not settled, in its own job so that
+    # it never skips the refresh job (whose pull request lists a refused key).
+    needs: check
+    if: always() && needs.check.outputs.bib_failed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Keep the run red while the merged bibliography is not settled
+        run: |
+          echo "::error::tools/bib-merge found a refused key, a failed check, a hand edit or a ruling that was not regenerated (state: ${{ needs.check.outputs.bib_state }}). The check job's bibliography step gives each line; tools/bib-merge --propose prints a sealed stub for a refused key."
+          exit 1
 
   refresh:
     needs: check
@@ -164,7 +180,9 @@ jobs:
         # promote writes every entry it can refresh and exits 1 if any entry
         # failed. The exit status is kept, not acted on here, so the entries
         # that did refresh still reach the pull request below; the last step
-        # turns the run red.
+        # turns the run red. Skipped when only the bibliography needs a
+        # refresh, so a quiet night re-anchors nothing in the ledger.
+        if: needs.check.outputs.refresh_needed == 'true'
         run: |
           set +e
           uv run --script tools/promote --refresh ${PROMOTE_EXCLUDE:+--exclude $PROMOTE_EXCLUDE} 2>&1 | tee promote.log
@@ -201,12 +219,16 @@ jobs:
           # ledger included. A non-zero exit without it means the run stopped
           # before or during its writes (a configuration error, or a crash; not
           # a refused entry), so what is on disk may be half-written: open nothing.
-          if [ "${{ steps.refresh.outputs.rc }}" != "0" ] && ! grep -q '^summary \[refresh\]' promote.log; then
-            echo "::error::tools/promote --refresh exited ${{ steps.refresh.outputs.rc }} before its summary: a configuration error (see the error line in the refresh step) or a crash part-way. Its writes may be partial, so no pull request is opened."
+          # promote is skipped on a night when only the bibliography moved.
+          prc="${{ steps.refresh.outputs.rc }}"
+          [ -n "$prc" ] || prc=0
+          [ -f promote.log ] || : > promote.log
+          if [ "$prc" != "0" ] && ! grep -q '^summary \[refresh\]' promote.log; then
+            echo "::error::tools/promote --refresh exited $prc before its summary: a configuration error (see the error line in the refresh step) or a crash part-way. Its writes may be partial, so no pull request is opened."
             exit 1
           fi
           failed=$(grep -E '^\[[^]]+\] FAILED: ' promote.log || true)
-          bibfail=$(grep -E '^\[(refused|style|closure|equivalence|violation)\]' bib.log || true)
+          bibfail=$(grep -E '^(\[(refused|style|closure|equivalence|violation|write-refused)\]|bib-merge: )' bib.log || true)
           git add lectures sync/ledger.yml
           if git diff --cached --quiet; then
             if [ -n "$failed" ]; then
@@ -224,9 +246,12 @@ jobs:
           after=$(grep -c 'interim: true' sync/ledger.yml || true)
           n=$(git diff --cached --name-only -- lectures | grep -c '\.md$' || true)
           bib=$(git diff --cached --name-only -- lectures/_static/quant-econ.bib | grep -c . || true)
-          if [ "$n" -gt 0 ] && [ "$bib" -gt 0 ]; then
+          # Every staged pool change other than the bibliography: lectures,
+          # assets, the ledger.
+          pool=$(git diff --cached --name-only -- lectures sync/ledger.yml | grep -vxc 'lectures/_static/quant-econ.bib' || true)
+          if [ "$pool" -gt 0 ] && [ "$bib" -gt 0 ]; then
             title="promote: refresh $n pool lectures and the merged bibliography"
-          elif [ "$n" -gt 0 ]; then
+          elif [ "$pool" -gt 0 ]; then
             title="promote: refresh $n pool lectures whose canonical source moved"
           else
             title="bib-merge: refresh the merged bibliography from the series' files"
@@ -235,7 +260,7 @@ jobs:
           git commit -m "$title"
           git push --force -u origin drift/refresh
           {
-            if [ "$n" -gt 0 ] || [ -n "$failed" ]; then
+            if [ "$pool" -gt 0 ] || [ -n "$failed" ]; then
             echo "\`tools/drift-check\` found pool entries whose **canonical copy moved upstream**; \`tools/promote --refresh${PROMOTE_EXCLUDE:+ --exclude $PROMOTE_EXCLUDE}\` re-promoted them. Review the ledger diff, not just the lecture text: a refresh re-resolves every source, so an entry whose other copies went stale can change shape."
             echo
             echo "| | before | after |"
@@ -279,13 +304,13 @@ jobs:
           fi
 
       - name: Keep the run red while any entry could not be refreshed
-        if: steps.refresh.outputs.rc != '0'
+        if: steps.refresh.outcome == 'success' && steps.refresh.outputs.rc != '0'
         run: |
           echo "::error::tools/promote --refresh could not refresh every entry (exit ${{ steps.refresh.outputs.rc }}). The FAILED lines in the refresh step give each entry and promote's reason; any entries it did refresh are in the drift/refresh pull request."
           exit 1
 
       - name: Keep the run red while the merged bibliography is not settled
-        if: steps.bib.outputs.rc != '0'
+        if: always() && steps.bib.outcome == 'success' && steps.bib.outputs.rc != '0'
         run: |
           echo "::error::tools/bib-merge --write exited ${{ steps.bib.outputs.rc }}. The [refused], [style], [closure] and [equivalence] lines in the bibliography step give each key and the reason; every key it could merge is in the drift/refresh pull request."
           exit 1
