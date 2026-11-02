@@ -110,7 +110,8 @@ rulings:
     seal: {intermediate: 3521470dba8bdbc0, advanced: 89402ddf67159cac}
   Hansen_Jagannathan_1991:
     take: advanced
-    because: 'owner''s ruling of 2026-11-02 (QuantEcon/project-monorepo#10): intermediate''s DOI points to the next article in the issue'
+    drop: [url]
+    because: 'owner''s ruling of 2026-11-02 (QuantEcon/project-monorepo#10): intermediate''s DOI points to the next article in the issue; the RePEc url is left out because the DOI exists (rule 9), as the owner ruled the same day'
     seal: {intermediate: fc2091edc196ecae, advanced: dbcc56ecafed336b, dp: dbcc56ecafed336b}
   HansenRichard1987:
     take: intermediate
