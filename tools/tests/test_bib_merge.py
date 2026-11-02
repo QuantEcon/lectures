@@ -271,8 +271,7 @@ def test_propose_seals_every_held_copy_and_keeps_a_reopened_rulings_fixes(make_r
         ("@article{Smith2000,\n  title = {T},\n  % year = {1999},\n  journal = {J}\n}\n", "is not a field name"),
         ("@article{Smith2000,\n  title = {unbalanced\n}\n", "cannot be read exactly"),
         (entry("Smith2000", SMITH) + "@comment{@book{Hidden2020, title = {H}, publisher = {P}, year = {2020}}}\n", "find different keys"),
-        # pybtex, the Jupyter Book 1 reader, cannot read the file at all.
-        (entry("Commas", [("author", "{Hu, Y., Guo, Y.}"), ("title", "{T}"), ("journal", "{J}"), ("year", "{1}")]), "pybtex cannot read it: Too many commas"),
+        (entry("Smith2000", SMITH) + entry("SMITH2000", SMITH), "find different keys"),
     ],
 )
 def test_input_it_cannot_read_exactly_is_refused_and_nothing_is_written(make_repo, text, message):
@@ -307,12 +306,46 @@ def test_unusual_but_valid_input_survives(make_repo):
     assert "@article{odd:key/2002+x," in out
 
 
-def test_nothing_is_written_that_does_not_read_back(make_repo):
-    repo = repo_with(make_repo, entry("Smith2000", SMITH), entry("Smith2000", SMITH_DOI))
+def test_an_entry_that_would_not_read_back_is_refused_alone(make_repo):
+    repo = repo_with(make_repo, entry("Smith2000", SMITH) + entry("Jones2001", SMITH), entry("Smith2000", SMITH_DOI))
     repo.bib_rulings(SERIES, {"Smith2000": rule(repo, "Smith2000", take="intermediate", set={"title": "Broken {"})})
     res = repo.bib_merge("--write")
-    assert res.returncode == 2 and "[write-refused] nothing was written" in res.stdout
-    assert not repo.pool("_static/quant-econ.bib").exists()
+    assert res.returncode == 2
+    assert "[refused] Smith2000: its merged entry would not read back as written" in res.stdout
+    out = merged(repo)
+    assert "@article{Jones2001," in out and "Smith2000" not in out
+
+
+def test_a_month_pybtex_does_not_know_is_read_and_dropped(make_repo):
+    repo = repo_with(make_repo, entry("Smith2000", SMITH + [("month", "sept")]), "")
+    res = repo.bib_merge("--write")
+    assert res.returncode == 0, res.stdout + res.stderr
+    assert "month" not in body(repo) and "[info:pybtex] intro:" in res.stdout
+
+
+@pytest.mark.parametrize(
+    "field, raw, expected",
+    [("pages", "{1-3,}", "1--3,"), ("doi", "{https://doi.org/doi:10.1/x}", "10.1/x"), ("doi", "{doi: https://doi.org/10.1/x}", "10.1/x")],
+)
+def test_the_normalising_is_idempotent(make_repo, field, raw, expected):
+    repo = repo_with(make_repo, entry("Smith2000", SMITH + [(field, raw)]), "")
+    res = repo.bib_merge("--write")
+    assert res.returncode == 0, res.stdout
+    assert f"= {{{expected}}}" in merged(repo)
+    assert repo.bib_merge().returncode == 0
+
+
+def test_keys_equal_but_for_case_keep_the_committed_one_and_refresh_the_rest(make_repo):
+    repo = repo_with(make_repo, entry("Smith2000", SMITH) + entry("Jones2001", SMITH), "")
+    assert repo.bib_merge("--write").returncode == 0
+    repo.bib("intermediate", entry("smith2000", SMITH))
+    repo.bib("intro", entry("Smith2000", SMITH) + entry("Jones2001", SMITH_DOI))
+    res = repo.bib_merge("--write")
+    assert res.returncode == 2
+    assert "[refused] smith2000: equal to `Smith2000` when case is ignored" in res.stdout
+    out = merged(repo)
+    assert "@article{Smith2000," in out and "@article{smith2000," not in out
+    assert "doi     = {10.1/abc}" in out  # Jones2001's update was not held back
 
 
 # --------------------------------------------------------------------------- #
@@ -367,6 +400,38 @@ def test_a_hand_edit_to_a_carried_entry_is_a_violation(make_repo):
     assert res.returncode == 2 and "a hand edit" in res.stdout
 
 
+@pytest.mark.parametrize("damage", ["hand edit", "unreadable", "not utf-8"])
+def test_write_carries_nothing_from_a_committed_file_it_cannot_trust(make_repo, damage):
+    repo = repo_with(make_repo, entry("Smith2000", SMITH) + entry("Jones2001", SMITH), entry("Smith2000", SMITH))
+    assert repo.bib_merge("--write").returncode == 0
+    repo.bib("intermediate", entry("Smith2000", SMITH_DOI))  # Smith2000 is now refused
+    path = repo.pool("_static/quant-econ.bib")
+    text = path.read_text(encoding="utf-8")
+    if damage == "hand edit":
+        path.write_text(text.replace("@article{Jones2001,", "@article{Jones2001,\n  note = {edited},"), encoding="utf-8")
+    elif damage == "unreadable":
+        path.write_text(text.replace("@article{Smith2000,", "<<<<<<< HEAD\n@article{Smith2000,"), encoding="utf-8")
+    else:
+        path.write_bytes(text.encode("utf-8") + "% caf\xe9\n".encode("latin-1"))
+    before = path.read_bytes()
+    res = repo.bib_merge("--write")
+    assert res.returncode == 2
+    assert "[write-refused]" in res.stdout and "cannot be trusted" in res.stdout, res.stdout
+    assert path.read_bytes() == before
+    check = repo.bib_merge()
+    assert check.returncode == 2 and "[violation]" in check.stdout and "is missing" not in check.stdout
+
+
+def test_an_unforeseen_error_fails_and_reports_an_error_state(tmp_path, make_repo):
+    repo = repo_with(make_repo, entry("Smith2000", SMITH), "")
+    bib = repo.root / "mirror" / "intermediate" / "lectures" / "_static" / "quant-econ.bib"
+    bib.unlink()
+    bib.mkdir()  # a directory where the file should be
+    res, out = outputs(tmp_path, repo)
+    assert res.returncode == 2 and "internal error" in res.stderr
+    assert out == {"bib_state": "error", "bib_failed": "true", "bib_refresh": "false"}
+
+
 def test_a_malformed_header_is_a_violation_not_a_crash(make_repo):
     repo = repo_with(make_repo, entry("Smith2000", SMITH), "")
     assert repo.bib_merge("--write").returncode == 0
@@ -417,6 +482,7 @@ def test_a_malformed_rulings_file_fails_and_says_why(tmp_path, make_repo, ruling
         ({"take": "intro", "because": "x", "seal": {"intro": "0" * 16}, "colour": "red"}, "unknown fields: colour"),
         ({"take": "intro", "seal": {"intro": "0" * 16}}, "needs `because`"),
         ({"take": "intro", "because": "x", "seal": {"intro": "xyz"}}, "16-hex digest"),
+        ({"take": "intro", "because": "x", "seal": {"intro": "0" * 16}, "set": {"note": " "}}, "use `drop` to remove a field"),
     ],
 )
 def test_a_malformed_ruling_stops_the_run(make_repo, ruling, message):
@@ -446,6 +512,8 @@ def test_every_key_a_pool_lecture_cites_must_resolve(make_repo):
     [
         (entry("Ch1", [("author", "{A, B}"), ("title", "{T}"), ("booktitle", "{Book}"), ("year", "{1}")], "incollection"), "@incollection needs `publisher` (rule 2)"),
         (entry("Amp", [("author", "{Hu, Y. & Guo, Y.}"), ("title", "{T}"), ("journal", "{J}"), ("year", "{1}")]), "joins names with `&` or `;`"),
+        # pybtex reads this with a warning; the key, not the file, fails.
+        (entry("Commas", [("author", "{Hu, Y., Guo, Y.}"), ("title", "{T}"), ("journal", "{J}"), ("year", "{1}")]), "separates names with commas"),
         (entry("Stray", [("author", "{Kydland, Finn E., and Edward C. Prescott}"), ("title", "{T}"), ("journal", "{J}"), ("year", "{1}")]), "an empty name or a stray comma"),
         (entry("Doi", SMITH + [("doi", "{https://example.org/paper}")]), "is not a bare DOI starting `10.`"),
     ],
@@ -461,7 +529,8 @@ def test_keys_equal_when_case_is_ignored_fail_the_check(make_repo):
     repo = repo_with(make_repo, entry("Smith2000", SMITH), entry("SMITH2000", SMITH))
     res = repo.bib_merge("--write")
     assert res.returncode == 2
-    assert "Smith2000: equal to `SMITH2000` when case is ignored (rule 12)" in res.stdout, res.stdout
+    assert "[refused] Smith2000: equal to `SMITH2000` when case is ignored" in res.stdout, res.stdout
+    assert "[refused] SMITH2000: equal to `Smith2000` when case is ignored" in res.stdout
     assert "Traceback" not in res.stderr
 
 
@@ -504,7 +573,7 @@ def test_the_equivalence_check_names_an_entry_pybtex_reads_differently(make_repo
     tool = importlib.util.module_from_spec(spec)
     loader.exec_module(tool)
     series, rulings, rulings_digest = tool.load_rulings()
-    copies, inputs, sources = tool.collect_copies(series)
+    copies, inputs, sources, _ = tool.collect_copies(series)
     merge = tool.Merge(series, rulings, copies, {})
     text = tool.render(merge.entries, inputs, rulings_digest)
     assert tool.equivalence_findings(text, merge, sources) == []

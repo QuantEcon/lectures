@@ -61,10 +61,15 @@ case), a field name that is not one, ``@string`` or ``@preamble``, a bare
 macro other than a month, a ``#`` concatenation, an unbalanced quoted value,
 or a file in which bibtexparser and pybtex (the reader Jupyter Book 1 uses)
 find different keys. A refused FILE stops the run (exit 2) and nothing is
-written. A refused KEY (a conflict without a ruling, or a reopened ruling)
-does not hold the others back: it keeps the entry the committed file already
-has, if any, and the run exits 2 with the key and the reason. Nothing is ever
-written that does not read back as the same entries, in both readers.
+written. A refused KEY does not hold the others back: it keeps the entry the
+committed file already has, if any, and the run exits 2 with the key and the
+reason. A key is refused when it is a conflict without a ruling, when a copy
+reopens its ruling, when its merged entry would not read back as written, or
+when it equals another series' key but for case (the key the committed file
+already holds stays). Nothing is ever written that does not read back as the
+same entries, in both readers. pybtex reads in its lenient mode, so a defect
+inside one entry (a name with too many commas, an unknown month) is that
+key's problem, named by the style check, and its warnings are listed.
 
 The committed file
 ------------------
@@ -251,15 +256,17 @@ def normalise_pages(value: str) -> str:
     for part in parts:
         m = PAGE_RANGE_RE.fullmatch(part)
         out.append(f"{m.group(1)}--{m.group(2)}" if m else part)
-    return ", ".join(out) if out != parts else value
+    return ", ".join(out).strip() if out != parts else value
 
 
 def normalise_value(field: str, value: str) -> str:
+    """The house style's mechanical rules for one value; applying it twice changes nothing."""
     value = re.sub(r"\s+", " ", value).strip()
     if field == "pages":
         value = normalise_pages(value)
     elif field == "doi":
-        value = DOI_PREFIX_RE.sub("", value).strip()
+        while (bare := DOI_PREFIX_RE.sub("", value).strip()) != value:
+            value = bare
     return value
 
 
@@ -301,30 +308,47 @@ def parse_bib_text(label: str, text: str) -> dict:
 
 
 def pybtex_entries(label: str, text: str):
+    """(entries, warnings) as pybtex reads ``text``.
+
+    pybtex runs in its lenient mode: an entry it cannot read fully (a name with
+    too many commas, an unknown month) is still read, with a warning, so a
+    defect in one entry is that key's problem, which the style check names and
+    a ruling can fix, rather than a refusal of the whole file.
+    """
+    import io
+
+    import pybtex.io
+    from pybtex import errors
     from pybtex.database import parse_string
 
+    errors.set_strict_mode(False)
+    saved, buffer = pybtex.io.stderr, io.StringIO()
+    pybtex.io.stderr = buffer
     try:
-        return parse_string(text, "bibtex").entries
+        entries = parse_string(text, "bibtex").entries
     except Exception as exc:
         raise Refused(f"{label}: pybtex cannot read it: {exc}") from exc
+    finally:
+        pybtex.io.stderr = saved
+    return entries, [line.strip() for line in buffer.getvalue().splitlines() if line.strip()]
 
 
 def read_bib(series: str, path: Path):
-    """(entries, pybtex entries) for one series' file, both readers agreeing on its keys."""
+    """(entries, pybtex entries, pybtex warnings) for one series' file, both readers agreeing on its keys."""
     label = f"{series}: {path.relative_to(ROOT)}"
     try:
         text = path.read_bytes().decode("utf-8")
     except UnicodeDecodeError as exc:
         raise Refused(f"{label} is not UTF-8: {exc}") from exc
     entries = parse_bib_text(series, text)
-    pyb = pybtex_entries(label, text)
+    pyb, warnings = pybtex_entries(label, text)
     ours, theirs = set(entries), set(pyb.keys())
     if ours != theirs:
         only_ours = ", ".join(sorted(ours - theirs)) or "none"
         only_theirs = ", ".join(sorted(theirs - ours)) or "none"
         raise Refused(f"{label}: bibtexparser and pybtex find different keys (only bibtexparser: {only_ours}; "
-                      f"only pybtex: {only_theirs}); an @comment that hides an entry?")
-    return entries, pyb
+                      f"only pybtex: {only_theirs}); an @comment that hides an entry, or two keys equal but for case?")
+    return entries, pyb, [f"{series}: {w}" for w in warnings]
 
 
 def digest(entry) -> str:
@@ -389,6 +413,8 @@ def load_rulings(path: Path = RULINGS_PATH):
             isinstance(k, str) and FIELD_NAME_RE.fullmatch(k.lower()) and isinstance(v, str) for k, v in sets.items()
         ):
             raise ConfigError(f"{where}: `set` must map field names to string values")
+        if any(not v.strip() for v in sets.values()):
+            raise ConfigError(f"{where}: a `set` value is empty; use `drop` to remove a field")
         drops = r.get("drop", [])
         if not isinstance(drops, list) or not all(isinstance(d, str) and FIELD_NAME_RE.fullmatch(d.lower()) for d in drops):
             raise ConfigError(f"{where}: `drop` must be a list of field names")
@@ -478,6 +504,23 @@ class Merge:
             self.entries[key] = result
         for key in sorted(set(self.rulings) - set(self.copies)):
             self.info.append(("ruling-orphaned", f"{key}: no series holds it any more; its ruling can be removed"))
+        # Keys equal but for case, from different series (rule 12): one file
+        # cannot hold both. The key the committed file already holds stays;
+        # the other is refused until it is renamed upstream.
+        groups = {}
+        for key in self.entries:
+            groups.setdefault(key.lower(), []).append(key)
+        for keys in groups.values():
+            if len(keys) < 2:
+                continue
+            held_before = [k for k in keys if k in committed]
+            keep = held_before[0] if len(held_before) == 1 else None
+            for key in keys:
+                if key != keep:
+                    others = ", ".join(f"`{k}`" for k in keys if k != key)
+                    self.refused[key] = f"equal to {others} when case is ignored, and one file cannot hold both (rule 12): rename one upstream"
+                    self.entries.pop(key, None)
+                    self.carried.discard(key)
 
     def _refuse(self, key, reason, committed):
         self.refused[key] = reason
@@ -485,19 +528,30 @@ class Merge:
             self.entries[key] = committed[key]
             self.carried.add(key)
 
+    def refuse_after(self, key, reason, committed):
+        """Refuse a key found unfit once merged: keep its committed entry, or leave it out."""
+        self.refused[key] = reason
+        if key in committed:
+            self.entries[key] = committed[key]
+            self.carried.add(key)
+        else:
+            self.entries.pop(key, None)
+            self.carried.discard(key)
+
 
 def collect_copies(series):
-    """(copies, per-series digest of its normalised entries, per-series pybtex entries)."""
-    copies, inputs, pyb = {}, {}, {}
+    """(copies, per-series digest of its normalised entries, per-series pybtex entries, pybtex warnings)."""
+    copies, inputs, pyb, warnings = {}, {}, {}, []
     for s in series:
         path = series_bib(s)
         if not path.exists():
             raise Refused(f"{s}: {path.relative_to(ROOT)} is missing (run tools/sync {s}, or pass --reconstruct)")
-        entries, pyb[s] = read_bib(s, path)
+        entries, pyb[s], found = read_bib(s, path)
+        warnings += found
         inputs[s] = entries_digest(entries)
         for key, entry in entries.items():
             copies.setdefault(key, {})[s] = entry
-    return copies, inputs, pyb
+    return copies, inputs, pyb, warnings
 
 
 class Committed:
@@ -548,7 +602,7 @@ def ordered_fields(fields):
     return known + rest
 
 
-def render(entries, inputs, rulings_digest) -> str:
+def render_entries(entries) -> str:
     chunks = []
     for key in sorted(entries, key=lambda k: (k.lower(), k)):
         etype, fields = entries[key]
@@ -556,7 +610,11 @@ def render(entries, inputs, rulings_digest) -> str:
         width = max((len(n) for n in names), default=0)
         body = ",\n".join(f"  {n:<{width}} = {{{fields[n]}}}" for n in names)
         chunks.append("\n" + (f"@{etype}{{{key},\n{body}\n}}\n" if names else f"@{etype}{{{key},\n}}\n"))
-    entries_text = "".join(chunks)
+    return "".join(chunks)
+
+
+def render(entries, inputs, rulings_digest) -> str:
+    entries_text = render_entries(entries)
     return (
         HEADER
         + INPUTS_PREFIX + " ".join(f"{s}={inputs[s]}" for s in sorted(inputs)) + "\n"
@@ -579,6 +637,17 @@ def render_problem(text, entries):
         changed = sorted(k for k in set(back) | set(entries) if back.get(k) != entries.get(k))
         return f"the merged text reads back differently for {', '.join(changed[:10])}"
     return None
+
+
+def entry_problem(key, entry):
+    """Why one merged entry would not read back as written, or None."""
+    text = render_entries({key: entry})
+    try:
+        back = parse_bib_text("its merged entry", text)
+        pybtex_entries("its merged entry", text)
+    except Refused as exc:
+        return str(exc)
+    return None if back == {key: entry} else "it reads back with different fields"
 
 
 # --------------------------------------------------------------------------- #
@@ -712,7 +781,7 @@ def equivalence_findings(text, merge, sources):
     from pybtex.database import parse_string
 
     try:
-        merged = pybtex_entries("the merged text", text)
+        merged, _ = pybtex_entries("the merged text", text)
     except Refused as exc:
         return [str(exc)]
     errors = []
@@ -834,7 +903,7 @@ def run(args):
         missing = [s for s in series if s not in manifest_series()]
         if missing:
             raise ConfigError(f"sync/bib.yml: series {', '.join(missing)} are not in sync/manifest.yml")
-        copies, inputs, sources = collect_copies(series)
+        copies, inputs, sources, pybtex_warnings = collect_copies(series)
     except (Refused, ConfigError) as exc:
         print(f"bib-merge: {exc}", file=sys.stderr)
         github_output(bib_state="error", bib_failed="true", bib_refresh="false")
@@ -845,15 +914,26 @@ def run(args):
     merge = Merge(series, rulings, copies, committed.entries)
     text = render(merge.entries, inputs, rulings_digest)
 
+    # Nothing is written that does not read back. A key whose merged entry
+    # would not is refused on its own (keeping its committed entry), so it
+    # cannot hold back the others; only a whole-file failure stops the write.
+    write_problem = render_problem(text, merge.entries)
+    if write_problem:
+        for key, entry in sorted(merge.entries.items()):
+            if key not in merge.carried and (problem := entry_problem(key, entry)):
+                merge.refuse_after(key, f"its merged entry would not read back as written: {problem}", committed.entries)
+        text = render(merge.entries, inputs, rulings_digest)
+        write_problem = render_problem(text, merge.entries)
+
     for s in manifest_series():
         if s not in series and series_bib(s).exists():
             merge.info.append(("series-unlisted", f"{s} has a {BIB_BASENAME} but is not in sync/bib.yml's `series`"))
+    merge.info += [("pybtex", w) for w in pybtex_warnings]
 
     style_errors, style_infos = style_findings(merge.entries)
     closure_errors, closure_infos = closure_findings(merge.entries)
     equivalence_errors = equivalence_findings(text, merge, sources)
     merge.info += style_infos + closure_infos
-    write_problem = render_problem(text, merge.entries)
 
     if args.report:
         body = report(merge)
@@ -866,10 +946,10 @@ def run(args):
 
     if committed.text == text:
         state = "clean"
+    elif committed.problem or (committed.text is not None and committed.rulings != rulings_digest):
+        state = "violation"
     elif committed.text is None:
         state = "missing"
-    elif committed.problem or committed.rulings != rulings_digest:
-        state = "violation"
     elif committed.inputs != inputs:
         state = "refresh"
     else:
@@ -879,9 +959,9 @@ def run(args):
     if args.write:
         if write_problem:
             pass
-        elif committed.problem and merge.carried:
-            write_problem = (f"{POOL_BIB.relative_to(ROOT)} cannot be trusted ({committed.problem}), so the committed "
-                             f"entries of the refused keys cannot be carried; settle them first")
+        elif committed.problem and merge.refused:
+            write_problem = (f"{POOL_BIB.relative_to(ROOT)} cannot be trusted ({committed.problem}), so the entries "
+                             f"of the refused keys cannot be carried from it; restore the file or settle those keys first")
         elif committed.text != text:
             POOL_BIB.parent.mkdir(parents=True, exist_ok=True)
             with open(POOL_BIB, "w", encoding="utf-8", newline="\n") as fh:

@@ -270,7 +270,11 @@ jobs:
             fi
             if [ "$bib" -gt 0 ] || [ -n "$bibfail" ]; then
               echo
-              echo "**The merged bibliography.** \`tools/bib-merge --write\` regenerated \`lectures/_static/quant-econ.bib\` from the series' own files and the rulings in \`sync/bib.yml\` ($(grep -m1 '^keys ' bib.log || true)). Review the entries it changed: each comes from a series' file, normalised to the house style, or from a ruling."
+              if [ "$bib" -gt 0 ]; then
+                echo "**The merged bibliography.** \`tools/bib-merge --write\` regenerated \`lectures/_static/quant-econ.bib\` from the series' own files and the rulings in \`sync/bib.yml\` ($(grep -m1 '^keys ' bib.log || true)). Review the entries it changed: each comes from a series' file, normalised to the house style, or from a ruling."
+              else
+                echo "**The merged bibliography was not refreshed.** \`lectures/_static/quant-econ.bib\` is unchanged in this pull request."
+              fi
               if [ -n "$bibfail" ]; then
                 echo
                 echo "**Not settled.** \`tools/bib-merge\` found the problems below, so the run that opened this PR is red. A refused key keeps the entry the committed file already had. A conflict without a ruling, or a ruling a copy has reopened, is settled by a ruling in \`sync/bib.yml\`: \`tools/bib-merge --propose\` prints a stub, sealed against the current copies. A citation that does not resolve, or an entry that breaks the house style, is settled upstream or by a ruling that fixes the entry."
