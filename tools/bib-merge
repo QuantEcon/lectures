@@ -915,12 +915,12 @@ def run(args):
             reconstruct(manifest_series())
         missing = [s for s in series if s not in manifest_series()]
         if missing:
-            raise ConfigError(f"sync/bib.yml: series {', '.join(missing)} are not in sync/manifest.yml")
+            raise ConfigError(f"sync/bib.yml lists series not in sync/manifest.yml: {', '.join(missing)}")
         consumers = manifest_consumers()
         listed = [s for s in series if s in consumers]
         if listed:
             raise ConfigError(
-                f"sync/bib.yml: series {', '.join(listed)} are consumers in sync/manifest.yml; "
+                f"sync/bib.yml lists consumer series (class: consumer in sync/manifest.yml): {', '.join(listed)}; "
                 "a consumer republishes other series' lectures and is never a source"
             )
         copies, inputs, sources, pybtex_warnings = collect_copies(series)
