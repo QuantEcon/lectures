@@ -21,35 +21,9 @@
 # Format: one `<slug>: <series>` line per lecture, series keys as in
 # sync/manifest.yml.
 #
-# Seeded 2026-10-06 (QuantEcon/project-monorepo#74) from the 24 entries that
-# were `interim: true` in sync/ledger.yml: each keeps the canonical copy that
-# promotion had picked by run order before this map existed, so the pool is
-# unchanged. Every one is a dp-test collision, retired with dp-test itself.
-# An entry covers the slug, not a pair of series: `ifp_egm` below also
-# settles jax's different ifp_egm whenever jax takes part (the CI refresh
-# excludes jax), recording jax's copy as divergent instead of failing.
-
-career: intermediate                        # over dp-test
-cons_news: dp-test                          # over advanced
-ifp_advanced: intermediate                  # over dp-test
-ifp_egm: intermediate                       # over dp-test (and jax, see above)
-ifp_egm_transient_shocks: intermediate      # over dp-test
-inventory_q: intermediate                   # over dp-test
-jv: intermediate                            # over dp-test
-lagrangian_lqdp: dp-test                    # over intermediate
-lqcontrol: dp-test                          # over intermediate
-mccall_fitted_vfi: intermediate             # over dp-test
-mccall_model: intermediate                  # over dp-test
-mccall_model_with_sep_markov: dp-test       # over intermediate
-mccall_persist_trans: intermediate          # over dp-test
-mccall_q: intermediate                      # over dp-test
-odu: dp-test                                # over intermediate
-opt_tax_recur: advanced                     # over dp-test
-os: dp-test                                 # over intermediate
-os_egm: dp-test                             # over intermediate
-os_egm_jax: dp-test                         # over intermediate
-os_stochastic: intermediate                 # over dp-test
-os_time_iter: intermediate                  # over dp-test
-perm_income: dp-test                        # over intermediate
-perm_income_cons: dp-test                   # over intermediate
-rs_inventory_q: intermediate                # over dp-test
+# An entry covers the slug, not a pair of series: it settles every series'
+# different copy of that lecture.
+#
+# Seeded 2026-10-06 (QuantEcon/project-monorepo#74) with 24 entries, every one
+# a dp-test collision; emptied 2026-11-03 when dp-test was removed as a sync
+# source (QuantEcon/project-monorepo#24). An empty file is an empty map.

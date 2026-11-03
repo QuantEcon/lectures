@@ -124,11 +124,11 @@ A series' pin (and its timestamp) is only rewritten when the upstream `HEAD` has
 | `tools/drift-check --reconstruct` | Rebuild `mirror/` for the series the ledger references first. |
 | `tools/drift-check --print-issues` | Show the issues `--issues` would open, without touching GitHub. |
 | `tools/drift-check --issues` | Open, update and close `drift` issues to match the findings (CI). |
-| `tools/drift-check --accept-toc dp-test` | Record a series' `_toc.yml` at its current pin as the watched baseline. |
+| `tools/drift-check --accept-toc dp` | Record a series' `_toc.yml` at its current pin as the watched baseline. |
 
 Four outcomes: **refresh** (the canonical copy moved upstream; CI runs `promote --refresh --exclude $PROMOTE_EXCLUDE` and opens a pull request; an entry the refresh refuses is listed with promote's reason, in that pull request when one is opened and always in the red run's refresh step; the usual reason is a same-name copy edited to differ, which `sync/canonical.yml` or upstream settles; while the entry's canonical copy differs from its ledger record the run stays red every night until it is settled, and a settlement applies the next night), **drift** (a non-canonical copy diverged from its canonical home, a copy was removed, or a watched toc changed; each becomes an issue that closes itself when the finding clears), **violation** (the pool itself was edited; the job goes red), and **info** (a copy is merely stale, or a divergence converged). [`drift-check.yml`](.github/workflows/drift-check.yml) runs it after every `sync`.
 
-One kind of copy is never watched. A **consumer** series (`class: consumer` in `sync/manifest.yml`, today `dp`) only republishes other series' lectures, so its copies are recorded as `superseded` and are expected to go stale.
+One kind of copy is never watched. A **consumer** series (`class: consumer` in `sync/manifest.yml`, today `dp`) only republishes other series' lectures, so its copies are recorded as `superseded` and are expected to go stale. Its `_toc.yml` is watched, though: the pool's `dp` selection is promoted from it (`tools/promote --toc dp`), so a change there means re-running that promotion, then `--accept-toc dp`.
 
 ## Running the bibliography merge
 

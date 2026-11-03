@@ -26,6 +26,13 @@ kernelspec:
 :depth: 2
 ```
 
+In addition to what's in Anaconda, this lecture will need the following libraries:
+
+```{code-cell} python3
+:tags: [hide-output]
+
+!pip install quantecon jax
+```
 
 ## Overview
 
@@ -110,7 +117,7 @@ def create_model(
     s_grid = jnp.linspace(1e-4, grid_max, grid_size)
 
     # Store shocks (with a seed, so results are reproducible)
-    key = jax.random.PRNGKey(seed)
+    key = jax.random.key(seed)
     shocks = jnp.exp(μ + s * jax.random.normal(key, shape=(shock_size,)))
 
     return Model(β, μ, s, s_grid, shocks, α)
