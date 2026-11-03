@@ -18,75 +18,78 @@
 # The rulings of 2026-11-02 implement QuantEcon/project-monorepo#10: the
 # owner's 23 rulings, the four rules the owner accepted on 2026-10-12, and the
 # style fixes of decision D3.
+#
+# `dp` is not listed (owner's decision of 2026-11-03). It is a topics series,
+# a consumer in sync/manifest.yml: its lectures are copies of other series'
+# lectures and its bibliography is a copy too, so it is never a source, and
+# tools/bib-merge refuses a consumer here. Dropping it removed its copy from
+# every seal, the Bertsekas75 ruling that only its copy needed, and the one
+# key only it held (blume2006if, which no lecture cites).
 
-series: [intro, intermediate, advanced, jax, dp]
+series: [intro, intermediate, advanced, jax]
 rulings:
   AKR1990:
     take: intermediate
     set: {publisher: Elsevier}
     because: 'owner''s ruling of 2026-11-02 (QuantEcon/project-monorepo#10): the Handbook of Computational Economics (1996), which Amman, Kendrick and Rust edited; the others say 1990 and list them as authors'
-    seal: {intro: 7cc7b798cc306eb3, intermediate: a229f98efbe3e257, advanced: 7cc7b798cc306eb3, jax: 7cc7b798cc306eb3, dp: 7cc7b798cc306eb3}
+    seal: {intro: 7cc7b798cc306eb3, intermediate: a229f98efbe3e257, advanced: 7cc7b798cc306eb3, jax: 7cc7b798cc306eb3}
   Athanasios1991:
     take: intermediate
     because: 'owner''s ruling of 2026-11-02 (QuantEcon/project-monorepo#10): Papoulis alone wrote the 1991 (third) edition; the others swap his names and add Pillai, who joined at the fourth'
-    seal: {intro: e10b58a910cc1cf7, intermediate: 192c73b4ec2cf4c5, advanced: e10b58a910cc1cf7, jax: e10b58a910cc1cf7, dp: e10b58a910cc1cf7}
+    seal: {intro: e10b58a910cc1cf7, intermediate: 192c73b4ec2cf4c5, advanced: e10b58a910cc1cf7, jax: e10b58a910cc1cf7}
   Bansal_Yaron_2004:
     take: intermediate
     because: 'rule: one copy has more fields (#10): intermediate''s adds the DOI, and names in the house form; the RePEc url is left out because the DOI exists (rule 9)'
-    seal: {intro: 3322096878ad9cb6, intermediate: b58de0bbb212cd3d, advanced: 3322096878ad9cb6, jax: 3322096878ad9cb6, dp: 3322096878ad9cb6}
-  Bertsekas75:
-    take: intermediate
-    because: 'owner''s ruling of 2026-11-02 (QuantEcon/project-monorepo#10): Dimitri P. Bertsekas, Academic Press 1976; dp has "Dmitri" and 1975'
-    seal: {intermediate: 9c731f393aebe117, dp: 56e56b55285261c4}
+    seal: {intro: 3322096878ad9cb6, intermediate: b58de0bbb212cd3d, advanced: 3322096878ad9cb6, jax: 3322096878ad9cb6}
   bertsimas_tsitsiklis1997:
     take: intermediate
     because: 'rule: one copy is broken (#10): the others join the authors with "&"'
-    seal: {intro: 11f36dd4e0ce733d, intermediate: 04213f2e91573b47, jax: 11f36dd4e0ce733d, dp: 11f36dd4e0ce733d}
+    seal: {intro: 11f36dd4e0ce733d, intermediate: 04213f2e91573b47, jax: 11f36dd4e0ce733d}
   Burns_2023:
     take: intermediate
     because: 'rule: one copy is broken (#10): intro''s title adds "by Jennifer Burns"'
-    seal: {intro: b76fffd7ca55cbcc, intermediate: e06dc8515c49f078, dp: e06dc8515c49f078}
+    seal: {intro: b76fffd7ca55cbcc, intermediate: e06dc8515c49f078}
   CampbellShiller88:
     take: intermediate
     because: 'rule: one copy is broken (#10): the others separate the authors with a comma, so they print as one name'
-    seal: {intro: 3c2504ef0328c0b8, intermediate: 8b5272ea07d60f91, advanced: 3c2504ef0328c0b8, jax: 3c2504ef0328c0b8, dp: 3c2504ef0328c0b8}
+    seal: {intro: 3c2504ef0328c0b8, intermediate: 8b5272ea07d60f91, advanced: 3c2504ef0328c0b8, jax: 3c2504ef0328c0b8}
   Chadhuri_Mukerjee_88:
     take: intermediate
     because: 'owner''s ruling of 2026-11-02 (QuantEcon/project-monorepo#10): Chaudhuri (the key keeps its spelling) and "…Techniques"'
-    seal: {intro: 6782a24292cb1043, intermediate: 48c61632f21cb628, jax: 6782a24292cb1043, dp: 6782a24292cb1043}
+    seal: {intro: 6782a24292cb1043, intermediate: 48c61632f21cb628, jax: 6782a24292cb1043}
   Clarke_71:
     take: intermediate
     because: 'owner''s ruling of 2026-11-02 (QuantEcon/project-monorepo#10): Public Choice 11:17--33, matching the publisher''s record'
-    seal: {intro: 419e6ef80b36c25e, intermediate: aed034539b60bc46, jax: 419e6ef80b36c25e, dp: 419e6ef80b36c25e}
+    seal: {intro: 419e6ef80b36c25e, intermediate: aed034539b60bc46, jax: 419e6ef80b36c25e}
   davis2006flow:
     take: intermediate
     because: 'owner''s ruling of 2026-11-02 (QuantEcon/project-monorepo#10): the published JEP title and 20(3):3--26; the others carry the working paper''s title'
-    seal: {intro: 277fc0ec73a9ee04, intermediate: 903329c536587bde, advanced: 277fc0ec73a9ee04, jax: 277fc0ec73a9ee04, dp: 277fc0ec73a9ee04}
+    seal: {intro: 277fc0ec73a9ee04, intermediate: 903329c536587bde, advanced: 277fc0ec73a9ee04, jax: 277fc0ec73a9ee04}
   definetti:
     take: intermediate
     because: 'rule: one copy is broken (#10): "Annales de l''Institut Henri Poincaré"; the others misspell it'
-    seal: {intro: 1a8d720cdb39bc23, intermediate: 7fe4c73a3694690f, advanced: 1a8d720cdb39bc23, jax: 1a8d720cdb39bc23, dp: 1a8d720cdb39bc23}
+    seal: {intro: 1a8d720cdb39bc23, intermediate: 7fe4c73a3694690f, advanced: 1a8d720cdb39bc23, jax: 1a8d720cdb39bc23}
   Deneckere1992:
     take: intermediate
     because: 'rule: one copy is broken (#10): a chapter in Benhabib (ed.), Cycles and Chaos in Economic Equilibrium; the others type the book''s title as a journal'
-    seal: {intro: 64ea70075bd4c030, intermediate: 28d1e9d1f2d8614d, advanced: 64ea70075bd4c030, jax: 64ea70075bd4c030, dp: 64ea70075bd4c030}
+    seal: {intro: 64ea70075bd4c030, intermediate: 28d1e9d1f2d8614d, advanced: 64ea70075bd4c030, jax: 64ea70075bd4c030}
   DMD_book:
     take: intermediate
     because: 'rule: one copy is broken (#10): the others write "B. W, Brunton", which breaks the name'
-    seal: {intro: c642898bf6bc9f27, intermediate: daafcfd7dc4cf93d, jax: c642898bf6bc9f27, dp: c642898bf6bc9f27}
+    seal: {intro: c642898bf6bc9f27, intermediate: daafcfd7dc4cf93d, jax: c642898bf6bc9f27}
   Greenfield_Sargent_1993:
     take: intermediate
     because: 'rule: one copy is broken (#10): "Hoist"; the others have "Hoise"'
-    seal: {intro: d78e5e4fa40aac18, intermediate: 0e35765e065feb90, jax: d78e5e4fa40aac18, dp: d78e5e4fa40aac18}
+    seal: {intro: d78e5e4fa40aac18, intermediate: 0e35765e065feb90, jax: d78e5e4fa40aac18}
   HallMishkin1982:
     take: intermediate
     because: 'owner''s ruling of 2026-11-02 (QuantEcon/project-monorepo#10): Econometrica 50(2):461--481; the others cite the NBER working paper'
-    seal: {intro: 70b33e1b07b635c9, intermediate: 19112a1c34fdb4fb, advanced: 70b33e1b07b635c9, jax: 70b33e1b07b635c9, dp: 70b33e1b07b635c9}
+    seal: {intro: 70b33e1b07b635c9, intermediate: 19112a1c34fdb4fb, advanced: 70b33e1b07b635c9, jax: 70b33e1b07b635c9}
   hamburger1967computation:
     take: advanced
     drop: [publisher]
     because: 'rule: the same fact written two ways (#10): the journal''s own name, Econometrica; "publisher = JSTOR" is left out, as an article does not print it and the manual says to remove it'
-    seal: {intro: b036b143f82511bd, intermediate: b036b143f82511bd, advanced: 1ac1e05eda8c0cb9, jax: b036b143f82511bd, dp: b036b143f82511bd}
+    seal: {intro: b036b143f82511bd, intermediate: b036b143f82511bd, advanced: 1ac1e05eda8c0cb9, jax: b036b143f82511bd}
   hansen1983stochastic:
     take: advanced
     because: 'rule: one copy has more fields (#10): advanced''s has the journal''s own name and the title''s capitals; intermediate''s extra field is a publisher, which an article does not print'
@@ -98,11 +101,11 @@ rulings:
   hansen2008consumption:
     take: intermediate
     because: 'rule: one copy has more fields (#10): intermediate''s adds the DOI, the journal''s capitals and the title''s'
-    seal: {intro: 6b46c887c1585de2, intermediate: 0e4ed3e951ec8a9f, advanced: 6b46c887c1585de2, jax: 6b46c887c1585de2, dp: 6b46c887c1585de2}
+    seal: {intro: 6b46c887c1585de2, intermediate: 0e4ed3e951ec8a9f, advanced: 6b46c887c1585de2, jax: 6b46c887c1585de2}
   hansen2008robustness:
     take: advanced
     because: 'rule: cosmetic differences (#10): "Princeton University Press", capitalised'
-    seal: {intro: ee6edd20d68b9667, advanced: 65ce351840f50d34, jax: ee6edd20d68b9667, dp: ee6edd20d68b9667}
+    seal: {intro: ee6edd20d68b9667, advanced: 65ce351840f50d34, jax: ee6edd20d68b9667}
   hansen2020twisted:
     take: intermediate
     set: {author: 'Hansen, Lars Peter and Sz\H{o}ke, B\''{a}lint and Han, Lloyd S. and Sargent, Thomas J.'}
@@ -112,17 +115,17 @@ rulings:
     take: advanced
     drop: [url]
     because: 'owner''s ruling of 2026-11-02 (QuantEcon/project-monorepo#10): intermediate''s DOI points to the next article in the issue; the RePEc url is left out because the DOI exists (rule 9), as the owner ruled the same day'
-    seal: {intermediate: fc2091edc196ecae, advanced: dbcc56ecafed336b, dp: dbcc56ecafed336b}
+    seal: {intermediate: fc2091edc196ecae, advanced: dbcc56ecafed336b}
   HansenRichard1987:
     take: intermediate
     set: {title: The Role of Conditioning Information in Deducing Testable Restrictions Implied by Dynamic Asset Pricing Models}
     because: 'rule: one copy is broken (#10): every copy misspells or truncates the title, corrected from the publisher''s record'
-    seal: {intro: 3bbc65ca3cdefc33, intermediate: 3bbc65ca3cdefc33, advanced: ca75df9a41b3bb8b, jax: 3bbc65ca3cdefc33, dp: 3bbc65ca3cdefc33}
+    seal: {intro: 3bbc65ca3cdefc33, intermediate: 3bbc65ca3cdefc33, advanced: ca75df9a41b3bb8b, jax: 3bbc65ca3cdefc33}
   Helpman1985:
     take: intermediate
     set: {year: '1985'}
     because: 'owner''s ruling of 2026-11-02 (QuantEcon/project-monorepo#10): the full title, with the year kept at 1985 (1987 is the paperback)'
-    seal: {intro: ac0c02587b4d71db, intermediate: cf417eed8a3dacef, advanced: ac0c02587b4d71db, jax: ac0c02587b4d71db, dp: ac0c02587b4d71db}
+    seal: {intro: ac0c02587b4d71db, intermediate: cf417eed8a3dacef, advanced: ac0c02587b4d71db, jax: ac0c02587b4d71db}
   hicks1937mr:
     take: advanced
     because: 'rule: one copy is broken (#10): advanced''s has the title as published, with volume and number; intermediate''s title is mangled'
@@ -130,41 +133,41 @@ rulings:
   HST_1999:
     take: intermediate
     because: 'rule: cosmetic differences (#10): names in the house form'
-    seal: {intro: 61219fbc94069e72, intermediate: a3dc086e84327163, advanced: 61219fbc94069e72, jax: 61219fbc94069e72, dp: 61219fbc94069e72}
+    seal: {intro: 61219fbc94069e72, intermediate: a3dc086e84327163, advanced: 61219fbc94069e72, jax: 61219fbc94069e72}
   hu_guo2018:
     take: intermediate
     because: 'rule: one copy is broken (#10): the others join the authors with "&"'
-    seal: {intro: 7d5c824dd7761b0f, intermediate: a1da852f9309c9aa, jax: 7d5c824dd7761b0f, dp: 7d5c824dd7761b0f}
+    seal: {intro: 7d5c824dd7761b0f, intermediate: a1da852f9309c9aa, jax: 7d5c824dd7761b0f}
   Judd1985:
     take: intermediate
     because: 'rule: one copy has more fields (#10): intermediate''s adds volume and number; the others'' extra field is "publisher = JSTOR", which an article does not print and the manual says to remove'
-    seal: {intro: b593289d330f9b36, intermediate: 58d7bb94f20286e0, advanced: b593289d330f9b36, jax: b593289d330f9b36, dp: b593289d330f9b36}
+    seal: {intro: b593289d330f9b36, intermediate: 58d7bb94f20286e0, advanced: b593289d330f9b36, jax: b593289d330f9b36}
   kemeny1956generalization:
     take: advanced
     drop: [publisher]
     because: 'rule: the same fact written two ways (#10): the journal''s own name, Econometrica; "publisher = JSTOR" is left out, as an article does not print it and the manual says to remove it'
-    seal: {intro: ec40c4a35c10aeb7, intermediate: ec40c4a35c10aeb7, advanced: 6f763ea2a15a7bd9, jax: ec40c4a35c10aeb7, dp: ec40c4a35c10aeb7}
+    seal: {intro: ec40c4a35c10aeb7, intermediate: ec40c4a35c10aeb7, advanced: 6f763ea2a15a7bd9, jax: ec40c4a35c10aeb7}
   Koopmans:
     take: intermediate
     because: 'rule: one copy is broken (#10): the others misspell the field as "publilsher", so no publisher prints'
-    seal: {intro: ff411ee0aa513fc1, intermediate: 3fbfeeec730effad, advanced: ff411ee0aa513fc1, jax: ff411ee0aa513fc1, dp: ff411ee0aa513fc1}
+    seal: {intro: ff411ee0aa513fc1, intermediate: 3fbfeeec730effad, advanced: ff411ee0aa513fc1, jax: ff411ee0aa513fc1}
   KydlandPrescott1977:
     take: advanced
     because: 'owner''s ruling of 2026-11-02 (QuantEcon/project-monorepo#10): JPE 85(3):473--491; advanced''s copy, corrected upstream, now equals the ruled entry'
-    seal: {intro: 7bdcb790edcfc9c7, intermediate: df5d36eee87e2734, advanced: d08a8db87906f418, jax: 7bdcb790edcfc9c7, dp: 7bdcb790edcfc9c7}
+    seal: {intro: 7bdcb790edcfc9c7, intermediate: df5d36eee87e2734, advanced: d08a8db87906f418, jax: 7bdcb790edcfc9c7}
   KydlandPrescott1980:
     take: intermediate
     because: 'owner''s ruling of 2026-11-02 (QuantEcon/project-monorepo#10): Time to Build, Econometrica 50(6):1345--1370, 1982; advanced''s JEDC paper is kydland1980dynamic'
-    seal: {intro: c77c438d5ae7bb02, intermediate: 165981c92bd66f3a, advanced: b4ec83ccb3c23b24, jax: c77c438d5ae7bb02, dp: c77c438d5ae7bb02}
+    seal: {intro: c77c438d5ae7bb02, intermediate: 165981c92bd66f3a, advanced: b4ec83ccb3c23b24, jax: c77c438d5ae7bb02}
   Leeper_Walker_Yang:
     take: intermediate
     because: 'rule: cosmetic differences (#10): advanced''s spells Shu-Chun with the U+2010 hyphen'
-    seal: {intro: da97169d537012dc, intermediate: da97169d537012dc, advanced: 9700d717bb248f86, jax: da97169d537012dc, dp: da97169d537012dc}
+    seal: {intro: da97169d537012dc, intermediate: da97169d537012dc, advanced: 9700d717bb248f86, jax: da97169d537012dc}
   Ljungqvist2012:
     take: advanced
     set: {publisher: MIT Press}
     because: 'rule: the same fact written two ways (#10): the fuller given names, and "MIT Press" over "The MIT Press"'
-    seal: {intro: 48fe30fec593fbab, intermediate: 48fe30fec593fbab, advanced: a5c7961f8719d053, jax: 48fe30fec593fbab, dp: 48fe30fec593fbab}
+    seal: {intro: 48fe30fec593fbab, intermediate: 48fe30fec593fbab, advanced: a5c7961f8719d053, jax: 48fe30fec593fbab}
   LubikSchorfheide2004:
     take: advanced
     because: 'rule: one copy has more fields (#10): advanced''s adds the DOI'
@@ -172,24 +175,24 @@ rulings:
   Lucas1978:
     take: intermediate
     because: 'rule: the same fact written two ways (#10): the journal''s own name, Econometrica'
-    seal: {intro: 9a9450fab2f23a64, intermediate: c06847c529dc3c77, advanced: 9a9450fab2f23a64, jax: 9a9450fab2f23a64, dp: 9a9450fab2f23a64}
+    seal: {intro: 9a9450fab2f23a64, intermediate: c06847c529dc3c77, advanced: 9a9450fab2f23a64, jax: 9a9450fab2f23a64}
   LucasPrescott1971:
     take: intermediate
     set: {author: 'Lucas, Jr., Robert E. and Prescott, Edward C.'}
     because: 'rule: the same fact written two ways (#10): intermediate''s adds the DOI, volume and number and the journal''s own name; the author keeps the others'' "Jr." in the three-part form (rule 3)'
-    seal: {intro: 9e8772b7fb918409, intermediate: a92e876f5979b24d, advanced: 9e8772b7fb918409, jax: 9e8772b7fb918409, dp: 9e8772b7fb918409}
+    seal: {intro: 9e8772b7fb918409, intermediate: a92e876f5979b24d, advanced: 9e8772b7fb918409, jax: 9e8772b7fb918409}
   LucasStokey1983:
     take: intermediate
     because: 'owner''s ruling of 2026-11-02 (QuantEcon/project-monorepo#10): JME 12(1):55--93; the others have number 3'
-    seal: {intro: 653f17ba32ccbd99, intermediate: 28914ea0d3db9da1, advanced: 653f17ba32ccbd99, jax: 653f17ba32ccbd99, dp: 653f17ba32ccbd99}
+    seal: {intro: 653f17ba32ccbd99, intermediate: 28914ea0d3db9da1, advanced: 653f17ba32ccbd99, jax: 653f17ba32ccbd99}
   MaccheroniMarinacciRustichini:2006b:
     take: intermediate
     because: 'owner''s ruling of 2026-11-02 (QuantEcon/project-monorepo#10): pages 1447--1498; advanced has 1147'
-    seal: {intro: bbcd2eb5833026a7, intermediate: bb0658cc6ee899df, advanced: bbcd2eb5833026a7, jax: bbcd2eb5833026a7, dp: bbcd2eb5833026a7}
+    seal: {intro: bbcd2eb5833026a7, intermediate: bb0658cc6ee899df, advanced: bbcd2eb5833026a7, jax: bbcd2eb5833026a7}
   MarcetMarimon1994:
     take: intermediate
     because: 'owner''s ruling of 2026-11-02 (QuantEcon/project-monorepo#10): the published Econometrica 87(5):1589--1631, 2019; the others type the working paper as an article with no journal'
-    seal: {intro: db3e82123c20a0ad, intermediate: 6a07cc2f60597369, advanced: db3e82123c20a0ad, jax: db3e82123c20a0ad, dp: db3e82123c20a0ad}
+    seal: {intro: db3e82123c20a0ad, intermediate: 6a07cc2f60597369, advanced: db3e82123c20a0ad, jax: db3e82123c20a0ad}
   MarcetMarshall1992:
     take: intermediate
     set: {institution: Universitat Pompeu Fabra, type: Economics Working Paper}
@@ -201,25 +204,25 @@ rulings:
     take: intro
     set: {publisher: Rutgers University Press}
     because: 'style fix (#10, decision D3): an @incollection needs its publisher (rule 2); Post-Keynesian Economics (Kurihara, ed.) is Rutgers University Press, 1954'
-    seal: {intro: 1b5b4d953cab4093, intermediate: 1b5b4d953cab4093, advanced: 1b5b4d953cab4093, jax: 1b5b4d953cab4093, dp: 1b5b4d953cab4093}
+    seal: {intro: 1b5b4d953cab4093, intermediate: 1b5b4d953cab4093, advanced: 1b5b4d953cab4093, jax: 1b5b4d953cab4093}
   Neyman_Pearson:
     take: intermediate
     because: 'rule: one copy is broken (#10): the others put volume and issue inside an abbreviated journal name'
-    seal: {intro: 3ce0c13d825c865f, intermediate: 8ea82822caaa8b12, jax: 3ce0c13d825c865f, dp: 3ce0c13d825c865f}
+    seal: {intro: 3ce0c13d825c865f, intermediate: 8ea82822caaa8b12, jax: 3ce0c13d825c865f}
   pareto1896cours:
     take: intermediate
     drop: [volume]
     because: 'owner''s ruling of 2026-11-02 (QuantEcon/project-monorepo#10): a book (F. Rouge, Lausanne, 1896), the Cours cited as a whole: the income-distribution law is in volume II (1897), so volume 1 would point at the wrong volume'
-    seal: {intro: b3ff36006857ebbb, intermediate: 3af6b01cc3c7cc6c, advanced: 0bff74c55a618d9c, jax: b3ff36006857ebbb, dp: b3ff36006857ebbb}
+    seal: {intro: b3ff36006857ebbb, intermediate: 3af6b01cc3c7cc6c, advanced: 0bff74c55a618d9c, jax: b3ff36006857ebbb}
   PearlmanCurrieLevine1986:
     take: intermediate
     because: 'owner''s ruling of 2026-11-02 (QuantEcon/project-monorepo#10): Economic Modelling, 1986, with its full title'
-    seal: {intro: e4e1b93ce8162660, intermediate: 6a229841f500a9b4, advanced: e4e1b93ce8162660, jax: e4e1b93ce8162660, dp: e4e1b93ce8162660}
+    seal: {intro: e4e1b93ce8162660, intermediate: 6a229841f500a9b4, advanced: e4e1b93ce8162660, jax: e4e1b93ce8162660}
   Phelan_Townsend_91:
     take: advanced
     drop: [url]
     because: 'rule: one copy has more fields (#10): advanced''s adds the DOI; its RePEc url is left out because the DOI exists (rule 9)'
-    seal: {intro: 61014964c2276bc7, intermediate: 61014964c2276bc7, advanced: 4013dae8eba610c4, jax: 61014964c2276bc7, dp: 61014964c2276bc7}
+    seal: {intro: 61014964c2276bc7, intermediate: 61014964c2276bc7, advanced: 4013dae8eba610c4, jax: 61014964c2276bc7}
   piazzesi2015trend:
     take: advanced
     because: 'rule: the same fact written two ways (#10): the longer note'
@@ -227,15 +230,15 @@ rulings:
   Prescott1977:
     take: intermediate
     because: 'owner''s ruling of 2026-11-02 (QuantEcon/project-monorepo#10): Carnegie-Rochester Conference Series on Public Policy, not JME'
-    seal: {intro: ff78242c6d8db199, intermediate: f0ea1bbe8e5cafbc, advanced: ff78242c6d8db199, jax: ff78242c6d8db199, dp: ff78242c6d8db199}
+    seal: {intro: ff78242c6d8db199, intermediate: f0ea1bbe8e5cafbc, advanced: ff78242c6d8db199, jax: ff78242c6d8db199}
   Samuelson1939:
     take: intermediate
     because: 'owner''s ruling of 2026-11-02 (QuantEcon/project-monorepo#10): The Review of Economics and Statistics, not the Review of Economic Studies'
-    seal: {intro: d08d82e65287665e, intermediate: a44074eae3e21d0f, advanced: d08d82e65287665e, jax: d08d82e65287665e, dp: d08d82e65287665e}
+    seal: {intro: d08d82e65287665e, intermediate: a44074eae3e21d0f, advanced: d08d82e65287665e, jax: d08d82e65287665e}
   Sargent1979:
     take: intermediate
     because: 'owner''s ruling of 2026-11-02 (QuantEcon/project-monorepo#10): JME 5(1):133--143'
-    seal: {intro: 5738a3daa6bad3c8, intermediate: 1b1ec01408ad8500, advanced: 5738a3daa6bad3c8, jax: 5738a3daa6bad3c8, dp: 5738a3daa6bad3c8}
+    seal: {intro: 5738a3daa6bad3c8, intermediate: 1b1ec01408ad8500, advanced: 5738a3daa6bad3c8, jax: 5738a3daa6bad3c8}
   sargent1989least:
     take: intro
     set: {editor: William Barnett and John Geweke and Karl Shell}
@@ -244,7 +247,7 @@ rulings:
   Sargent_Stachurski_2025:
     take: advanced
     because: 'rule: one copy has more fields (#10): advanced''s adds the DOI; the others'' extra field, place, is one neither reader prints'
-    seal: {intermediate: 31efde439665ebf6, advanced: 5fa2bdaf273684ad, dp: 31efde439665ebf6}
+    seal: {intermediate: 31efde439665ebf6, advanced: 5fa2bdaf273684ad}
   Sims1980:
     take: intermediate
     because: 'rule: one copy has more fields (#10): intermediate''s has the title''s capitals; advanced''s extra field is "publisher = JSTOR", which an article does not print'
@@ -257,11 +260,11 @@ rulings:
     take: advanced
     drop: [url]
     because: 'rule: one copy has more fields (#10): advanced''s adds the DOI; its RePEc url is left out because the DOI exists (rule 9)'
-    seal: {intro: c59395ec8e29abba, intermediate: c59395ec8e29abba, advanced: e941cb15275c5de1, jax: c59395ec8e29abba, dp: c59395ec8e29abba}
+    seal: {intro: c59395ec8e29abba, intermediate: c59395ec8e29abba, advanced: e941cb15275c5de1, jax: c59395ec8e29abba}
   SvenssonWilliams2009:
     take: intermediate
     because: 'rule: one copy is broken (#10): advanced''s editor list is truncated mid-name; the editors also list the series editors, which is #112''s to correct'
-    seal: {intro: 3603af09c33264d1, intermediate: 3603af09c33264d1, advanced: e0dc98e4769af2f9, jax: 3603af09c33264d1, dp: 3603af09c33264d1}
+    seal: {intro: 3603af09c33264d1, intermediate: 3603af09c33264d1, advanced: e0dc98e4769af2f9, jax: 3603af09c33264d1}
   szoke2022estimating:
     take: advanced
     because: 'owner''s ruling of 2026-11-02 (QuantEcon/project-monorepo#10): Bálint Szőke, with the DOI; intermediate has "Balázs"'
@@ -273,7 +276,7 @@ rulings:
   Townsend1983:
     take: intermediate
     because: 'rule: one copy has more fields (#10): intermediate''s adds the number and the DOI'
-    seal: {intro: 57ce1b7420cd07a2, intermediate: ebb2b6167b2c1f20, jax: 57ce1b7420cd07a2, dp: 57ce1b7420cd07a2}
+    seal: {intro: 57ce1b7420cd07a2, intermediate: ebb2b6167b2c1f20, jax: 57ce1b7420cd07a2}
   Weil_1989:
     take: intermediate
     because: 'rule: one copy has more fields (#10): intermediate''s adds the DOI'

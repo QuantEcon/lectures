@@ -558,6 +558,23 @@ def test_a_series_with_a_bibliography_outside_the_list_is_reported(make_repo):
     assert "[info:series-unlisted] jax has a quant-econ.bib" in res.stdout
 
 
+def test_a_consumer_series_is_never_a_source(make_repo):
+    repo = make_repo(["intro", "intermediate", "dp"], consumers=["dp"])
+    repo.bib("intro", entry("Smith2000", SMITH))
+    repo.bib("intermediate", "")
+    repo.bib("dp", entry("Smith2000", SMITH_DOI))  # a consumer's older copy
+    repo.bib_rulings(["intro", "intermediate", "dp"])
+    res = repo.bib_merge("--write")
+    assert res.returncode == 2 and "series dp are consumers in sync/manifest.yml" in res.stderr, res.stderr
+
+    # Left out of the list, its bibliography is ignored, and not reported as unlisted.
+    repo.bib_rulings(SERIES)
+    res = repo.bib_merge("--write")
+    assert res.returncode == 0, res.stdout
+    assert "series-unlisted" not in res.stdout
+    assert "doi" not in body(repo)
+
+
 def test_the_report_goes_to_stdout_and_the_check_to_stderr(make_repo):
     repo = repo_with(make_repo, entry("Smith2000", SMITH), entry("Smith2000", SMITH_DOI))
     res = repo.bib_merge("--report")
