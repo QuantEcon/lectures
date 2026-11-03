@@ -121,8 +121,9 @@ def test_canonical_map_rejects_unknown_and_consumer_series(make_repo):
 
 
 def test_a_canonical_map_of_comments_only_is_an_empty_map(make_repo):
-    # sync/canonical.yml keeps its header when its last entry goes. YAML reads
-    # that as no document: an empty map, which settles nothing.
+    # sync/canonical.yml keeps its header when its last entry goes. PyYAML reads
+    # that as no document (None), which promote's load_yaml() turns into an
+    # empty map: one that settles nothing.
     repo = make_repo(["intro", "intermediate"])
     (repo.root / "sync" / "canonical.yml").write_text(
         "# sync/canonical.yml — HUMAN INTENT\n#\n# Every entry has been retired.\n", encoding="utf-8"
