@@ -21,8 +21,9 @@
 # Format: one `<slug>: <series>` line per lecture, series keys as in
 # sync/manifest.yml.
 #
-# An entry covers the slug, not a pair of series: it settles every series'
-# different copy of that lecture.
+# An entry covers the slug, not a pair of series: it settles the different
+# copy of that lecture in every canonical-eligible series taking part in the
+# run.
 #
 # Seeded 2026-10-06 (QuantEcon/project-monorepo#74) with 24 entries, every one
 # a dp-test collision; emptied 2026-11-03 when dp-test was removed as a sync

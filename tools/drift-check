@@ -15,10 +15,10 @@ same lecture. This script compares all of that against the reconstructed
   wrong: ``tools/promote --refresh`` re-copies it. CI does this automatically,
   with the exclusions in PROMOTE_EXCLUDE (.github/workflows/drift-check.yml),
   and opens a pull request.
-* ``drift``   — a NON-canonical copy (a second series' copy of a pool lecture,
-  recorded as a source) no longer matches its canonical home, or a copy was
-  removed upstream, or a watched ``_toc.yml`` changed. Each becomes a GitHub
-  issue (``--issues``) that closes itself when the finding clears.
+* ``drift``   — a NON-canonical copy (a second series' copy of a pool lecture
+  or asset, recorded as a source) no longer matches its canonical home, or a
+  copy was removed upstream, or a watched ``_toc.yml`` changed. Each becomes a
+  GitHub issue (``--issues``) that closes itself when the finding clears.
 * ``violation`` — the POOL itself no longer equals rewrites(canonical), or a
   pool asset changed: someone edited the pool directly, which the upstream-
   first rule forbids. Exit code 2; a red run is the alarm.
@@ -43,7 +43,7 @@ Usage
 -----
     tools/drift-check                      # report against the existing mirror/
     tools/drift-check --reconstruct        # rebuild mirror/ for the series the
-                                           # ledger references, then report
+                                           # checks read, then report
     tools/drift-check --json PATH          # also write a machine-readable report
     tools/drift-check --issues             # open/update/close `drift` issues
                                            # on GitHub (needs `gh`, authenticated)
@@ -256,7 +256,8 @@ class Finding:
 # --------------------------------------------------------------------------- #
 def series_in_ledger(ledger_lectures, ledger_assets, toc_state, consumers):
     """Every series whose mirror the checks read. Consumer copies are never
-    read, so they need no mirror."""
+    read, but a watched toc is, so a consumer whose toc is watched (``dp``)
+    needs its mirror too."""
     seen = []
 
     def add(s):
@@ -563,9 +564,12 @@ def check_tocs(toc_state: dict, manifest: dict, findings: list):
             "drift", "toc-changed", f"{series}/_toc.yml",
             f"{series}: lectures/_toc.yml changed since it was accepted at {rec.get('sha', '')[:12]}",
             detail=(
-                f"The product manifest generated from {series}'s toc may need regenerating, or the change is a "
-                f"deliberate divergence to record. When the manifest is in step again, re-accept with "
-                f"`tools/drift-check --accept-toc {series}`."
+                f"What is generated from {series}'s toc must follow it before the toc is re-accepted. If the "
+                f"pool's selection is promoted from it, re-run `tools/promote --toc {series}` with the refresh's "
+                f"exclusions (`PROMOTE_EXCLUDE` in `.github/workflows/drift-check.yml`), so a lecture newly listed "
+                f"there reaches the pool; if a product manifest is generated from it, regenerate that; if the "
+                f"change is a deliberate divergence, there is nothing to regenerate. Then re-accept with "
+                f"`tools/drift-check --accept-toc {series}`. Re-accepting alone clears this issue but promotes nothing."
             ),
             diff=diff,
             issue_title=f"drift({series}): _toc.yml changed since it was accepted",
@@ -755,7 +759,8 @@ def write_github_output(summary):
 def build_parser():
     p = argparse.ArgumentParser(prog="tools/drift-check", description=__doc__.split("\n\n")[0])
     p.add_argument("--reconstruct", action="store_true",
-                   help="rebuild mirror/ for every series the ledger references before checking")
+                   help="rebuild mirror/ for every series the checks read, a watched toc's series "
+                   "included, before checking")
     p.add_argument("--json", metavar="PATH", help="write the findings as JSON to PATH")
     p.add_argument("--issues", action="store_true",
                    help="open, update and close `drift` issues on GitHub to match the findings")
