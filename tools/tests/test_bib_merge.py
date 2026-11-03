@@ -565,7 +565,7 @@ def test_a_consumer_series_is_never_a_source(make_repo):
     repo.bib("dp", entry("Smith2000", SMITH_DOI))  # a consumer's older copy
     repo.bib_rulings(["intro", "intermediate", "dp"])
     res = repo.bib_merge("--write")
-    assert res.returncode == 2 and "lists consumer series (class: consumer in sync/manifest.yml): dp;" in res.stderr, res.stderr
+    assert res.returncode == 2 and "sync/bib.yml: `series` lists consumer series (class: consumer in sync/manifest.yml): dp;" in res.stderr, res.stderr
 
     # Left out of the list, its bibliography is ignored, and not reported as unlisted.
     repo.bib_rulings(SERIES)
