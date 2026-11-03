@@ -59,13 +59,13 @@ It is just a matter of appropriately relabeling the variables in Hall's model.
 In this lecture, we'll
 
 * show how the solution to the LQ permanent income model can be obtained using LQ control methods.
-* represent the model as a linear state space system as in {doc}`this lecture <intermediate:linear_models>`.
+* represent the model as a linear state space system as in {doc}`this lecture <linear_models>`.
 * apply [QuantEcon](https://quantecon.org/quantecon-py/)'s [LinearStateSpace](https://github.com/QuantEcon/QuantEcon.py/blob/master/quantecon/lss.py) class to characterize statistical features of the consumer's optimal consumption and borrowing plans.
 
 We'll then use these characterizations to construct a simple model of cross-section wealth and
 consumption dynamics in the spirit of Truman Bewley {cite}`Bewley86`.
 
-(Later we'll study other Bewley models---see {doc}`this lecture <intermediate:aiyagari>`.)
+(Later we'll study other Bewley models---see {doc}`this lecture <aiyagari>`.)
 
 The model will prove useful for illustrating concepts such as
 
@@ -171,7 +171,7 @@ y_{t+1} = \alpha + \rho_1 y_t + \rho_2 y_{t-1} + \sigma w_{t+1}
 $$
 
 We can map this into the linear state space framework in {eq}`sprob15ab2`, as
-discussed in our lecture on  {doc}`linear models <intermediate:linear_models>`.
+discussed in our lecture on  {doc}`linear models <linear_models>`.
 
 To do so we take
 

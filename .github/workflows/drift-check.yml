@@ -70,18 +70,14 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  # Series every refresh leaves out (promote --exclude). `dp`: the real dp
-  # series is excluded while the dp-test sandbox stands in for it (M2 posture,
-  # PLAN.md); it leaves this list at QuantEcon/project-monorepo#24. `jax`: it
-  # used to be excluded inside tools/promote and is now excluded here, by the
-  # same per-run flag. With jax considered, short_path fails the refresh
-  # (intro's and jax's are different lectures), while ifp_egm's
-  # sync/canonical.yml line records jax's copy as divergent instead; drop jax
-  # when its renames land (QuantEcon/project-monorepo#76). A refresh fails an
-  # entry whose canonical series is excluded once that series' pin moves, so
-  # jax must leave this list before any jax-only lecture is promoted. An
-  # empty list is fine: the flag is then left off.
-  PROMOTE_EXCLUDE: dp jax
+  # Series every refresh leaves out (promote --exclude). `jax` stays out until
+  # its own promotion (QuantEcon/project-monorepo#24), and leaves this list in
+  # that pull request: a refresh fails an entry whose canonical series is
+  # excluded once that series' pin moves. A consumer (`dp`) is never listed:
+  # it cannot collide, and a refresh that excluded it would erase the
+  # `superseded` rows a `--toc dp` run writes (#19). An empty list is fine:
+  # the flag is then left off.
+  PROMOTE_EXCLUDE: jax
 
 jobs:
   check:

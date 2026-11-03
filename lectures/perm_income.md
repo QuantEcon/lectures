@@ -141,7 +141,7 @@ The consumer also faces initial conditions $b_0$ and $y_0$, which can be fixed o
 
 For the remainder of this lecture, we follow Friedman and Hall in assuming that $(1 + r)^{-1} = \beta$.
 
-Regarding the endowment process, we assume it has the {doc}`state-space representation <intermediate:linear_models>`
+Regarding the endowment process, we assume it has the {doc}`state-space representation <linear_models>`
 
 ```{math}
 :label: sprob15ab
@@ -391,7 +391,7 @@ Then we can express equation  {eq}`pi_ssr` as
 \end{aligned}
 ```
 
-We can use the following formulas from {doc}`linear state space models <intermediate:linear_models>` to compute population mean $\mu_t = \mathbb{E}    x_t$ and covariance $\Sigma_t := \mathbb{E} [ (x_t - \mu_t) (x_t - \mu_t)']$
+We can use the following formulas from {doc}`linear state space models <linear_models>` to compute population mean $\mu_t = \mathbb{E}    x_t$ and covariance $\Sigma_t := \mathbb{E} [ (x_t - \mu_t) (x_t - \mu_t)']$
 
 ```{math}
 :label: lss_mut_perm_income
@@ -479,8 +479,8 @@ r = 0.05
 T = 60
 
 @jit
-def time_path(T):
-    w = np.random.randn(T+1)  # w_0, w_1, ..., w_T
+def time_path(T, rng):
+    w = rng.standard_normal(T+1)  # w_0, w_1, ..., w_T
     w[0] = 0
     b = np.zeros(T+1)
     for t in range(1, T+1):
@@ -489,7 +489,8 @@ def time_path(T):
     c = μ + (1 - β) * (σ * w - b)
     return w, b, c
 
-w, b, c = time_path(T)
+rng = np.random.default_rng()
+w, b, c = time_path(T, rng)
 
 fig, ax = plt.subplots(figsize=(10, 6))
 
@@ -512,7 +513,7 @@ fig, ax = plt.subplots(figsize=(10, 6))
 
 b_sum = np.zeros(T+1)
 for i in range(250):
-    w, b, c = time_path(T)  # Generate new time path
+    w, b, c = time_path(T, rng)  # Generate new time path
     rcolor = random.choice(('c', 'g', 'b', 'k'))
     ax.plot(c, color=rcolor, lw=0.8, alpha=0.7)
 
@@ -635,7 +636,7 @@ Equation {eq}`sprob77`  asserts that the *cointegrating residual*  on the left s
 ### Cross-Sectional Implications
 
 Consider again {eq}`sprob16abcd`, this time in light of our discussion of
-distribution dynamics in the {doc}`lecture on linear systems <intermediate:linear_models>`.
+distribution dynamics in the {doc}`lecture on linear systems <linear_models>`.
 
 The dynamics of $c_t$ are given by
 
@@ -899,7 +900,7 @@ In the same discussion in {cite}`Ljungqvist2012` it is shown that $K \in [0,1]$ 
 
 In other words, $K$ increases as the ratio of the standard deviation of the permanent shock to that of the transitory shock increases.
 
-Please see  {doc}`first look at the Kalman filter <intermediate:kalman>`.
+Please see  {doc}`first look at the Kalman filter <kalman>`.
 
 Applying formulas {eq}`sprob16abcd` implies
 

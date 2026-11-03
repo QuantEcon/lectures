@@ -85,7 +85,7 @@ We use the different behaviors of our  consumers as a way to learn about
   model
 - how the Kalman filter introduced in [this lecture](https://python-intro.quantecon.org/kalman.html)
   and/or another representation of the  theory of optimal
-  forecasting introduced in {doc}`this lecture <advanced:classical_filtering>`
+  forecasting introduced in {doc}`this lecture <classical_filtering>`
   embody lessons
   that can be applied to the **news** and **noise** literature
 - ways of representing and computing optimal decision rules in
@@ -96,7 +96,7 @@ We use the different behaviors of our  consumers as a way to learn about
   payments used to service the risk-free government bonds that are issued to finance
   the tax cut
 - a simple application of alternative ways to factor a covariance
-  generating function along lines described in {doc}`this lecture <advanced:classical_filtering>`
+  generating function along lines described in {doc}`this lecture <classical_filtering>`
 
 This lecture can be regarded as an introduction to   **invertibility** issues that take center stage in
 the analysis of **fiscal foresight** by Eric Leeper, Todd Walker, and Susan Yang {cite}`Leeper_Walker_Yang`, as well
@@ -192,7 +192,7 @@ $$
 Let $g_j \equiv E z_t z_{t-j}$ be the $j$th autocovariance
 of the $\{y_t - y_{t-1}\}$ process.
 
-Using calculations in the {doc}`quantecon lecture <advanced:classical_filtering>`, where
+Using calculations in the {doc}`quantecon lecture <classical_filtering>`, where
 $z \in C$ is a complex variable, the **covariance generating
 function** $g (z) =
 \sum_{j=-\infty}^\infty g_j z^j$
@@ -262,7 +262,7 @@ $K = \beta^2, \sigma_a^2 = \beta^{-2} \sigma_\epsilon^2 = \beta^{-2},$
 and $\Sigma = (1-\beta^2) \sigma_\epsilon^2$.
 
 Alternatively, we can  obtain these formulas via the classical filtering theory
-described in {doc}`this lecture <advanced:classical_filtering>`.
+described in {doc}`this lecture <classical_filtering>`.
 
 ## News shocks and less informative shocks
 
@@ -871,7 +871,7 @@ computed earlier.
 
 ## Another invertibility issue
 
-This {doc}`quantecon lecture <advanced:hs_invertibility_example>` contains another example of a shock-invertibility issue that is endemic
+This {doc}`quantecon lecture <hs_invertibility_example>` contains another example of a shock-invertibility issue that is endemic
 to the LQ permanent income or consumption smoothing model.
 
 The technical issue discussed there is ultimately the source of the shock-invertibility issues discussed by

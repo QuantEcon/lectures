@@ -31,7 +31,7 @@ from scipy.linalg import schur
 This is a sequel to this lecture {doc}`linear quadratic dynamic programming <lqcontrol>`
 
 It can also be regarded as presenting **invariant subspace** techniques that extend ones that 
-we encountered earlier in this lecture {doc}`stability in linear rational expectations models<intermediate:re_with_feedback>`
+we encountered earlier in this lecture {doc}`stability in linear rational expectations models<re_with_feedback>`
 
 We present a Lagrangian formulation of an infinite horizon linear quadratic undiscounted dynamic programming problem.
 
