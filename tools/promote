@@ -657,21 +657,37 @@ def resolve_sources(plan: Plan, considered, consumers, canonical_map, recorded=N
     eligible = [s for s in considered if s in digests and s not in consumers]
     if not eligible:
         held = [s for s in considered if s in digests]
+        # A copy this run leaves out is named, so a refusal never hides the
+        # lecture's home behind --exclude.
+        left_out = [
+            s for s in order
+            if s not in considered and s not in consumers
+            and (mirror_lectures(s) / rel).is_file()
+        ]
+        also = ""
+        if left_out:
+            also = f"; {', '.join(left_out)}, excluded from this run, " + (
+                "holds a copy" if len(left_out) == 1 else "hold copies"
+            )
+        # A pool lecture comes first: its home series dropping it is the
+        # news, whichever consumer still republishes a copy.
+        if recorded:
+            raise PromoteError(
+                f"{rel} is in the pool, but no canonical-eligible series this "
+                "run considers holds it any more (removed or renamed upstream?)"
+                + (f"; only consumer series ({', '.join(held)}) still do" if held else "")
+                + also
+                + " — decide whether the lecture was retired, renamed or moved; "
+                "the drift-check reports it as canonical-removed"
+            )
         if held:
             raise PromoteError(
                 f"{rel} is held only by consumer series ({', '.join(held)}) — "
-                "a consumer contributes no lecture to the pool"
-            )
-        if recorded:
-            raise PromoteError(
-                f"{rel} is in the pool, but no series this run considers holds "
-                "it any more (removed or renamed upstream?) — decide whether "
-                "the lecture was retired, renamed or moved; the drift-check "
-                "reports it as canonical-removed"
+                "a consumer contributes no lecture to the pool" + also
             )
         raise PromoteError(
             f"{rel} not found in any non-excluded series "
-            f"(searched: {', '.join(considered)})"
+            f"(searched: {', '.join(considered)})" + also
         )
     requested = plan.requested if plan.requested not in consumers else None
     if requested is not None and requested not in digests:

@@ -120,6 +120,27 @@ def test_canonical_map_rejects_unknown_and_consumer_series(make_repo):
     assert "unknown series 'nonesuch'" in res.stderr
 
 
+def test_a_canonical_map_of_comments_only_is_an_empty_map(make_repo):
+    # sync/canonical.yml keeps its header when its last entry goes. PyYAML reads
+    # that as no document (None), which promote's load_yaml() turns into an
+    # empty map: one that settles nothing.
+    repo = make_repo(["intro", "intermediate"])
+    (repo.root / "sync" / "canonical.yml").write_text(
+        "# sync/canonical.yml — HUMAN INTENT\n#\n# Every entry has been retired.\n", encoding="utf-8"
+    )
+    repo.lecture("intro", "shared", lecture_text("Shared"))
+    repo.lecture("intro", "lake_model", lecture_text("Lake (intro)"))
+    repo.lecture("intermediate", "lake_model", lecture_text("Lake (intermediate)"))
+
+    res = repo.promote("shared")
+    assert res.returncode == 0, res.stderr
+    assert repo.entry("shared")["canonical"] == "intro"
+
+    res = repo.promote("lake_model")
+    assert res.returncode == 1
+    assert "[lake_model] FAILED: lake_model.md differs across series" in res.stderr
+
+
 def test_canonical_map_entry_that_settles_nothing_warns(make_repo):
     repo = make_repo(["intro", "intermediate"])
     text = lecture_text("Shared")
