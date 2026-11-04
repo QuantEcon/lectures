@@ -64,3 +64,45 @@ def test_a_pooled_name_another_site_starts_publishing_differently_is_drift(make_
 
     assert res.returncode == 1, res.stdout
     assert "[name-shared] lectures/lqcontrol.md: programming and intermediate both publish" in res.stdout
+
+
+def test_only_the_sites_that_list_a_name_are_compared(make_repo):
+    # intermediate, canonical for lqcontrol, stops listing it; advanced, a
+    # recorded source, still does, and programming starts to with another text.
+    repo = make_repo(["programming", "intermediate", "advanced"])
+    text = lecture_text("LQ Control")
+    repo.lecture("intermediate", "lqcontrol", text)
+    repo.lecture("advanced", "lqcontrol", text)
+    assert repo.promote("lqcontrol").returncode == 0
+    assert repo.entry("lqcontrol")["canonical"] == "intermediate"
+    repo.toc("intermediate", ["kalman"])
+    repo.toc("advanced", ["lqcontrol"])
+    repo.lecture("programming", "lqcontrol", lecture_text("LQ Control, an introduction"))
+    repo.toc("programming", ["lqcontrol"])
+
+    res = repo.drift_check()
+
+    assert res.returncode == 1, res.stdout
+    assert "[name-shared] lectures/lqcontrol.md: programming and advanced both publish" in res.stdout
+    assert res.stdout.count("[name-shared]") == 1
+
+
+def test_sites_that_agree_are_clean_though_the_pooled_copy_is_unlisted(make_repo):
+    # The pool's copy came from intermediate, which stopped listing the name,
+    # and the two sites that list it publish one text: no clash between sites.
+    # promote refuses those copies when their series is promoted.
+    repo = make_repo(["programming", "intermediate", "advanced"])
+    repo.lecture("intermediate", "lqcontrol", lecture_text("LQ Control"))
+    assert repo.promote("lqcontrol").returncode == 0
+    repo.toc("intermediate", ["kalman"])
+    rewritten = lecture_text("LQ Control", "Rewritten.")
+    for series in ("programming", "advanced"):
+        repo.lecture(series, "lqcontrol", rewritten)
+        repo.toc(series, ["lqcontrol"])
+
+    res = repo.drift_check()
+    assert res.returncode == 0, res.stdout
+
+    res = repo.promote("--toc", "programming")
+    assert res.returncode == 1
+    assert "[lqcontrol] FAILED" in res.stderr

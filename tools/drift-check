@@ -85,6 +85,7 @@ import os
 import shutil
 import subprocess
 import sys
+import traceback
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -629,8 +630,10 @@ def check_toc_promoted(series: str, ledger_lectures: dict, findings: list):
 def check_names(manifest: dict, consumers: set, ledger_lectures: dict, findings: list):
     """Names unique across the published sites: a lecture name two
     canonical-eligible series list in their tocs is one lecture in both, by
-    promotion's rule (``same_lecture``). Product pages are each series' own.
-    A series the name's ledger entry already records is ``check_lecture``'s."""
+    promotion's rule (``same_lecture``). Only the series that list the name
+    are compared: a canonical series that stopped listing it publishes no
+    copy. Product pages are each series' own. A series the name's ledger
+    entry already records is ``check_lecture``'s."""
     listed = {}
     for series in manifest:
         root = mirror_lectures(series)
@@ -645,10 +648,14 @@ def check_names(manifest: dict, consumers: set, ledger_lectures: dict, findings:
         key = f"lectures/{slug}.md"
         entry = ledger_lectures.get(key) or {}
         recorded = {s.get("series") for s in (entry.get("sources") or []) + (entry.get("divergent") or [])}
-        base = entry.get("canonical") or holders[0]
+        # The copy the others are compared with: the canonical one when its
+        # series lists the name, else one the ledger records, else the first.
+        canonical = entry.get("canonical")
+        if canonical in holders:
+            base = canonical
+        else:
+            base = next((s for s in holders if s in recorded), holders[0])
         base_bytes = read_bytes(mirror_lectures(base) / f"{slug}.md")
-        if base_bytes is None:
-            continue  # the canonical copy is gone: check_lecture reports it
         for series in holders:
             if series == base or series in recorded:
                 continue
@@ -866,7 +873,7 @@ def build_parser():
     return p
 
 
-def main(argv=None):
+def run(argv=None):
     args = build_parser().parse_args(argv)
 
     ledger = load_yaml(LEDGER_PATH)
@@ -959,6 +966,15 @@ def main(argv=None):
 
     except DriftError as exc:
         sys.stderr.write(f"error: {exc}\n")
+        return 2
+
+
+def main(argv=None):
+    try:
+        return run(argv)
+    except Exception as exc:  # anything unforeseen must fail loudly, never read as findings
+        traceback.print_exc()
+        sys.stderr.write(f"drift-check: internal error: {type(exc).__name__}: {exc}\n")
         return 2
 
 

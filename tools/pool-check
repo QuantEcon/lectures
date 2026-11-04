@@ -46,6 +46,7 @@ from __future__ import annotations
 import argparse
 import posixpath
 import sys
+import traceback
 from collections import defaultdict
 from pathlib import Path
 
@@ -71,7 +72,10 @@ def promote_module():
     loader = SourceFileLoader("qe_promote", str(PROMOTE_PATH))
     spec = importlib.util.spec_from_loader(loader.name, loader)
     module = importlib.util.module_from_spec(spec)
-    loader.exec_module(module)
+    try:
+        loader.exec_module(module)
+    except SystemExit as exc:  # promote exits when it cannot start (PyYAML missing)
+        raise PoolCheckError(f"tools/promote could not be loaded: it exited with status {exc.code}")
     return module
 
 
@@ -159,11 +163,15 @@ def main(argv=None):
         promote = promote_module()
         lectures, problems = check_layout(POOL_DIR, promote.BIB_BASENAME)
         problems += check_references(POOL_DIR, lectures, promote)
+        static = POOL_DIR / "_static"
+        n_files = sum(1 for p in static.rglob("*") if p.is_file()) if static.is_dir() else 0
     except PoolCheckError as exc:
         sys.stderr.write(f"error: {exc}\n")
         return 2
-    static = POOL_DIR / "_static"
-    n_files = sum(1 for p in static.rglob("*") if p.is_file()) if static.is_dir() else 0
+    except Exception as exc:  # anything unforeseen is an error, never a broken rule
+        traceback.print_exc()
+        sys.stderr.write(f"pool-check: internal error: {type(exc).__name__}: {exc}\n")
+        return 2
     print(f"pool-check — {len(lectures)} lectures, {n_files} files under _static/")
     if not problems:
         print("clean: the pool keeps its conventions.")
