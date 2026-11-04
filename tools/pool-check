@@ -1,0 +1,186 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.9"
+# dependencies = ["pyyaml"]
+# ///
+"""tools/pool-check — check that the pool keeps its layout conventions.
+
+The pool, ``lectures/``, is flat: a lecture's file name is its slug and its
+stable address, and its assets live under ``_static/`` by the conventions in
+PLAN.md (M2, *Pool ``_static`` conventions*). ``tools/promote`` writes the pool
+that way. This check keeps it so, whoever edits it next. Each rule it breaks
+is reported under a tag:
+
+* ``top-level``     — ``lectures/`` holds lectures (``<slug>.md``) and
+  ``_static/``, nothing else.
+* ``underscore``    — no lecture's name starts with ``_``. The prefix is kept
+  for names that are not lectures, such as ``_static/_shared/``.
+* ``case``          — no two lectures' names differ only in case: a
+  case-insensitive file system or address cannot tell them apart.
+* ``static-entry``  — every entry at the top of ``_static/`` is a lecture's
+  own folder (``_static/<slug>/`` beside ``<slug>.md``), ``_shared/`` or the
+  merged bibliography, ``quant-econ.bib``.
+* ``asset-owner``   — a file under ``_static/<slug>/`` is used by
+  ``<slug>.md`` alone. An asset a second lecture uses belongs in
+  ``_static/_shared/``.
+* ``root-relative`` — asset references are file-relative
+  (``_static/<slug>/fig.png``, never ``/_static/...``), so a lecture
+  resolves under any project root.
+* ``escapes``       — no reference leaves ``lectures/``.
+
+References are found by ``tools/promote``'s own parser, imported for the
+purpose, so the two tools agree on what a lecture refers to. Names unique
+across the published sites needs the mirror, so it is the drift-check's
+(``name-shared``).
+
+Usage
+-----
+    tools/pool-check        # check lectures/
+
+Exit status: 0 clean, 1 a rule broken, 2 an error. It reads ``lectures/``
+only and writes nothing.
+"""
+
+from __future__ import annotations
+
+import argparse
+import posixpath
+import sys
+import traceback
+from collections import defaultdict
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+POOL_DIR = ROOT / "lectures"
+PROMOTE_PATH = Path(__file__).resolve().parent / "promote"
+
+SHARED_DIR = "_shared"
+# The kinds promote's parser finds by pattern alone (markdown links, quoted
+# strings in code cells): only one whose target exists refers to a file.
+HEURISTIC_KINDS = ("link", "code-str")
+
+
+class PoolCheckError(Exception):
+    pass
+
+
+def promote_module():
+    """``tools/promote`` imported as a module, for its reference parser."""
+    import importlib.util
+    from importlib.machinery import SourceFileLoader
+
+    loader = SourceFileLoader("qe_promote", str(PROMOTE_PATH))
+    spec = importlib.util.spec_from_loader(loader.name, loader)
+    module = importlib.util.module_from_spec(spec)
+    try:
+        loader.exec_module(module)
+    except SystemExit as exc:  # promote exits when it cannot start (PyYAML missing)
+        raise PoolCheckError(f"tools/promote could not be loaded: it exited with status {exc.code}")
+    return module
+
+
+def check_layout(pool: Path, bib_name: str):
+    """The pool's lectures, and every layout rule they break as ``(tag, message)``."""
+    problems, lectures = [], []
+    for p in sorted(pool.iterdir()):
+        if p.is_file() and p.suffix == ".md":
+            lectures.append(p.stem)
+        elif not (p.is_dir() and p.name == "_static"):
+            shown = f"lectures/{p.name}" + ("/" if p.is_dir() else "")
+            problems.append(("top-level", f"{shown} is neither a lecture (<slug>.md) nor _static/: the pool is flat"))
+    for slug in lectures:
+        if slug.startswith("_"):
+            problems.append((
+                "underscore",
+                f"lectures/{slug}.md: a lecture's name may not start with `_`, which is kept for names that are "
+                "not lectures (_static/_shared/)",
+            ))
+    folded = defaultdict(list)
+    for slug in lectures:
+        folded[slug.casefold()].append(slug)
+    for names in folded.values():
+        if len(names) > 1:
+            shown = " and ".join(f"lectures/{n}.md" for n in names)
+            problems.append(("case", f"{shown} differ only in case, which a case-insensitive file system or address cannot tell apart"))
+    static = pool / "_static"
+    if static.is_dir():
+        owned = set(lectures)
+        for p in sorted(static.iterdir()):
+            if p.is_dir() and (p.name == SHARED_DIR or p.name in owned):
+                continue
+            if p.is_file() and p.name == bib_name:
+                continue
+            if p.is_dir():
+                message = (f"lectures/_static/{p.name}/ is no lecture's folder: there is no lectures/{p.name}.md, "
+                           f"and only {SHARED_DIR}/ holds files lectures share")
+            else:
+                message = (f"lectures/_static/{p.name} is a loose file: a file in _static/ goes in its lecture's "
+                           f"folder or in {SHARED_DIR}/ ({bib_name} aside)")
+            problems.append(("static-entry", message))
+    return lectures, problems
+
+
+def check_references(pool: Path, lectures, promote):
+    """Every reference rule a pool lecture breaks, as ``(tag, message)``."""
+    problems = []
+    for slug in lectures:
+        where = f"lectures/{slug}.md"
+        try:
+            text = (pool / f"{slug}.md").read_bytes().decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise PoolCheckError(f"{where} is not UTF-8 text: {exc}")
+        for kind, written in promote.extract_refs(text):
+            if kind == "url":
+                continue  # a published address, not a file in the pool
+            literal = written.split("#", 1)[0]
+            if not literal or promote.SCHEME_RE.match(literal):
+                continue
+            if kind == "link" and literal.endswith(".md"):
+                continue  # a link to another lecture
+            rel = posixpath.normpath(literal[1:] if literal.startswith("/") else literal)
+            if kind in HEURISTIC_KINDS and not (pool / rel).is_file():
+                continue
+            if rel == ".." or rel.startswith("../"):
+                problems.append(("escapes", f"{where} refers to {written}, outside lectures/"))
+                continue
+            if literal.startswith("/"):
+                problems.append(("root-relative", f"{where} refers to {written}: write it file-relative, as {rel}"))
+            parts = rel.split("/")
+            if len(parts) > 2 and parts[0] == "_static" and parts[1] not in (SHARED_DIR, slug):
+                problems.append((
+                    "asset-owner",
+                    f"{where} uses {rel}, which belongs to lectures/{parts[1]}.md: an asset two lectures use goes "
+                    f"in _static/{SHARED_DIR}/",
+                ))
+    return problems
+
+
+def main(argv=None):
+    argparse.ArgumentParser(prog="tools/pool-check", description=__doc__.split("\n\n")[0]).parse_args(argv)
+    try:
+        if not POOL_DIR.is_dir():
+            raise PoolCheckError(f"{POOL_DIR} does not exist")
+        promote = promote_module()
+        lectures, problems = check_layout(POOL_DIR, promote.BIB_BASENAME)
+        problems += check_references(POOL_DIR, lectures, promote)
+        static = POOL_DIR / "_static"
+        n_files = sum(1 for p in static.rglob("*") if p.is_file()) if static.is_dir() else 0
+    except PoolCheckError as exc:
+        sys.stderr.write(f"error: {exc}\n")
+        return 2
+    except Exception as exc:  # anything unforeseen is an error, never a broken rule
+        traceback.print_exc()
+        sys.stderr.write(f"pool-check: internal error: {type(exc).__name__}: {exc}\n")
+        return 2
+    print(f"pool-check — {len(lectures)} lectures, {n_files} files under _static/")
+    if not problems:
+        print("clean: the pool keeps its conventions.")
+        return 0
+    for tag, message in problems:
+        print(f"  [{tag}] {message}")
+    print(f"{len(problems)} problem(s).")
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

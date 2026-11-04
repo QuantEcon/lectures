@@ -116,7 +116,7 @@ jobs:
           fi
           rc=$?
           set -e
-          echo "drift-check exit status: $rc (0 clean, 1 findings handled below, 2 violation)"
+          echo "drift-check exit status: $rc (0 clean, 1 findings handled below, 2 a violation or an error)"
           test "$rc" -le 1
 
       - name: Keep the report
