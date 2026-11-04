@@ -166,7 +166,7 @@ lectures/career.md:
     path: career.md
     digest: f76621615f2331f0cfb38ee10d80f667f805b9fd5b4e7b73a75cd216889f16c2
   promoted_at:
-    intermediate: 17192485bf8f2fdb823e76d9115e260ca53585ee
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
     dp: da83d88d8de7ab04a4c722bdbd0ce6e2c8333c7c
   assets:
   - _static/_shared/_admonition/gpu.md
@@ -238,7 +238,7 @@ lectures/cross_product_trick.md:
     path: cross_product_trick.md
     digest: ff84e07d006be53be60cbdda4902e655c8503db44be80b9fc728f1147054663d
   promoted_at:
-    intermediate: 17192485bf8f2fdb823e76d9115e260ca53585ee
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
     dp: da83d88d8de7ab04a4c722bdbd0ce6e2c8333c7c
   assets: []
   rewrites: []
@@ -289,7 +289,7 @@ lectures/ifp_advanced.md:
     path: ifp_advanced.md
     digest: 609edbee0503f199f0bfddd5cae27dfe602bedcce8a57ac1e397dc42009f5a4d
   promoted_at:
-    intermediate: 17192485bf8f2fdb823e76d9115e260ca53585ee
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
     dp: da83d88d8de7ab04a4c722bdbd0ce6e2c8333c7c
   assets:
   - _static/_shared/_admonition/gpu.md
@@ -307,7 +307,7 @@ lectures/ifp_discrete.md:
     path: ifp_discrete.md
     digest: f682b80bc0b0d2d57e6b803ed078c5b8f118e780b4e897fa5aac30b8448c9da6
   promoted_at:
-    intermediate: 17192485bf8f2fdb823e76d9115e260ca53585ee
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
     dp: da83d88d8de7ab04a4c722bdbd0ce6e2c8333c7c
   assets:
   - _static/_shared/_admonition/gpu.md
@@ -325,7 +325,7 @@ lectures/ifp_egm.md:
     path: ifp_egm.md
     digest: 55caf3340fb40ef5299d7fc440985172ec94e9c495552ab50c74b38a8dbf9f11
   promoted_at:
-    intermediate: 17192485bf8f2fdb823e76d9115e260ca53585ee
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
     dp: da83d88d8de7ab04a4c722bdbd0ce6e2c8333c7c
   assets:
   - _static/_shared/_admonition/gpu.md
@@ -343,7 +343,7 @@ lectures/ifp_egm_transient_shocks.md:
     path: ifp_egm_transient_shocks.md
     digest: a8df3aa52e6e2a9eeb123da30c6af849def7a425a43f38d73e7bd7fe50a118d8
   promoted_at:
-    intermediate: 17192485bf8f2fdb823e76d9115e260ca53585ee
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
     dp: da83d88d8de7ab04a4c722bdbd0ce6e2c8333c7c
   assets:
   - _static/_shared/_admonition/gpu.md
@@ -361,7 +361,7 @@ lectures/ifp_opi.md:
     path: ifp_opi.md
     digest: 6d065237901c8cc4b37e13396d66467c5f76a576a17e20b3a4e281d133e18925
   promoted_at:
-    intermediate: 17192485bf8f2fdb823e76d9115e260ca53585ee
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
     dp: da83d88d8de7ab04a4c722bdbd0ce6e2c8333c7c
   assets:
   - _static/_shared/_admonition/gpu.md
@@ -375,7 +375,7 @@ lectures/information_market_equilibrium.md:
     path: information_market_equilibrium.md
     digest: d84a542f8ba1c2902f16b42073bd24fc24e2d24b5d44e2f6d99bbaef254cb080
   promoted_at:
-    intermediate: 1ba3a42af594a159de8e5d7538b9addc06f67138
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
   assets: []
   rewrites: []
 lectures/inventory_q.md:
@@ -389,7 +389,7 @@ lectures/inventory_q.md:
     path: inventory_q.md
     digest: a4a1789b0aebba6692f25c9483f68b1de809f6734b5a416f5a037c98ee75e4fb
   promoted_at:
-    intermediate: 17192485bf8f2fdb823e76d9115e260ca53585ee
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
     dp: da83d88d8de7ab04a4c722bdbd0ce6e2c8333c7c
   assets: []
   rewrites: []
@@ -404,7 +404,7 @@ lectures/jv.md:
     path: jv.md
     digest: 251f24c59118ea6220df9e31ae07119f92f6fda2df3ce85c573e7e1361a8b858
   promoted_at:
-    intermediate: 17192485bf8f2fdb823e76d9115e260ca53585ee
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
     dp: da83d88d8de7ab04a4c722bdbd0ce6e2c8333c7c
   assets:
   - _static/_shared/_admonition/gpu.md
@@ -422,7 +422,7 @@ lectures/lagrangian_lqdp.md:
     path: lagrangian_lqdp.md
     digest: 47517fbe0a5eec1d5e288af19743dbcaeb28755c86cf9bfe158ec5ed31f26f01
   promoted_at:
-    intermediate: 17192485bf8f2fdb823e76d9115e260ca53585ee
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
     dp: da83d88d8de7ab04a4c722bdbd0ce6e2c8333c7c
   assets: []
   rewrites: []
@@ -437,7 +437,7 @@ lectures/lq_inventories.md:
     path: lq_inventories.md
     digest: 63cd01cf845cc3b5b4c28e863f587cf16d8a7f7b45e18950c9e8c90e5779bded
   promoted_at:
-    intermediate: 17192485bf8f2fdb823e76d9115e260ca53585ee
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
     dp: da83d88d8de7ab04a4c722bdbd0ce6e2c8333c7c
   assets: []
   rewrites: []
@@ -452,7 +452,7 @@ lectures/lqcontrol.md:
     path: lqcontrol.md
     digest: d19f4ae70585f9fc122e755537a54fb280dfc9f87a5443a06958ef63cf469a42
   promoted_at:
-    intermediate: 17192485bf8f2fdb823e76d9115e260ca53585ee
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
     dp: da83d88d8de7ab04a4c722bdbd0ce6e2c8333c7c
   assets:
   - _static/lqcontrol/solution_lqc_ex1.png
@@ -515,7 +515,7 @@ lectures/mccall_fitted_vfi.md:
     path: mccall_fitted_vfi.md
     digest: e3de90c73a8770896c1a35fe0bfc8f2e98f2e05828d26180617715277f5bbd08
   promoted_at:
-    intermediate: 17192485bf8f2fdb823e76d9115e260ca53585ee
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
     dp: da83d88d8de7ab04a4c722bdbd0ce6e2c8333c7c
   assets:
   - _static/_shared/_admonition/gpu.md
@@ -533,7 +533,7 @@ lectures/mccall_model.md:
     path: mccall_model.md
     digest: 513e33f31e047312131de0983a3e06a500b5768b2f5900fcbad799651c5f9fb7
   promoted_at:
-    intermediate: 17192485bf8f2fdb823e76d9115e260ca53585ee
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
     dp: da83d88d8de7ab04a4c722bdbd0ce6e2c8333c7c
   assets:
   - _static/_shared/_admonition/gpu.md
@@ -551,7 +551,7 @@ lectures/mccall_model_with_sep_markov.md:
     path: mccall_model_with_sep_markov.md
     digest: 34f5ae674492de541b78cf586daf88851d6ed231c56b64ffa05a28377189a6c9
   promoted_at:
-    intermediate: 17192485bf8f2fdb823e76d9115e260ca53585ee
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
     dp: da83d88d8de7ab04a4c722bdbd0ce6e2c8333c7c
   assets:
   - _static/_shared/_admonition/gpu.md
@@ -569,7 +569,7 @@ lectures/mccall_model_with_separation.md:
     path: mccall_model_with_separation.md
     digest: a7e57bf7d78a21e31acfb138b2536e244a9bfebd5bc512fea0f87ca45ac1094a
   promoted_at:
-    intermediate: 17192485bf8f2fdb823e76d9115e260ca53585ee
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
     dp: da83d88d8de7ab04a4c722bdbd0ce6e2c8333c7c
   assets:
   - _static/_shared/_admonition/gpu.md
@@ -587,7 +587,7 @@ lectures/mccall_persist_trans.md:
     path: mccall_persist_trans.md
     digest: 01aaa2b9476da6e045a19ebd785245acb3f77bb8c26c9163c16d21a612164ba3
   promoted_at:
-    intermediate: 17192485bf8f2fdb823e76d9115e260ca53585ee
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
     dp: da83d88d8de7ab04a4c722bdbd0ce6e2c8333c7c
   assets:
   - _static/_shared/_admonition/gpu.md
@@ -605,7 +605,7 @@ lectures/mccall_q.md:
     path: mccall_q.md
     digest: 1ba2a8c13e77dd343d3d63b77d9cde1f0277f76ba6305d9d08d03d4746338b47
   promoted_at:
-    intermediate: 17192485bf8f2fdb823e76d9115e260ca53585ee
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
     dp: da83d88d8de7ab04a4c722bdbd0ce6e2c8333c7c
   assets: []
   rewrites: []
@@ -645,7 +645,7 @@ lectures/odu.md:
     path: odu.md
     digest: e359251ed2a9c906e5956890f53f37efac4ba3237ec04a1d372f14951ea3632c
   promoted_at:
-    intermediate: 17192485bf8f2fdb823e76d9115e260ca53585ee
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
     dp: da83d88d8de7ab04a4c722bdbd0ce6e2c8333c7c
   assets: []
   rewrites: []
@@ -687,7 +687,7 @@ lectures/os.md:
     path: os.md
     digest: 5a267a10de911fabcb0155ee2a332753b0106c6fc9b8d3ae031e972d44b03e0c
   promoted_at:
-    intermediate: 17192485bf8f2fdb823e76d9115e260ca53585ee
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
     dp: da83d88d8de7ab04a4c722bdbd0ce6e2c8333c7c
   assets: []
   rewrites: []
@@ -702,7 +702,7 @@ lectures/os_egm.md:
     path: os_egm.md
     digest: ad4435c7eca7288b8216d0968a1720e9a347285e31f0d39a7df6d366a0f358f1
   promoted_at:
-    intermediate: 17192485bf8f2fdb823e76d9115e260ca53585ee
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
     dp: da83d88d8de7ab04a4c722bdbd0ce6e2c8333c7c
   assets: []
   rewrites: []
@@ -717,7 +717,7 @@ lectures/os_egm_jax.md:
     path: os_egm_jax.md
     digest: 06b6e18a3296e978b978503ca8e1c809ec0386f33e8878d3e3e699f5139db0c8
   promoted_at:
-    intermediate: 17192485bf8f2fdb823e76d9115e260ca53585ee
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
     dp: da83d88d8de7ab04a4c722bdbd0ce6e2c8333c7c
   assets:
   - _static/_shared/_admonition/gpu.md
@@ -735,7 +735,7 @@ lectures/os_numerical.md:
     path: os_numerical.md
     digest: 7037f0003d74dda30773a4425ebd724871aa052c3f4ffa8294256c49f53b6283
   promoted_at:
-    intermediate: 17192485bf8f2fdb823e76d9115e260ca53585ee
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
     dp: da83d88d8de7ab04a4c722bdbd0ce6e2c8333c7c
   assets: []
   rewrites: []
@@ -750,7 +750,7 @@ lectures/os_stochastic.md:
     path: os_stochastic.md
     digest: c4eec8485da3931391d0c7b2f42c904da4e81e50deb80045f85eb317810d3319
   promoted_at:
-    intermediate: 17192485bf8f2fdb823e76d9115e260ca53585ee
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
     dp: da83d88d8de7ab04a4c722bdbd0ce6e2c8333c7c
   assets: []
   rewrites: []
@@ -765,7 +765,7 @@ lectures/os_time_iter.md:
     path: os_time_iter.md
     digest: d27b7af1e2dd2a8c2d92f37bf2af09d7d1bd565d3b2583c02c0b11cc131058ec
   promoted_at:
-    intermediate: 17192485bf8f2fdb823e76d9115e260ca53585ee
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
     dp: da83d88d8de7ab04a4c722bdbd0ce6e2c8333c7c
   assets: []
   rewrites: []
@@ -780,7 +780,7 @@ lectures/perm_income.md:
     path: perm_income.md
     digest: 6c524d72ca25a4fd8d8a5593bae85d3018da70fee9474820b6405fbc8fe348f4
   promoted_at:
-    intermediate: 17192485bf8f2fdb823e76d9115e260ca53585ee
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
     dp: da83d88d8de7ab04a4c722bdbd0ce6e2c8333c7c
   assets: []
   rewrites: []
@@ -795,7 +795,7 @@ lectures/perm_income_cons.md:
     path: perm_income_cons.md
     digest: edfeca33dc3aaa0a04c57f2de5bf53e915d7960fd32b97f7acb0534ffd47e810
   promoted_at:
-    intermediate: 17192485bf8f2fdb823e76d9115e260ca53585ee
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
     dp: da83d88d8de7ab04a4c722bdbd0ce6e2c8333c7c
   assets: []
   rewrites: []
@@ -804,9 +804,9 @@ lectures/phillips_drifts_volatilities.md:
   sources:
   - series: intermediate
     path: phillips_drifts_volatilities.md
-    digest: fe0f8eb5238437d02a201dd2894a20941ce227f8e378e11046835e69bcc3ade5
+    digest: 6dfe8672b8a93e9eb8293cb0a3cd8de2f9867e78231b17c70c2b76e257e97c67
   promoted_at:
-    intermediate: 1ba3a42af594a159de8e5d7538b9addc06f67138
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
   assets: []
   rewrites: []
 lectures/rs_inventory_q.md:
@@ -820,7 +820,7 @@ lectures/rs_inventory_q.md:
     path: rs_inventory_q.md
     digest: 697dd978247aa755bd450db25b2ee1d8e905087b9a51811e071935fc6b9d71ed
   promoted_at:
-    intermediate: 17192485bf8f2fdb823e76d9115e260ca53585ee
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
     dp: da83d88d8de7ab04a4c722bdbd0ce6e2c8333c7c
   assets: []
   rewrites: []
