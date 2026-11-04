@@ -76,10 +76,12 @@ The repository is organised around three layers. The first two exist today.
 │   ├── promote       # promotes lectures + their asset closure into the pool; writes the ledger
 │   ├── drift-check   # proves the pool still equals its sources; issues, refresh PR
 │   ├── bib-merge     # merges the series' bibliographies into the pool's one file; checks it
-│   └── tests/        # pytest suite for promote, drift-check and bib-merge (scratch repos)
+│   ├── pool-check    # checks the pool keeps its layout conventions
+│   └── tests/        # pytest suite for promote, drift-check, bib-merge and pool-check (scratch repos)
 └── .github/workflows/
     ├── sync.yml         # daily job that refreshes the pinned SHAs (pin-only)
     ├── drift-check.yml  # runs after sync: drift issues, refresh PR (pool and bibliography), red on a pool edit or a refused refresh
+    ├── pool-check.yml   # runs tools/pool-check on pull requests that touch the pool
     └── tests.yml        # runs tools/tests on pull requests
 ```
 
@@ -121,14 +123,20 @@ A series' pin (and its timestamp) is only rewritten when the upstream `HEAD` has
 | Command | What it does |
 | --- | --- |
 | `tools/drift-check` | Report against the existing `mirror/`. Exit 0 clean, 1 findings, 2 a pool file was edited directly. |
-| `tools/drift-check --reconstruct` | Rebuild `mirror/` first, for every series the check reads, a watched toc's series included. |
+| `tools/drift-check --reconstruct` | Rebuild `mirror/` first, for every series the check reads: every canonical-eligible series, and a consumer whose toc is watched. |
 | `tools/drift-check --print-issues` | Show the issues `--issues` would open, without touching GitHub. |
 | `tools/drift-check --issues` | Open, update and close `drift` issues to match the findings (CI). |
 | `tools/drift-check --accept-toc dp` | Record a series' `_toc.yml` at its current pin as the watched baseline. |
 
-Four outcomes: **refresh** (the canonical copy moved upstream; CI runs `promote --refresh --exclude $PROMOTE_EXCLUDE` and opens a pull request; an entry the refresh refuses is listed with promote's reason, in that pull request when one is opened and always in the red run's refresh step; the usual reason is a same-name copy edited to differ, which `sync/canonical.yml` or upstream settles; while the entry's canonical copy differs from its ledger record the run stays red every night until it is settled, and a settlement applies the next night), **drift** (a non-canonical copy diverged from its canonical home, a copy was removed, or a watched toc changed; each becomes an issue that closes itself when the finding clears), **violation** (the pool itself was edited; the job goes red), and **info** (a copy is merely stale, or a divergence converged). [`drift-check.yml`](.github/workflows/drift-check.yml) runs it after every `sync`.
+Four outcomes: **refresh** (the canonical copy moved upstream; CI runs `promote --refresh --exclude $PROMOTE_EXCLUDE` and opens a pull request; an entry the refresh refuses is listed with promote's reason, in that pull request when one is opened and always in the red run's refresh step; the usual reason is a same-name copy edited to differ, which `sync/canonical.yml` or upstream settles; while the entry's canonical copy differs from its ledger record the run stays red every night until it is settled, and a settlement applies the next night), **drift** (a non-canonical copy diverged from its canonical home, a copy was removed, a watched toc changed or lists a lecture the pool does not hold, or two published sites hold different lectures under one name; each becomes an issue that closes itself when the finding clears), **violation** (the pool itself was edited; the job goes red), and **info** (a copy is merely stale, or a divergence converged). [`drift-check.yml`](.github/workflows/drift-check.yml) runs it after every `sync`.
 
-One kind of copy is never watched. A **consumer** series (`class: consumer` in `sync/manifest.yml`, today `dp`) only republishes other series' lectures, so its copies are recorded as `superseded` and are expected to go stale. Its `_toc.yml` is watched, though: the pool's `dp` selection is promoted from it, so a change there means re-running that promotion with the refresh's exclusions (`PROMOTE_EXCLUDE` in [`drift-check.yml`](.github/workflows/drift-check.yml); today `tools/promote --toc dp --exclude jax`), then `--accept-toc dp`. Accepting alone clears the issue but leaves a newly listed lecture out of the pool.
+One kind of copy is never watched. A **consumer** series (`class: consumer` in `sync/manifest.yml`, today `dp`) only republishes other series' lectures, so its copies are recorded as `superseded` and are expected to go stale. Its `_toc.yml` is watched, though: the pool's `dp` selection is promoted from it, so a change there means re-running that promotion with the refresh's exclusions (`PROMOTE_EXCLUDE` in [`drift-check.yml`](.github/workflows/drift-check.yml); today `tools/promote --toc dp --exclude jax`), then `--accept-toc dp`. Accepting alone clears that issue but leaves a newly listed lecture out of the pool, which the check then reports as `toc-unpromoted`.
+
+Lecture names are unique across the published sites, not only in the pool: a link that leaves a product resolves by name, so two sites that publish different lectures under one name send readers to the wrong one. The check reads every canonical-eligible series' `_toc.yml`, whether its lectures are in the pool yet or not, and a name two of them list must be one lecture in both, by promote's rule (`name-shared`). A consumer's toc is not read for this: it only republishes.
+
+## Checking the pool's layout
+
+[`tools/pool-check`](tools/pool-check) checks that the pool keeps the layout `tools/promote` writes, whoever edits it next. `lectures/` holds lectures (`<slug>.md`, no name starting with `_`, no two names that differ only in case) and `_static/`. Every folder at the top of `_static/` is a lecture's own (`_static/<slug>/`, beside `<slug>.md`) or `_shared/`, and the merged bibliography is the one file there. A file in `_static/<slug>/` is used by `<slug>.md` alone, so an asset two lectures use goes in `_shared/`. Every asset reference is file-relative (`_static/<slug>/fig.png`, never `/_static/...`) and stays inside `lectures/`. It finds references with promote's own parser, reads `lectures/` only, and needs no mirror. Exit 0 clean, 1 a rule broken, 2 an error. [`pool-check.yml`](.github/workflows/pool-check.yml) runs it on every pull request that touches the pool.
 
 ## Running the bibliography merge
 

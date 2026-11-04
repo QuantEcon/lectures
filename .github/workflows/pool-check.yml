@@ -1,0 +1,39 @@
+name: pool-check
+
+# Check that the pool keeps its layout conventions (tools/pool-check): a flat
+# lectures/ of <slug>.md files and _static/; every folder in _static/ a
+# lecture's own or _shared/; every asset reference file-relative, inside the
+# pool, and used only by the lecture whose folder holds it. It reads
+# lectures/ only, so it needs no mirror and no network.
+#
+# Names unique across the published sites needs the mirror, so the
+# drift-check runs that check (drift-check.yml).
+#
+# Pull requests and manual runs only, like tests.yml: a push to a branch
+# triggers nothing. tools/promote is listed because the check finds
+# references with promote's parser.
+
+on:
+  pull_request:
+    paths:
+      - 'lectures/**'
+      - 'tools/pool-check'
+      - 'tools/promote'
+      - '.github/workflows/pool-check.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Check the pool's conventions
+        run: uv run --script tools/pool-check

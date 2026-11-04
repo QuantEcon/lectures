@@ -167,6 +167,30 @@ def test_drift_check_watches_a_consumers_accepted_toc(make_repo):
     assert res.returncode == 0, res.stdout
 
 
+def test_an_accepted_toc_listing_a_lecture_the_pool_lacks_is_drift(make_repo):
+    # Accepting a toc clears toc-changed whether or not the pool followed it.
+    repo = make_repo(["intermediate", "dp"], consumers=["dp"])
+    repo.lecture("intermediate", "career", lecture_text("Career"))
+    repo.lecture("intermediate", "mccall_model", lecture_text("Job Search"))
+    repo.toc("dp", ["career"])
+    assert repo.promote("--toc", "dp").returncode == 0
+    assert repo.drift_check("--accept-toc", "dp").returncode == 0
+
+    repo.toc("dp", ["career", "mccall_model"])
+    assert repo.drift_check("--accept-toc", "dp").returncode == 0  # re-accepted, never promoted
+    res = repo.drift_check("--print-issues")
+
+    assert res.returncode == 1, res.stdout
+    assert ("[toc-unpromoted] dp: the accepted lectures/_toc.yml lists 1 lecture(s) the pool does not hold: "
+            "mccall_model") in res.stdout
+    assert "### drift(dp): _toc.yml lists lectures the pool does not hold" in res.stdout
+    assert "[toc-changed]" not in res.stdout
+
+    assert repo.promote("--toc", "dp").returncode == 0
+    res = repo.drift_check()
+    assert res.returncode == 0, res.stdout
+
+
 def test_drift_check_honours_a_class_declared_after_promotion(make_repo):
     # A ledger written while dp was an ordinary series lists dp as a source;
     # declaring dp a consumer afterwards stops its copy being watched.

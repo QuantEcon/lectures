@@ -17,8 +17,10 @@ same lecture. This script compares all of that against the reconstructed
   and opens a pull request.
 * ``drift``   — a NON-canonical copy (a second series' copy of a pool lecture
   or asset, recorded as a source) no longer matches its canonical home, or a
-  copy was removed upstream, or a watched ``_toc.yml`` changed. Each becomes a
-  GitHub issue (``--issues``) that closes itself when the finding clears.
+  copy was removed upstream, or a watched ``_toc.yml`` changed or lists a
+  lecture the pool does not hold, or two published sites hold different
+  lectures under one name. Each becomes a GitHub issue (``--issues``) that
+  closes itself when the finding clears.
 * ``violation`` — the POOL itself no longer equals rewrites(canonical), or a
   pool asset changed: someone edited the pool directly, which the upstream-
   first rule forbids. Exit code 2; a red run is the alarm.
@@ -61,7 +63,16 @@ The toc watch: a series' ``_toc.yml`` is watched once it has been accepted
 (``sync/toc.yml`` records the digest and the pin it was taken at). Accept a
 series when a product manifest is generated from its toc, or when the pool's
 selection is promoted from it (``tools/promote --toc``); until then a toc
-change is upstream's business, not the pool's.
+change is upstream's business, not the pool's. Accepting a toc clears its
+``toc-changed`` finding whether or not the pool followed it, so an accepted
+toc that lists a lecture the pool does not hold is a finding of its own
+(``toc-unpromoted``).
+
+The names check: a link that leaves a product resolves by lecture name, so
+names are unique across the published sites. Every canonical-eligible series'
+``_toc.yml`` is read, whether its lectures are in the pool or not, and a name
+two of them list must be one lecture in both, by the rule above
+(``name-shared``). A consumer only republishes, so its toc is not read for it.
 """
 
 from __future__ import annotations
@@ -254,10 +265,11 @@ class Finding:
 # --------------------------------------------------------------------------- #
 # The checks                                                                   #
 # --------------------------------------------------------------------------- #
-def series_in_ledger(ledger_lectures, ledger_assets, toc_state, consumers):
+def series_in_ledger(ledger_lectures, ledger_assets, toc_state, consumers, manifest):
     """Every series whose mirror the checks read. Consumer copies are never
     read, but a watched toc is, so a consumer whose toc is watched (``dp``)
-    needs its mirror too."""
+    needs its mirror too; and the names check reads every canonical-eligible
+    series' toc, in the pool or not."""
     seen = []
 
     def add(s):
@@ -276,6 +288,9 @@ def series_in_ledger(ledger_lectures, ledger_assets, toc_state, consumers):
                 add(s.get("series"))
     for s in toc_state:
         add(s)
+    for s in manifest:
+        if s not in consumers:
+            add(s)
     return seen
 
 
@@ -543,7 +558,7 @@ def fetch_baseline_toc(repo: str, sha: str):
     return fetch_at_pin(repo, sha, "lectures/_toc.yml")
 
 
-def check_tocs(toc_state: dict, manifest: dict, findings: list):
+def check_tocs(toc_state: dict, manifest: dict, ledger_lectures: dict, findings: list):
     for series, rec in toc_state.items():
         p = mirror_lectures(series) / "_toc.yml"
         cur = read_bytes(p)
@@ -556,6 +571,7 @@ def check_tocs(toc_state: dict, manifest: dict, findings: list):
             ))
             continue
         if sha256_bytes(cur) == rec.get("digest"):
+            check_toc_promoted(series, ledger_lectures, findings)
             continue
         repo = ((manifest.get(series) or {}).get("repo")) or ""
         base = fetch_baseline_toc(repo, rec.get("sha", "")) if repo and rec.get("sha") else None
@@ -575,6 +591,84 @@ def check_tocs(toc_state: dict, manifest: dict, findings: list):
             issue_title=f"drift({series}): _toc.yml changed since it was accepted",
             data={"series": series, "accepted_sha": rec.get("sha")},
         ))
+
+
+def toc_lectures(series: str):
+    """The lectures a series' ``_toc.yml`` lists, product pages aside, read by
+    ``tools/promote``'s own parser so the tools agree on what a toc lists."""
+    promote = promote_module()
+    try:
+        slugs = promote.toc_slugs(series)
+    except SystemExit as exc:  # promote's reader exits on a toc it cannot parse
+        raise DriftError(str(exc).removeprefix("error: "))
+    return [s for s in slugs if s not in promote.PRODUCT_PAGES]
+
+
+def check_toc_promoted(series: str, ledger_lectures: dict, findings: list):
+    """Every lecture an accepted toc lists is in the pool, product pages
+    aside. Read only while the toc is unchanged since it was accepted: a
+    changed toc is ``toc-changed``'s, and its remedy covers this one."""
+    missing = [s for s in toc_lectures(series) if f"lectures/{s}.md" not in ledger_lectures]
+    if not missing:
+        return
+    findings.append(Finding(
+        "drift", "toc-unpromoted", f"{series}/_toc.yml",
+        f"{series}: the accepted lectures/_toc.yml lists {len(missing)} lecture(s) the pool does not hold: "
+        + ", ".join(missing),
+        detail=(
+            f"What is generated from {series}'s toc needs every lecture it lists in the pool, and accepting the "
+            f"toc does not promote them. Run `tools/promote --toc {series}` with the refresh's exclusions "
+            f"(`PROMOTE_EXCLUDE` in `.github/workflows/drift-check.yml`). A lecture it refuses, such as one only "
+            f"a consumer series holds, needs a decision upstream."
+        ),
+        issue_title=f"drift({series}): _toc.yml lists lectures the pool does not hold",
+        data={"series": series, "missing": missing},
+    ))
+
+
+def check_names(manifest: dict, consumers: set, ledger_lectures: dict, findings: list):
+    """Names unique across the published sites: a lecture name two
+    canonical-eligible series list in their tocs is one lecture in both, by
+    promotion's rule (``same_lecture``). Product pages are each series' own.
+    A series the name's ledger entry already records is ``check_lecture``'s."""
+    listed = {}
+    for series in manifest:
+        root = mirror_lectures(series)
+        if series in consumers or not (root / "_toc.yml").is_file():
+            continue
+        for slug in toc_lectures(series):
+            if (root / f"{slug}.md").is_file():
+                listed.setdefault(slug, []).append(series)
+    for slug, holders in sorted(listed.items()):
+        if len(holders) < 2:
+            continue
+        key = f"lectures/{slug}.md"
+        entry = ledger_lectures.get(key) or {}
+        recorded = {s.get("series") for s in (entry.get("sources") or []) + (entry.get("divergent") or [])}
+        base = entry.get("canonical") or holders[0]
+        base_bytes = read_bytes(mirror_lectures(base) / f"{slug}.md")
+        if base_bytes is None:
+            continue  # the canonical copy is gone: check_lecture reports it
+        for series in holders:
+            if series == base or series in recorded:
+                continue
+            cur = read_bytes(mirror_lectures(series) / f"{slug}.md")
+            if same_lecture(series, base, f"{slug}.md", cur, base_bytes):
+                continue
+            findings.append(Finding(
+                "drift", "name-shared", key,
+                f"{key}: {series} and {base} both publish a lecture named {slug}, and they are different lectures",
+                detail=(
+                    "Lecture names are unique across the published sites: a link that leaves a product resolves "
+                    "by name, so two sites publishing different lectures under one name send readers to the wrong "
+                    "one. Reconcile it in the series, never in the pool: rename one copy with a redirect, or merge "
+                    f"the two into one lecture, as QuantEcon/project-monorepo#76 did. If the {series} copy is only "
+                    "an older version of the same lecture, bring it up to date upstream."
+                ),
+                diff=unified_diff(base_bytes, cur, f"{base}/lectures/{slug}.md", f"{series}/lectures/{slug}.md"),
+                issue_title=f"drift({series}): lectures/{slug}.md is a different lecture from {base}'s",
+                data={"series": series, "canonical": base},
+            ))
 
 
 def accept_tocs(series_list, state: dict, toc_state: dict):
@@ -759,8 +853,8 @@ def write_github_output(summary):
 def build_parser():
     p = argparse.ArgumentParser(prog="tools/drift-check", description=__doc__.split("\n\n")[0])
     p.add_argument("--reconstruct", action="store_true",
-                   help="rebuild mirror/ for every series the checks read, a watched toc's series "
-                   "included, before checking")
+                   help="rebuild mirror/ for every series the checks read (every canonical-eligible series, "
+                   "and a consumer whose toc is watched) before checking")
     p.add_argument("--json", metavar="PATH", help="write the findings as JSON to PATH")
     p.add_argument("--issues", action="store_true",
                    help="open, update and close `drift` issues on GitHub to match the findings")
@@ -796,7 +890,7 @@ def main(argv=None):
             accept_tocs(args.accept_toc, state, toc_state)
             return 0
 
-        needed = series_in_ledger(ledger_lectures, ledger_assets, toc_state, consumers)
+        needed = series_in_ledger(ledger_lectures, ledger_assets, toc_state, consumers, manifest)
         if args.reconstruct:
             reconstruct(needed)
         missing = [s for s in needed if not mirror_lectures(s).exists()]
@@ -811,7 +905,8 @@ def main(argv=None):
             check_lecture(key, ledger_lectures[key], manifest, consumers, findings)
         for pool_rel in sorted(ledger_assets):
             check_asset(pool_rel, ledger_assets[pool_rel], consumers, findings)
-        check_tocs(toc_state, manifest, findings)
+        check_tocs(toc_state, manifest, ledger_lectures, findings)
+        check_names(manifest, consumers, ledger_lectures, findings)
         findings.sort(key=lambda f: (SEVERITY_ORDER[f.severity], f.subject, f.kind))
 
         pins = {s: state.get(s) for s in needed}
