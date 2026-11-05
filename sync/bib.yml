@@ -252,6 +252,10 @@ rulings:
     take: intermediate
     because: 'rule: one copy has more fields (#10): intermediate''s has the title''s capitals; advanced''s extra field is "publisher = JSTOR", which an article does not print'
     seal: {intermediate: 44dd7bf9d6e7aea0, advanced: 1716a52a47cec2a2}
+  Sims1982:
+    take: advanced
+    because: 'rule: one copy has more fields (#10): advanced''s adds the DOI'
+    seal: {intermediate: e4927668f7f31fa7, advanced: 5d89808291e62bfa}
   SmetsWouters2007:
     take: advanced
     because: 'rule: one copy has more fields (#10): advanced''s adds the DOI'
