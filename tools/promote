@@ -64,7 +64,7 @@ Usage
 Flags
 -----
     --toc SERIES       take the slug list from mirror/SERIES/lectures/_toc.yml
-                       (product pages — intro, status, troubleshooting,
+                       (product pages — about, intro, status, troubleshooting,
                        zreferences — are skipped: they become products/<key>/
                        pages in M3, not pool content). For a consumer series
                        each lecture comes from its canonical home instead.
@@ -131,7 +131,8 @@ CONSUMER_CLASS = "consumer"
 SERIES_CLASSES = (SOURCE_CLASS, CONSUMER_CLASS)
 
 # Per-series boilerplate: product pages, not pool content (M3 owns them).
-PRODUCT_PAGES = ("intro", "status", "troubleshooting", "zreferences")
+# `about` is a series' page about itself: what it covers, its level, its credits.
+PRODUCT_PAGES = ("about", "intro", "status", "troubleshooting", "zreferences")
 
 # The merged bibliography is owned by the separate bib-merge tool.
 BIB_BASENAME = "quant-econ.bib"
