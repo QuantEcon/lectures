@@ -20,6 +20,28 @@
 # embedded in its own `to` (e.g. an _admonition include) is applied
 # exactly once, never to a fixpoint. The drift-check applies exactly
 # this transform before comparing.
+lectures/about_py.md:
+  canonical: programming
+  sources:
+  - series: programming
+    path: about_py.md
+    digest: 15f0a77815b08a5d66673fc2a4f427e584fdbdd29d9c7ce7a7b052d521fb9266
+  promoted_at:
+    programming: e2d28d003d61f45bf75e790a94b8d478ed0902f2
+  assets:
+  - _static/about_py/bn_density1.png
+  - _static/about_py/career_vf.png
+  - _static/about_py/pytorch_vs_matlab.png
+  - _static/about_py/qs.png
+  rewrites:
+  - from: /_static/lecture_specific/about_py/pytorch_vs_matlab.png
+    to: _static/about_py/pytorch_vs_matlab.png
+  - from: /_static/lecture_specific/about_py/bn_density1.png
+    to: _static/about_py/bn_density1.png
+  - from: /_static/lecture_specific/about_py/career_vf.png
+    to: _static/about_py/career_vf.png
+  - from: /_static/lecture_specific/about_py/qs.png
+    to: _static/about_py/qs.png
 lectures/amss.md:
   canonical: advanced
   sources:
@@ -120,6 +142,19 @@ lectures/ar1_processes.md:
     intro: 530ede2b348321d3924f7c900691b7daf165757c
   assets: []
   rewrites: []
+lectures/autodiff.md:
+  canonical: programming
+  sources:
+  - series: programming
+    path: autodiff.md
+    digest: 4a1a441630c1b34a46ff514b60f2ad64e9f0cdb008b4349b25b98d0f4807e621
+  promoted_at:
+    programming: e2d28d003d61f45bf75e790a94b8d478ed0902f2
+  assets:
+  - _static/_shared/_admonition/gpu.md
+  rewrites:
+  - from: _admonition/gpu.md
+    to: _static/_shared/_admonition/gpu.md
 lectures/bayes_intro.md:
   canonical: intro
   sources:
@@ -342,6 +377,16 @@ lectures/cross_product_trick.md:
     dp: da83d88d8de7ab04a4c722bdbd0ce6e2c8333c7c
   assets: []
   rewrites: []
+lectures/debugging.md:
+  canonical: programming
+  sources:
+  - series: programming
+    path: debugging.md
+    digest: 8a72a4477d36c56b3ad1f67193b338f75e6495b4a24b02720ff4822b8b61eb82
+  promoted_at:
+    programming: e2d28d003d61f45bf75e790a94b8d478ed0902f2
+  assets: []
+  rewrites: []
 lectures/discrete_dp.md:
   canonical: advanced
   sources:
@@ -428,6 +473,16 @@ lectures/french_rev.md:
     intro: 530ede2b348321d3924f7c900691b7daf165757c
   assets: []
   rewrites: []
+lectures/functions.md:
+  canonical: programming
+  sources:
+  - series: programming
+    path: functions.md
+    digest: 4b602fccc06f2eb9bcc6043e1325e152b66646b1cd3ded447fc3e678a39a3563
+  promoted_at:
+    programming: e2d28d003d61f45bf75e790a94b8d478ed0902f2
+  assets: []
+  rewrites: []
 lectures/geom_series.md:
   canonical: intro
   sources:
@@ -438,6 +493,49 @@ lectures/geom_series.md:
     intro: 530ede2b348321d3924f7c900691b7daf165757c
   assets: []
   rewrites: []
+lectures/getting_started.md:
+  canonical: programming
+  sources:
+  - series: programming
+    path: getting_started.md
+    digest: 6e13c028a70102562f62778fe86f1f87d1403f1bbad0fce7730adc0bc11accc1
+  promoted_at:
+    programming: e2d28d003d61f45bf75e790a94b8d478ed0902f2
+  assets:
+  - _static/getting_started/debug.png
+  - _static/getting_started/debugger_breakpoint.png
+  - _static/getting_started/jp_demo.png
+  - _static/getting_started/nb.png
+  - _static/getting_started/nb2.png
+  - _static/getting_started/nb3.png
+  - _static/getting_started/nb6.png
+  - _static/getting_started/nb6a.png
+  - _static/getting_started/nb7.png
+  - _static/getting_started/nb8.png
+  - _static/getting_started/starting_nb.png
+  rewrites:
+  - from: /_static/lecture_specific/getting_started/debugger_breakpoint.png
+    to: _static/getting_started/debugger_breakpoint.png
+  - from: /_static/lecture_specific/getting_started/starting_nb.png
+    to: _static/getting_started/starting_nb.png
+  - from: /_static/lecture_specific/getting_started/jp_demo.png
+    to: _static/getting_started/jp_demo.png
+  - from: /_static/lecture_specific/getting_started/debug.png
+    to: _static/getting_started/debug.png
+  - from: /_static/lecture_specific/getting_started/nb6a.png
+    to: _static/getting_started/nb6a.png
+  - from: /_static/lecture_specific/getting_started/nb2.png
+    to: _static/getting_started/nb2.png
+  - from: /_static/lecture_specific/getting_started/nb3.png
+    to: _static/getting_started/nb3.png
+  - from: /_static/lecture_specific/getting_started/nb6.png
+    to: _static/getting_started/nb6.png
+  - from: /_static/lecture_specific/getting_started/nb7.png
+    to: _static/getting_started/nb7.png
+  - from: /_static/lecture_specific/getting_started/nb8.png
+    to: _static/getting_started/nb8.png
+  - from: /_static/lecture_specific/getting_started/nb.png
+    to: _static/getting_started/nb.png
 lectures/greek_square.md:
   canonical: intro
   sources:
@@ -613,6 +711,19 @@ lectures/inventory_q.md:
     dp: da83d88d8de7ab04a4c722bdbd0ce6e2c8333c7c
   assets: []
   rewrites: []
+lectures/jax_intro.md:
+  canonical: programming
+  sources:
+  - series: programming
+    path: jax_intro.md
+    digest: a21bb131b93d2649586c06cd3e88aae3efa5bb1aa9e1afccddd0179ffb3d8f7e
+  promoted_at:
+    programming: e2d28d003d61f45bf75e790a94b8d478ed0902f2
+  assets:
+  - _static/_shared/_admonition/gpu.md
+  rewrites:
+  - from: _admonition/gpu.md
+    to: _static/_shared/_admonition/gpu.md
 lectures/jv.md:
   canonical: intermediate
   sources:
@@ -827,6 +938,19 @@ lectures/markov_jump_lq.md:
     dp: da83d88d8de7ab04a4c722bdbd0ce6e2c8333c7c
   assets: []
   rewrites: []
+lectures/matplotlib.md:
+  canonical: programming
+  sources:
+  - series: programming
+    path: matplotlib.md
+    digest: 3090de43fe488ebbd2ab902639a5bc2bd1dddc22a653c32fa68ed93a2edcf51f
+  promoted_at:
+    programming: e2d28d003d61f45bf75e790a94b8d478ed0902f2
+  assets:
+  - _static/matplotlib/matplotlib_ex1.png
+  rewrites:
+  - from: /_static/lecture_specific/matplotlib/matplotlib_ex1.png
+    to: _static/matplotlib/matplotlib_ex1.png
 lectures/mccall_fitted_vfi.md:
   canonical: intermediate
   sources:
@@ -992,6 +1116,62 @@ lectures/msy_fishery.md:
     intro: 530ede2b348321d3924f7c900691b7daf165757c
   assets: []
   rewrites: []
+lectures/names.md:
+  canonical: programming
+  sources:
+  - series: programming
+    path: names.md
+    digest: f6637f00453b1fb1d60b20705f92aa8821f29f19f2ff42f711add818aebaf0b2
+  promoted_at:
+    programming: e2d28d003d61f45bf75e790a94b8d478ed0902f2
+  assets:
+  - _static/_shared/oop_intro/global.png
+  - _static/_shared/oop_intro/global2.png
+  - _static/_shared/oop_intro/local1.png
+  - _static/_shared/oop_intro/local_return.png
+  - _static/_shared/oop_intro/mutable1.png
+  - _static/_shared/oop_intro/mutable2.png
+  - _static/_shared/oop_intro/mutable3.png
+  - _static/_shared/oop_intro/mutable4.png
+  - _static/_shared/oop_intro/mutable5.png
+  rewrites:
+  - from: /_static/lecture_specific/oop_intro/local_return.png
+    to: _static/_shared/oop_intro/local_return.png
+  - from: /_static/lecture_specific/oop_intro/mutable1.png
+    to: _static/_shared/oop_intro/mutable1.png
+  - from: /_static/lecture_specific/oop_intro/mutable2.png
+    to: _static/_shared/oop_intro/mutable2.png
+  - from: /_static/lecture_specific/oop_intro/mutable3.png
+    to: _static/_shared/oop_intro/mutable3.png
+  - from: /_static/lecture_specific/oop_intro/mutable4.png
+    to: _static/_shared/oop_intro/mutable4.png
+  - from: /_static/lecture_specific/oop_intro/mutable5.png
+    to: _static/_shared/oop_intro/mutable5.png
+  - from: /_static/lecture_specific/oop_intro/global2.png
+    to: _static/_shared/oop_intro/global2.png
+  - from: /_static/lecture_specific/oop_intro/global.png
+    to: _static/_shared/oop_intro/global.png
+  - from: /_static/lecture_specific/oop_intro/local1.png
+    to: _static/_shared/oop_intro/local1.png
+lectures/need_for_speed.md:
+  canonical: programming
+  sources:
+  - series: programming
+    path: need_for_speed.md
+    digest: a91b233ce9487a28c1faed87a7e7caafd5cce0d45185c8be4c24da307aaf0e61
+  promoted_at:
+    programming: e2d28d003d61f45bf75e790a94b8d478ed0902f2
+  assets:
+  - _static/need_for_speed/dgx.png
+  - _static/need_for_speed/geforce.png
+  - _static/need_for_speed/matlab.png
+  rewrites:
+  - from: /_static/lecture_specific/need_for_speed/geforce.png
+    to: _static/need_for_speed/geforce.png
+  - from: /_static/lecture_specific/need_for_speed/matlab.png
+    to: _static/need_for_speed/matlab.png
+  - from: /_static/lecture_specific/need_for_speed/dgx.png
+    to: _static/need_for_speed/dgx.png
 lectures/networks.md:
   canonical: intro
   sources:
@@ -1017,6 +1197,45 @@ lectures/networks.md:
     to: _static/networks/weighted.png
   - from: /_static/lecture_specific/networks/mc.png
     to: _static/networks/mc.png
+lectures/numba.md:
+  canonical: programming
+  sources:
+  - series: programming
+    path: numba.md
+    digest: 50829cab55b5aa94effdeeb2172ab38b7eb43509d104f70a2be7c8174a3a1fe6
+  promoted_at:
+    programming: e2d28d003d61f45bf75e790a94b8d478ed0902f2
+  assets:
+  - _static/_shared/sci_libs/nfs_ex1.png
+  rewrites:
+  - from: /_static/lecture_specific/sci_libs/nfs_ex1.png
+    to: _static/_shared/sci_libs/nfs_ex1.png
+lectures/numpy.md:
+  canonical: programming
+  sources:
+  - series: programming
+    path: numpy.md
+    digest: 9762f515e28aa8443fccfa2c40b5add39c0996685f8e99963462a84861ef5405
+  promoted_at:
+    programming: e2d28d003d61f45bf75e790a94b8d478ed0902f2
+  assets:
+  - _static/_shared/parallelization/htop_parallel_npmat.png
+  rewrites:
+  - from: /_static/lecture_specific/parallelization/htop_parallel_npmat.png
+    to: _static/_shared/parallelization/htop_parallel_npmat.png
+lectures/numpy_vs_numba_vs_jax.md:
+  canonical: programming
+  sources:
+  - series: programming
+    path: numpy_vs_numba_vs_jax.md
+    digest: 138c9d4a9570d16238f82e97edcc49f66ed782c596171e09901fd23a146a1163
+  promoted_at:
+    programming: e2d28d003d61f45bf75e790a94b8d478ed0902f2
+  assets:
+  - _static/_shared/_admonition/gpu.md
+  rewrites:
+  - from: _admonition/gpu.md
+    to: _static/_shared/_admonition/gpu.md
 lectures/observed_distributions.md:
   canonical: intro
   sources:
@@ -1050,6 +1269,16 @@ lectures/olg.md:
     digest: bda023d2d97d5107a594dc4e1c23315560eefe32e1f2838ff95b921fa8557a0c
   promoted_at:
     intro: 530ede2b348321d3924f7c900691b7daf165757c
+  assets: []
+  rewrites: []
+lectures/oop_intro.md:
+  canonical: programming
+  sources:
+  - series: programming
+    path: oop_intro.md
+    digest: ce9b5f57d0a121a13cc98bc07feb40a740ec0a60c167decab258f18d7bccdfc7
+  promoted_at:
+    programming: e2d28d003d61f45bf75e790a94b8d478ed0902f2
   assets: []
   rewrites: []
 lectures/opt_tax_recur.md:
@@ -1172,6 +1401,42 @@ lectures/os_time_iter.md:
     dp: da83d88d8de7ab04a4c722bdbd0ce6e2c8333c7c
   assets: []
   rewrites: []
+lectures/pandas.md:
+  canonical: programming
+  sources:
+  - series: programming
+    path: pandas.md
+    digest: 1a5aafd3078491f4b30e0238e92ac5820c1baab29c4c8b71644e4b582bff9458
+  promoted_at:
+    programming: e2d28d003d61f45bf75e790a94b8d478ed0902f2
+  assets:
+  - _static/pandas/pandas_indices_pctchange.png
+  - _static/pandas/pandas_share_prices.png
+  - _static/pandas/pandas_vs_rest.png
+  rewrites:
+  - from: /_static/lecture_specific/pandas/pandas_indices_pctchange.png
+    to: _static/pandas/pandas_indices_pctchange.png
+  - from: /_static/lecture_specific/pandas/pandas_share_prices.png
+    to: _static/pandas/pandas_share_prices.png
+  - from: /_static/lecture_specific/pandas/pandas_vs_rest.png
+    to: _static/pandas/pandas_vs_rest.png
+lectures/pandas_panel.md:
+  canonical: programming
+  sources:
+  - series: programming
+    path: pandas_panel.md
+    digest: 61281bfcc1924692ed866f6c078b73bf569c7baec3f91bc2dcd8c7bbe205eb01
+  - series: intermediate
+    path: pandas_panel.md
+    digest: 61281bfcc1924692ed866f6c078b73bf569c7baec3f91bc2dcd8c7bbe205eb01
+  promoted_at:
+    programming: e2d28d003d61f45bf75e790a94b8d478ed0902f2
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets:
+  - _static/pandas_panel/venn_diag.png
+  rewrites:
+  - from: /_static/lecture_specific/pandas_panel/venn_diag.png
+    to: _static/pandas_panel/venn_diag.png
 lectures/perm_income.md:
   canonical: intermediate
   sources:
@@ -1212,6 +1477,16 @@ lectures/phillips_drifts_volatilities.md:
     intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
   assets: []
   rewrites: []
+lectures/polars.md:
+  canonical: programming
+  sources:
+  - series: programming
+    path: polars.md
+    digest: 7a12fcfa8ddf6257a1d63a33cafeb16600de41ca6753d0df617eaf1bee27c148
+  promoted_at:
+    programming: e2d28d003d61f45bf75e790a94b8d478ed0902f2
+  assets: []
+  rewrites: []
 lectures/prob_dist.md:
   canonical: intro
   sources:
@@ -1230,6 +1505,49 @@ lectures/pv.md:
     digest: 1851682e34ebd45ed2ee14f3df09e09e90472024c18e6b288303c1012873952b
   promoted_at:
     intro: 530ede2b348321d3924f7c900691b7daf165757c
+  assets: []
+  rewrites: []
+lectures/python_advanced_features.md:
+  canonical: programming
+  sources:
+  - series: programming
+    path: python_advanced_features.md
+    digest: 5a6a3b188622fdfd974b5a4fe5dd922d6c090c1bcf3d9b40de9a58b8e11b8704
+  promoted_at:
+    programming: e2d28d003d61f45bf75e790a94b8d478ed0902f2
+  assets: []
+  rewrites: []
+lectures/python_by_example.md:
+  canonical: programming
+  sources:
+  - series: programming
+    path: python_by_example.md
+    digest: 531483bae42a93a4c603a954a33b9d86a4c9b6dcf0deccfcae200a6e6d4c1e9a
+  promoted_at:
+    programming: e2d28d003d61f45bf75e790a94b8d478ed0902f2
+  assets:
+  - _static/python_by_example/test_program_1_updated.png
+  rewrites:
+  - from: /_static/lecture_specific/python_by_example/test_program_1_updated.png
+    to: _static/python_by_example/test_program_1_updated.png
+lectures/python_essentials.md:
+  canonical: programming
+  sources:
+  - series: programming
+    path: python_essentials.md
+    digest: 44f39dd095e40d6d147a077382ca978db371dd3bd8f2afc5d86fc9a08b16effa
+  promoted_at:
+    programming: e2d28d003d61f45bf75e790a94b8d478ed0902f2
+  assets: []
+  rewrites: []
+lectures/python_oop.md:
+  canonical: programming
+  sources:
+  - series: programming
+    path: python_oop.md
+    digest: 9cc15ceaee4c7be1d1d4e8bacbaf6a436556598eb521ecacf5781d91430ff0f8
+  promoted_at:
+    programming: e2d28d003d61f45bf75e790a94b8d478ed0902f2
   assets: []
   rewrites: []
 lectures/rs_inventory_q.md:
@@ -1265,6 +1583,16 @@ lectures/schelling.md:
     digest: 7e66ab73e6253cf9b1d30c528b0b6a96d220be5f4bedcd4e48870f41df918f84
   promoted_at:
     intro: 530ede2b348321d3924f7c900691b7daf165757c
+  assets: []
+  rewrites: []
+lectures/scipy.md:
+  canonical: programming
+  sources:
+  - series: programming
+    path: scipy.md
+    digest: e21de87b430301e66a53074447b186b244b775d0f79a5036407812bb181fee0c
+  promoted_at:
+    programming: e2d28d003d61f45bf75e790a94b8d478ed0902f2
   assets: []
   rewrites: []
 lectures/short_path.md:
@@ -1362,6 +1690,16 @@ lectures/supply_demand_multiple_goods.md:
     digest: 7bdc255a81c0bdac00fdb5632b42952495239032c4248490cbf9bcb65ccea095
   promoted_at:
     intro: 530ede2b348321d3924f7c900691b7daf165757c
+  assets: []
+  rewrites: []
+lectures/sympy.md:
+  canonical: programming
+  sources:
+  - series: programming
+    path: sympy.md
+    digest: 9bd30370c3f7b2a7b20c5dc5ab8a075badb82fab6544c2ae30cd4c62587bf610
+  promoted_at:
+    programming: e2d28d003d61f45bf75e790a94b8d478ed0902f2
   assets: []
   rewrites: []
 lectures/tax_smooth.md:
@@ -1464,6 +1802,74 @@ lectures/wealth_tax.md:
     intro: 530ede2b348321d3924f7c900691b7daf165757c
   assets: []
   rewrites: []
+lectures/workspace.md:
+  canonical: programming
+  sources:
+  - series: programming
+    path: workspace.md
+    digest: fac5c325dc4d35633a3394232d705d17e16500d95c53a02ed17b511c4f3b125c
+  promoted_at:
+    programming: e2d28d003d61f45bf75e790a94b8d478ed0902f2
+  assets:
+  - _static/workspace/extensions.png
+  - _static/workspace/file_browser.png
+  - _static/workspace/jupyter_lab.png
+  - _static/workspace/jupyter_lab_cmd.png
+  - _static/workspace/jupyter_lab_py_run.png
+  - _static/workspace/jupyter_lab_py_run_term.png
+  - _static/workspace/sine_wave_import.png
+  - _static/workspace/vs_code_extensions.png
+  - _static/workspace/vs_code_git.png
+  - _static/workspace/vs_code_home.png
+  - _static/workspace/vs_code_install_ext.png
+  - _static/workspace/vs_code_kernels.png
+  - _static/workspace/vs_code_run.png
+  - _static/workspace/vs_code_run_button.png
+  - _static/workspace/vs_code_terminal_opts.png
+  - _static/workspace/vs_code_walkthrough.png
+  rewrites:
+  - from: /_static/lecture_specific/workspace/jupyter_lab_py_run_term.png
+    to: _static/workspace/jupyter_lab_py_run_term.png
+  - from: /_static/lecture_specific/workspace/vs_code_terminal_opts.png
+    to: _static/workspace/vs_code_terminal_opts.png
+  - from: /_static/lecture_specific/workspace/vs_code_install_ext.png
+    to: _static/workspace/vs_code_install_ext.png
+  - from: /_static/lecture_specific/workspace/vs_code_walkthrough.png
+    to: _static/workspace/vs_code_walkthrough.png
+  - from: /_static/lecture_specific/workspace/jupyter_lab_py_run.png
+    to: _static/workspace/jupyter_lab_py_run.png
+  - from: /_static/lecture_specific/workspace/vs_code_extensions.png
+    to: _static/workspace/vs_code_extensions.png
+  - from: /_static/lecture_specific/workspace/vs_code_run_button.png
+    to: _static/workspace/vs_code_run_button.png
+  - from: /_static/lecture_specific/workspace/sine_wave_import.png
+    to: _static/workspace/sine_wave_import.png
+  - from: /_static/lecture_specific/workspace/jupyter_lab_cmd.png
+    to: _static/workspace/jupyter_lab_cmd.png
+  - from: /_static/lecture_specific/workspace/vs_code_kernels.png
+    to: _static/workspace/vs_code_kernels.png
+  - from: /_static/lecture_specific/workspace/file_browser.png
+    to: _static/workspace/file_browser.png
+  - from: /_static/lecture_specific/workspace/vs_code_home.png
+    to: _static/workspace/vs_code_home.png
+  - from: /_static/lecture_specific/workspace/jupyter_lab.png
+    to: _static/workspace/jupyter_lab.png
+  - from: /_static/lecture_specific/workspace/vs_code_git.png
+    to: _static/workspace/vs_code_git.png
+  - from: /_static/lecture_specific/workspace/vs_code_run.png
+    to: _static/workspace/vs_code_run.png
+  - from: /_static/lecture_specific/workspace/extensions.png
+    to: _static/workspace/extensions.png
+lectures/writing_good_code.md:
+  canonical: programming
+  sources:
+  - series: programming
+    path: writing_good_code.md
+    digest: c8d996c3fa8c0469913e93e4c5cb03cd89f191c6ef0bf0c09e8bda8c04d2415c
+  promoted_at:
+    programming: e2d28d003d61f45bf75e790a94b8d478ed0902f2
+  assets: []
+  rewrites: []
 assets:
   _static/_shared/_admonition/gpu.md:
     canonical: programming
@@ -1509,6 +1915,60 @@ assets:
     sources:
     - series: intro
       path: _static/lecture_specific/lake_model/lake_model_worker.png
+  _static/_shared/oop_intro/global.png:
+    canonical: programming
+    digest: 2a3e0ee4ca2ead12cc7c9861f66fe2234772f6fe87193e8fb978490c073ae205
+    sources:
+    - series: programming
+      path: _static/lecture_specific/oop_intro/global.png
+  _static/_shared/oop_intro/global2.png:
+    canonical: programming
+    digest: 26c6f307ced23e59bbfb3709a462c4d985abc2e66c228708c777156ea6ad00f7
+    sources:
+    - series: programming
+      path: _static/lecture_specific/oop_intro/global2.png
+  _static/_shared/oop_intro/local1.png:
+    canonical: programming
+    digest: 05302a2835fd4b3c7dcc57d90ba5e6f8baf006a4aeb7c805978833f3dfa82f5d
+    sources:
+    - series: programming
+      path: _static/lecture_specific/oop_intro/local1.png
+  _static/_shared/oop_intro/local_return.png:
+    canonical: programming
+    digest: e57ae5e37b288c4bc3004caca3f5acb31ef6642e1218dc529c197b623038be14
+    sources:
+    - series: programming
+      path: _static/lecture_specific/oop_intro/local_return.png
+  _static/_shared/oop_intro/mutable1.png:
+    canonical: programming
+    digest: 2f34dc68c5129e4e5433656dd1650c10a0c64adcfc73a6f6fca8db26ce4023ac
+    sources:
+    - series: programming
+      path: _static/lecture_specific/oop_intro/mutable1.png
+  _static/_shared/oop_intro/mutable2.png:
+    canonical: programming
+    digest: 5cf028406fe6f660aa9aa8e2fc05cf1797705a52ba4b90c52265eb0d7e05c3ad
+    sources:
+    - series: programming
+      path: _static/lecture_specific/oop_intro/mutable2.png
+  _static/_shared/oop_intro/mutable3.png:
+    canonical: programming
+    digest: d868df15131de71cf911af9962691518a6a68d3c14d7e9d33a9d872f63faf6ab
+    sources:
+    - series: programming
+      path: _static/lecture_specific/oop_intro/mutable3.png
+  _static/_shared/oop_intro/mutable4.png:
+    canonical: programming
+    digest: bad52506527b8fe9f9b30760c6fea4a201994c3e3fd08f81ddbda9776996a1e0
+    sources:
+    - series: programming
+      path: _static/lecture_specific/oop_intro/mutable4.png
+  _static/_shared/oop_intro/mutable5.png:
+    canonical: programming
+    digest: 8f95eeb03ea646b0a1ebe53ce66cee9ef16da359e2bd70e27bab47d152a53a43
+    sources:
+    - series: programming
+      path: _static/lecture_specific/oop_intro/mutable5.png
   _static/_shared/opt_tax_recur/crra_utility.py:
     canonical: advanced
     digest: 9ab49a1716a0ec5c8cb14a3b60437890dd4848ec5ad6804a8b39cb959f5908ba
@@ -1527,6 +1987,42 @@ assets:
     sources:
     - series: advanced
       path: _static/lecture_specific/opt_tax_recur/sequential_allocation.py
+  _static/_shared/parallelization/htop_parallel_npmat.png:
+    canonical: programming
+    digest: 62f6c248bcf388123154555ae6a5ad564c89a003d5ac7635fb770e2cc465462d
+    sources:
+    - series: programming
+      path: _static/lecture_specific/parallelization/htop_parallel_npmat.png
+  _static/_shared/sci_libs/nfs_ex1.png:
+    canonical: programming
+    digest: a89d8535307fac9959bb58e5e1fbbca67d261b4329476434f88b35ab5bf585d0
+    sources:
+    - series: programming
+      path: _static/lecture_specific/sci_libs/nfs_ex1.png
+  _static/about_py/bn_density1.png:
+    canonical: programming
+    digest: ffe068278f3c205f33aa204e861990b61127708f0fca2ce0caaf5a1fe17aaa56
+    sources:
+    - series: programming
+      path: _static/lecture_specific/about_py/bn_density1.png
+  _static/about_py/career_vf.png:
+    canonical: programming
+    digest: 73070bee541aa03ba742526268c34434b81bd119b1dad4a942943d54cef1f5b9
+    sources:
+    - series: programming
+      path: _static/lecture_specific/about_py/career_vf.png
+  _static/about_py/pytorch_vs_matlab.png:
+    canonical: programming
+    digest: 774c208e9bad28ff80364936e61461d97a8e994322e26db727ef84bd6ea803c3
+    sources:
+    - series: programming
+      path: _static/lecture_specific/about_py/pytorch_vs_matlab.png
+  _static/about_py/qs.png:
+    canonical: programming
+    digest: e0773ba5f6f2786f9cfef8fc5e0686bc004e23050e07eebe5f8dc2bdf1ec25bd
+    sources:
+    - series: programming
+      path: _static/lecture_specific/about_py/qs.png
   _static/amss/recursive_allocation.py:
     canonical: advanced
     digest: bd3b07dcd3f8160e2876aee07de94392c723ced4224832f596b5da6cd0fb2fdb
@@ -1569,6 +2065,72 @@ assets:
     sources:
     - series: advanced
       path: _static/lecture_specific/discrete_dp/finite_dp_simple_og2.png
+  _static/getting_started/debug.png:
+    canonical: programming
+    digest: 865371d146b89b7636e15eaf58924e8989974e1efd727e803e6b7e0ec2177052
+    sources:
+    - series: programming
+      path: _static/lecture_specific/getting_started/debug.png
+  _static/getting_started/debugger_breakpoint.png:
+    canonical: programming
+    digest: fb406512b3de3a95f3ade1f9f1221f573668cb16cfd73c2b27d9b7a8a5d793a1
+    sources:
+    - series: programming
+      path: _static/lecture_specific/getting_started/debugger_breakpoint.png
+  _static/getting_started/jp_demo.png:
+    canonical: programming
+    digest: 937c3024f8f0e02600a8e21a1e98e7df63f50fa1fb2227229f0a9d464e692d0e
+    sources:
+    - series: programming
+      path: _static/lecture_specific/getting_started/jp_demo.png
+  _static/getting_started/nb.png:
+    canonical: programming
+    digest: 06afe391aeeec212b4980de632395ffd8d729e2911d1bd322f6013fe2198c3c6
+    sources:
+    - series: programming
+      path: _static/lecture_specific/getting_started/nb.png
+  _static/getting_started/nb2.png:
+    canonical: programming
+    digest: 6fd61cad6d9b64c74beba8b8e678c8f45434763e877277602e6a3d96c74b573e
+    sources:
+    - series: programming
+      path: _static/lecture_specific/getting_started/nb2.png
+  _static/getting_started/nb3.png:
+    canonical: programming
+    digest: 9bd5447e84c283c6b666bb8faab9cf78ce15a9efb35cd4b63193d94d8c6a13d9
+    sources:
+    - series: programming
+      path: _static/lecture_specific/getting_started/nb3.png
+  _static/getting_started/nb6.png:
+    canonical: programming
+    digest: 46b0ddcb4948d1b14bb688e804a22ccb2c11bee1378b1f16e6ac8504089325f9
+    sources:
+    - series: programming
+      path: _static/lecture_specific/getting_started/nb6.png
+  _static/getting_started/nb6a.png:
+    canonical: programming
+    digest: e2b5afcfb177e1373a1afe0dceaca422b665756b9b160ff5e953995054a873b5
+    sources:
+    - series: programming
+      path: _static/lecture_specific/getting_started/nb6a.png
+  _static/getting_started/nb7.png:
+    canonical: programming
+    digest: b43878511af994b6600e79ca7a31631fde2dff4f9253210a3b022d4bf574afc0
+    sources:
+    - series: programming
+      path: _static/lecture_specific/getting_started/nb7.png
+  _static/getting_started/nb8.png:
+    canonical: programming
+    digest: 5667cfa3587e7d65d056dad69b167f9b572d079b42f0f13efc66f7d9fc0deec5
+    sources:
+    - series: programming
+      path: _static/lecture_specific/getting_started/nb8.png
+  _static/getting_started/starting_nb.png:
+    canonical: programming
+    digest: 31e9566a881d2926fa3653a2d45229121b0c8f904ad9218e7e00421906fa9945
+    sources:
+    - series: programming
+      path: _static/lecture_specific/getting_started/starting_nb.png
   _static/long_run_growth/tooze_ch1_graph.png:
     canonical: intro
     digest: 2e3e4974290ca9e2e8177feda7285883395804cf4d3a4d8592308dc52db75e8e
@@ -1641,6 +2203,30 @@ assets:
     sources:
     - series: intro
       path: _static/lecture_specific/markov_chains_II/example4.png
+  _static/matplotlib/matplotlib_ex1.png:
+    canonical: programming
+    digest: a4b3bacb5f1e65242e0730d1e618a38b94f1ba6dbeeb3801f84b040c9b2d7009
+    sources:
+    - series: programming
+      path: _static/lecture_specific/matplotlib/matplotlib_ex1.png
+  _static/need_for_speed/dgx.png:
+    canonical: programming
+    digest: 6a0f726c4b49f130590a82cf1e86dfdfdbb6387725ae0de53dfa7dccdacec446
+    sources:
+    - series: programming
+      path: _static/lecture_specific/need_for_speed/dgx.png
+  _static/need_for_speed/geforce.png:
+    canonical: programming
+    digest: 07fa35ba97c1868f54aed53ea98e572db596f4a9900597b1ddfe99316c0086e0
+    sources:
+    - series: programming
+      path: _static/lecture_specific/need_for_speed/geforce.png
+  _static/need_for_speed/matlab.png:
+    canonical: programming
+    digest: a5eef081ac208b4636ae949b1303420d59b243a881008f5f896f868f79abfad9
+    sources:
+    - series: programming
+      path: _static/lecture_specific/need_for_speed/matlab.png
   _static/networks/mc.png:
     canonical: intro
     digest: f60ac44c43cf138f7d3483e77681a7bacd99fff90ffbdac4cd49584df1f62020
@@ -1677,6 +2263,38 @@ assets:
     sources:
     - series: advanced
       path: _static/lecture_specific/opt_tax_recur/recursive_allocation.py
+  _static/pandas/pandas_indices_pctchange.png:
+    canonical: programming
+    digest: dfae704a7b9dc102332cb656d31c75b24973aad2c8503e9ace2ff0c5022042c9
+    sources:
+    - series: programming
+      path: _static/lecture_specific/pandas/pandas_indices_pctchange.png
+  _static/pandas/pandas_share_prices.png:
+    canonical: programming
+    digest: ff1f5c7406778879b971c3c0f61454d8bee26a846a4b545293073fc95bea1150
+    sources:
+    - series: programming
+      path: _static/lecture_specific/pandas/pandas_share_prices.png
+  _static/pandas/pandas_vs_rest.png:
+    canonical: programming
+    digest: 479145ffd2abf193dea5987ad99a7084907a27d3ddef43f387fae87315f0805c
+    sources:
+    - series: programming
+      path: _static/lecture_specific/pandas/pandas_vs_rest.png
+  _static/pandas_panel/venn_diag.png:
+    canonical: programming
+    digest: 76429c84da9329dbc52eb09c6561b84bb9f9bf7d3820f032d429966afe1b7d25
+    sources:
+    - series: programming
+      path: _static/lecture_specific/pandas_panel/venn_diag.png
+    - series: intermediate
+      path: _static/lecture_specific/pandas_panel/venn_diag.png
+  _static/python_by_example/test_program_1_updated.png:
+    canonical: programming
+    digest: 7020bba3619ca14284f3309ff6741fbd561d77544bfde5c56a1a0ea136268f02
+    sources:
+    - series: programming
+      path: _static/lecture_specific/python_by_example/test_program_1_updated.png
   _static/short_path/graph.png:
     canonical: intro
     digest: a5e73bd5729df6131fcc41410d3e4ebf9d9edb88c934e295927dd8cb8255b844
@@ -1701,3 +2319,99 @@ assets:
     sources:
     - series: intro
       path: _static/lecture_specific/short_path/graph4.png
+  _static/workspace/extensions.png:
+    canonical: programming
+    digest: fe675fc70d1b6a5555a679986faa3ae72f2092712f58632663c5468fc9061582
+    sources:
+    - series: programming
+      path: _static/lecture_specific/workspace/extensions.png
+  _static/workspace/file_browser.png:
+    canonical: programming
+    digest: 0d156808dd0da40886d12e38926c9901f3001dc37eaa65db9926d3f385dd1cf9
+    sources:
+    - series: programming
+      path: _static/lecture_specific/workspace/file_browser.png
+  _static/workspace/jupyter_lab.png:
+    canonical: programming
+    digest: 0331e5dc77d9d0d41a73aaac944aff9fc41ef4fc4c72d34307d4c9820bf394e3
+    sources:
+    - series: programming
+      path: _static/lecture_specific/workspace/jupyter_lab.png
+  _static/workspace/jupyter_lab_cmd.png:
+    canonical: programming
+    digest: a13a3ff9dcd94a02f08b0232bb4085d9168246860de0ca8ecec1a7f6540c029e
+    sources:
+    - series: programming
+      path: _static/lecture_specific/workspace/jupyter_lab_cmd.png
+  _static/workspace/jupyter_lab_py_run.png:
+    canonical: programming
+    digest: 50388e21e66fbdb03177661081d1b5e6c1953c7b79ea80bdf44b3eef2ed05cc3
+    sources:
+    - series: programming
+      path: _static/lecture_specific/workspace/jupyter_lab_py_run.png
+  _static/workspace/jupyter_lab_py_run_term.png:
+    canonical: programming
+    digest: 3c460ebd8250e50a6b33ce4ea46d28227e486fb4082fdf49795c3d2ff5c00190
+    sources:
+    - series: programming
+      path: _static/lecture_specific/workspace/jupyter_lab_py_run_term.png
+  _static/workspace/sine_wave_import.png:
+    canonical: programming
+    digest: 28ec2889970b183ac752992652fa8f799862aca5c79c1c46634a9ddc31797cc0
+    sources:
+    - series: programming
+      path: _static/lecture_specific/workspace/sine_wave_import.png
+  _static/workspace/vs_code_extensions.png:
+    canonical: programming
+    digest: 19c6f3458a19c97eda42cac291e61094c6fcaa3e38a41838b64cf94b3c2e4f93
+    sources:
+    - series: programming
+      path: _static/lecture_specific/workspace/vs_code_extensions.png
+  _static/workspace/vs_code_git.png:
+    canonical: programming
+    digest: 4800edebd6028c375860c0af0453aa5f1ae176d9cc83c1d8fbad6337172ec3d7
+    sources:
+    - series: programming
+      path: _static/lecture_specific/workspace/vs_code_git.png
+  _static/workspace/vs_code_home.png:
+    canonical: programming
+    digest: 1c6ddc336013ab9bb172555851b8c555995185d20861e4a8f7c2a1f9acaab4f0
+    sources:
+    - series: programming
+      path: _static/lecture_specific/workspace/vs_code_home.png
+  _static/workspace/vs_code_install_ext.png:
+    canonical: programming
+    digest: dfe83deba85f55c117ee6ed56a94a227be67b6a76819ddc52c2987ec795d67ce
+    sources:
+    - series: programming
+      path: _static/lecture_specific/workspace/vs_code_install_ext.png
+  _static/workspace/vs_code_kernels.png:
+    canonical: programming
+    digest: fd9655caf3a6257bb2406e4c9a4c37910544ba483cb9a74aaa0309e4242bd2cf
+    sources:
+    - series: programming
+      path: _static/lecture_specific/workspace/vs_code_kernels.png
+  _static/workspace/vs_code_run.png:
+    canonical: programming
+    digest: 55ecfd930f566a0ad50e3377f4cfb99971f2b4f5080860be320aa7e574a790fb
+    sources:
+    - series: programming
+      path: _static/lecture_specific/workspace/vs_code_run.png
+  _static/workspace/vs_code_run_button.png:
+    canonical: programming
+    digest: 2d95445f9de8c121b3e091c18a439bfbdcf49ea0592d0581fbafd21e571b9c7f
+    sources:
+    - series: programming
+      path: _static/lecture_specific/workspace/vs_code_run_button.png
+  _static/workspace/vs_code_terminal_opts.png:
+    canonical: programming
+    digest: dbb15d505bc3088ecc82dc0199e9164dbaf995fba47183ade902d5c6c5679208
+    sources:
+    - series: programming
+      path: _static/lecture_specific/workspace/vs_code_terminal_opts.png
+  _static/workspace/vs_code_walkthrough.png:
+    canonical: programming
+    digest: 8b88d6af88e903d98d821709b37c75ecba265cd0866246d8656edee4eb616eca
+    sources:
+    - series: programming
+      path: _static/lecture_specific/workspace/vs_code_walkthrough.png
