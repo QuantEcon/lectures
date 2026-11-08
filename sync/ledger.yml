@@ -42,6 +42,62 @@ lectures/about_py.md:
     to: _static/about_py/career_vf.png
   - from: /_static/lecture_specific/about_py/qs.png
     to: _static/about_py/qs.png
+lectures/affine_risk_prices.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: affine_risk_prices.md
+    digest: d2a134d5a421f51b3f8e45c31a7ea20ba0d14aa46a61984f64025067dac7d1b3
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
+lectures/aiyagari.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: aiyagari.md
+    digest: f72e8f998fc8f1b9f24446430c3094e45a2c8a3890d11c0c2052ebf136ed8b73
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets:
+  - _static/_shared/_admonition/gpu.md
+  rewrites:
+  - from: _admonition/gpu.md
+    to: _static/_shared/_admonition/gpu.md
+lectures/aiyagari_egm.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: aiyagari_egm.md
+    digest: 4562f9d8ff6f4548a83f2e78bc7d6fb03b90186bd36bd79ab0e66f6a50c98545
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
+lectures/ak2.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: ak2.md
+    digest: 2c5c9adfe95311528abc2732ae20a34d78a7045e5aa234c3abdbf84008606bc7
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
+lectures/ak_aiyagari.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: ak_aiyagari.md
+    digest: 3eb6833c72736cb83d8eb008c499bd5f2fb72aa5f574c24325f488ecf1eb7a8b
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets:
+  - _static/_shared/_admonition/gpu.md
+  rewrites:
+  - from: _admonition/gpu.md
+    to: _static/_shared/_admonition/gpu.md
 lectures/amss.md:
   canonical: advanced
   sources:
@@ -132,6 +188,19 @@ lectures/amss3.md:
     to: _static/amss3/amss3_g3.png
   - from: _static/lecture_specific/amss2/utilities.py
     to: _static/_shared/amss2/utilities.py
+lectures/ar1_bayes.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: ar1_bayes.md
+    digest: 0a42b3188befdd0dad8825ac45bcb8676dcd6734f2612491e04e5198a2272e94
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets:
+  - _static/_shared/_admonition/gpu.md
+  rewrites:
+  - from: _admonition/gpu.md
+    to: _static/_shared/_admonition/gpu.md
 lectures/ar1_processes.md:
   canonical: intro
   sources:
@@ -142,6 +211,19 @@ lectures/ar1_processes.md:
     intro: 530ede2b348321d3924f7c900691b7daf165757c
   assets: []
   rewrites: []
+lectures/ar1_turningpts.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: ar1_turningpts.md
+    digest: 69f69e03909154b1be571d6368a1adf74398ceb4278745687c4f129bbe6da502
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets:
+  - _static/_shared/_admonition/gpu.md
+  rewrites:
+  - from: _admonition/gpu.md
+    to: _static/_shared/_admonition/gpu.md
 lectures/autodiff.md:
   canonical: programming
   sources:
@@ -150,6 +232,19 @@ lectures/autodiff.md:
     digest: 4a1a441630c1b34a46ff514b60f2ad64e9f0cdb008b4349b25b98d0f4807e621
   promoted_at:
     programming: e2d28d003d61f45bf75e790a94b8d478ed0902f2
+  assets:
+  - _static/_shared/_admonition/gpu.md
+  rewrites:
+  - from: _admonition/gpu.md
+    to: _static/_shared/_admonition/gpu.md
+lectures/back_prop.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: back_prop.md
+    digest: a266384a37a2014171989bbd00e5384fda256aea7bfe11f301b33bed830046bc
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
   assets:
   - _static/_shared/_admonition/gpu.md
   rewrites:
@@ -165,6 +260,19 @@ lectures/bayes_intro.md:
     intro: 530ede2b348321d3924f7c900691b7daf165757c
   assets: []
   rewrites: []
+lectures/bayes_nonconj.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: bayes_nonconj.md
+    digest: 5590ed437c5310853e5c35e1f0427d07a37989a0aba3f659f1f2fc5beefaa600
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets:
+  - _static/_shared/_admonition/gpu.md
+  rewrites:
+  - from: _admonition/gpu.md
+    to: _static/_shared/_admonition/gpu.md
 lectures/bivariate_dist.md:
   canonical: intro
   sources:
@@ -173,6 +281,26 @@ lectures/bivariate_dist.md:
     digest: 031fe469537cd7194e95749ab255dc95983f743f36ac93767ec5ec0ad8f91392
   promoted_at:
     intro: 530ede2b348321d3924f7c900691b7daf165757c
+  assets: []
+  rewrites: []
+lectures/blackwell_kihlstrom.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: blackwell_kihlstrom.md
+    digest: dbe7d7662e0e1f9eea53207fcecea641a15b558d106596cd09a9eec1226630b1
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
+lectures/bounded_rationality.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: bounded_rationality.md
+    digest: d3e66ca58166329c0c596c20bfa47763f4483b27d3bbdab64cb586d2f115f5f7
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
   assets: []
   rewrites: []
 lectures/business_cycle.md:
@@ -271,6 +399,46 @@ lectures/career.md:
     to: _static/career/career_solutions_ex1_py.png
   - from: _admonition/gpu.md
     to: _static/_shared/_admonition/gpu.md
+lectures/cass_fiscal.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: cass_fiscal.md
+    digest: 2c01f97c79d55386da1d51ba15524e6272e9d35e11dcae1f11528654e74890f2
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
+lectures/cass_fiscal_2.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: cass_fiscal_2.md
+    digest: 7f06812dcb3607d890c05694d2b1bf798ef5e16a18e29189e44e56fa59edb025
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
+lectures/cass_koopmans_1.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: cass_koopmans_1.md
+    digest: 7ea98f092ce7f37f77593376dc58422805947d069747818762cd7b1f269416fc
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
+lectures/cass_koopmans_2.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: cass_koopmans_2.md
+    digest: 11f3d2a351127761553c5d75cb75ae1791af0637d62bf27f4079831f0290cf63
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
 lectures/chang_credible.md:
   canonical: advanced
   sources:
@@ -307,6 +475,16 @@ lectures/chang_ramsey.md:
   rewrites:
   - from: _static/lecture_specific/chang_credible/changecon.py
     to: _static/_shared/chang_credible/changecon.py
+lectures/chow_business_cycles.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: chow_business_cycles.md
+    digest: 4422037804728bd32aa18329db5700ef6c3149f8ac9915527c97f3197085c8ae
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
 lectures/cobweb.md:
   canonical: intro
   sources:
@@ -408,6 +586,16 @@ lectures/discrete_dp.md:
     to: _static/discrete_dp/finite_dp_simple_og2.png
   - from: /_static/lecture_specific/discrete_dp/finite_dp_simple_og.png
     to: _static/discrete_dp/finite_dp_simple_og.png
+lectures/divergence_measures.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: divergence_measures.md
+    digest: 202b659ade09ee0a9a5f173cf393dccca787d2062cbf5cfbe69092b4266de9e9
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
 lectures/dyn_stack.md:
   canonical: advanced
   sources:
@@ -421,6 +609,16 @@ lectures/dyn_stack.md:
   promoted_at:
     advanced: 9604f98388850af66a3f919d1994957750f699f0
     dp: da83d88d8de7ab04a4c722bdbd0ce6e2c8333c7c
+  assets: []
+  rewrites: []
+lectures/eig_circulant.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: eig_circulant.md
+    digest: 6d8a86dc9be93af8432fd310f9c0c6ea4484f7d81a103fe56c4784088d30bde9
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
   assets: []
   rewrites: []
 lectures/eigen_I.md:
@@ -443,6 +641,19 @@ lectures/eigen_II.md:
     intro: 530ede2b348321d3924f7c900691b7daf165757c
   assets: []
   rewrites: []
+lectures/endogenous_lake.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: endogenous_lake.md
+    digest: da093563bb7328269bad2cd2dd4fce9ceb9b4d7e2f01d7df457343bc3e388e69
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets:
+  - _static/_shared/_admonition/gpu.md
+  rewrites:
+  - from: _admonition/gpu.md
+    to: _static/_shared/_admonition/gpu.md
 lectures/equalizing_difference.md:
   canonical: intro
   sources:
@@ -453,6 +664,54 @@ lectures/equalizing_difference.md:
     intro: 530ede2b348321d3924f7c900691b7daf165757c
   assets: []
   rewrites: []
+lectures/exchange_rate_learning.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: exchange_rate_learning.md
+    digest: 5c74a503a128ddda775e11940ec365d1d87a17497092f45fa0945f083f604c8f
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
+lectures/exchangeable.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: exchangeable.md
+    digest: 8b19b512bafaaa4fde1318c825e28e7c62494f477fb7a5e1960f3d691afe949d
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
+lectures/finite_markov.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: finite_markov.md
+    digest: 7224f5ca5f41ef16071a4544a65f02e3a2aaf8a80b32a9327384d8fa767ead4b
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets:
+  - _static/finite_markov/hamilton_graph.png
+  - _static/finite_markov/mc_aperiodicity1.png
+  - _static/finite_markov/mc_aperiodicity2.png
+  - _static/finite_markov/mc_irreducibility1.png
+  - _static/finite_markov/mc_irreducibility2.png
+  - _static/finite_markov/web_graph.png
+  rewrites:
+  - from: /_static/lecture_specific/finite_markov/mc_irreducibility1.png
+    to: _static/finite_markov/mc_irreducibility1.png
+  - from: /_static/lecture_specific/finite_markov/mc_irreducibility2.png
+    to: _static/finite_markov/mc_irreducibility2.png
+  - from: /_static/lecture_specific/finite_markov/mc_aperiodicity1.png
+    to: _static/finite_markov/mc_aperiodicity1.png
+  - from: /_static/lecture_specific/finite_markov/mc_aperiodicity2.png
+    to: _static/finite_markov/mc_aperiodicity2.png
+  - from: /_static/lecture_specific/finite_markov/hamilton_graph.png
+    to: _static/finite_markov/hamilton_graph.png
+  - from: /_static/lecture_specific/finite_markov/web_graph.png
+    to: _static/finite_markov/web_graph.png
 lectures/fitting_distributions.md:
   canonical: intro
   sources:
@@ -481,6 +740,36 @@ lectures/functions.md:
     digest: 4b602fccc06f2eb9bcc6043e1325e152b66646b1cd3ded447fc3e678a39a3563
   promoted_at:
     programming: e2d28d003d61f45bf75e790a94b8d478ed0902f2
+  assets: []
+  rewrites: []
+lectures/gallant_tauchen.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: gallant_tauchen.md
+    digest: 2bdaff7a4539c445247a3dd9b1e8a3905cd50d13b9a5cb1d588a13c423d3c1c4
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
+lectures/ge_arrow.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: ge_arrow.md
+    digest: 90dc0153da3f2d3b2b397b41aa7e252a63d2181a01901bdc307cce9bcef890af
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
+lectures/genetic_classifier.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: genetic_classifier.md
+    digest: ed58c000c297045eb157e4aa606520547fe0e26041a7b5507b7d30bf0930150c
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
   assets: []
   rewrites: []
 lectures/geom_series.md:
@@ -546,6 +835,36 @@ lectures/greek_square.md:
     intro: 530ede2b348321d3924f7c900691b7daf165757c
   assets: []
   rewrites: []
+lectures/hansen_singleton_1982.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: hansen_singleton_1982.md
+    digest: 141fbb7b161ef8d4d711c5e055609726dae27c3b64ae83ba34ee6143acefe353
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
+lectures/hansen_singleton_1983.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: hansen_singleton_1983.md
+    digest: 7b756840e103cfb6668e72ed0b0c733012e2e41d6bee3044ca12f8633eac30ec
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
+lectures/harrison_kreps.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: harrison_kreps.md
+    digest: 59bff69d859fb6cc13dc35451f97e077a68a2b34272cf6ae8844884f17c24c71
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
 lectures/heavy_tails.md:
   canonical: intro
   sources:
@@ -554,6 +873,26 @@ lectures/heavy_tails.md:
     digest: f7c6a053801180858a91c8abe5b15418ff87671f964a082222d167ae35ba9409
   promoted_at:
     intro: 530ede2b348321d3924f7c900691b7daf165757c
+  assets: []
+  rewrites: []
+lectures/hoist_failure.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: hoist_failure.md
+    digest: 9f20603d80a0514f8be391dddbec89f30b1d8c65f35e3a73a2436bb9a7fe68cb
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
+lectures/house_auction.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: house_auction.md
+    digest: 9ad108e4e061c7e23f4056cec150eca503ca3d07973683a839740bf17502623e
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
   assets: []
   rewrites: []
 lectures/ifp_advanced.md:
@@ -646,6 +985,19 @@ lectures/ifp_opi.md:
   rewrites:
   - from: _admonition/gpu.md
     to: _static/_shared/_admonition/gpu.md
+lectures/imp_sample.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: imp_sample.md
+    digest: 08081b40a6f35d7c0ac0ddfb2af4e71a600f41399c51c961ed39ea8439fe2086
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets:
+  - _static/_shared/_admonition/gpu.md
+  rewrites:
+  - from: _admonition/gpu.md
+    to: _static/_shared/_admonition/gpu.md
 lectures/inequality.md:
   canonical: intro
   sources:
@@ -696,6 +1048,16 @@ lectures/intro_supply_demand.md:
     intro: 530ede2b348321d3924f7c900691b7daf165757c
   assets: []
   rewrites: []
+lectures/inventory_dynamics.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: inventory_dynamics.md
+    digest: b0e243ea61a12c208ffec80f3106de6001fe176ef6f04c9e9d8a40e93782124f
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
 lectures/inventory_q.md:
   canonical: intermediate
   sources:
@@ -742,6 +1104,52 @@ lectures/jv.md:
   rewrites:
   - from: _admonition/gpu.md
     to: _static/_shared/_admonition/gpu.md
+lectures/kalman.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: kalman.md
+    digest: 19d3229e90ae193e1ad840b3b0159176a0fb30745641c9030bc85c2314b54a84
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets:
+  - _static/kalman/kl_ex1_fig.png
+  rewrites:
+  - from: /_static/lecture_specific/kalman/kl_ex1_fig.png
+    to: _static/kalman/kl_ex1_fig.png
+lectures/kalman_2.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: kalman_2.md
+    digest: 39e64e88cbe52e82c65818e53cbf0b415c90841ae2675420ce3feb847114c815
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
+lectures/kalman_filter_var.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: kalman_filter_var.md
+    digest: fe17ad1984c84b447f4e42a7785b93d5802a819f6ff8d15c95066bef397475f4
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
+lectures/kesten_processes.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: kesten_processes.md
+    digest: 236108afaacc71f4d25bc059867ee02eb3fb2dcb40d2ca9eb329c440a910eeeb
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets:
+  - _static/_shared/_admonition/gpu.md
+  rewrites:
+  - from: _admonition/gpu.md
+    to: _static/_shared/_admonition/gpu.md
 lectures/laffer_adaptive.md:
   canonical: intro
   sources:
@@ -767,6 +1175,19 @@ lectures/lagrangian_lqdp.md:
     dp: da83d88d8de7ab04a4c722bdbd0ce6e2c8333c7c
   assets: []
   rewrites: []
+lectures/lake_model.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: lake_model.md
+    digest: 59993883552f3b140628de3e13320857b3a5bba72a963da318a4fa7eb4637318
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets:
+  - _static/_shared/_admonition/gpu.md
+  rewrites:
+  - from: _admonition/gpu.md
+    to: _static/_shared/_admonition/gpu.md
 lectures/lake_model_intro.md:
   canonical: intro
   sources:
@@ -780,6 +1201,69 @@ lectures/lake_model_intro.md:
   rewrites:
   - from: /_static/lecture_specific/lake_model/lake_model_worker.png
     to: _static/_shared/lake_model/lake_model_worker.png
+lectures/learning_approximation.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: learning_approximation.md
+    digest: d90353ad3036e1082657b55452d25957e3d2995f967b778f10b69e756048d886
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
+lectures/likelihood_bayes.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: likelihood_bayes.md
+    digest: 492a3ec43663f9ad876502ce4eef4efe63aec82247ed0dd4109992f374f78abc
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
+lectures/likelihood_ratio_process.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: likelihood_ratio_process.md
+    digest: 9c63b104f369178c7d659e19c667d72fa1dc3de5faa8c22672af4c674bd004cd
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
+lectures/likelihood_ratio_process_2.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: likelihood_ratio_process_2.md
+    digest: 33aad5fd41b44ce455d35ebe68eaae0cd859232c7b7803a4c67d93be6052b256
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
+lectures/likelihood_var.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: likelihood_var.md
+    digest: 959fad599eabf8985cd711fa65750bf9b60335a1a3f5b14974c9ea8c4c8483fa
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
+lectures/linear_algebra.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: linear_algebra.md
+    digest: 8dab3932cc751397fd6dae43107026503a35173ff04210978d89f61f63666b74
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets:
+  - _static/linear_algebra/course_notes.pdf
+  rewrites:
+  - from: https://python.quantecon.org/_static/lecture_specific/linear_algebra/course_notes.pdf
+    to: _static/linear_algebra/course_notes.pdf
 lectures/linear_equations.md:
   canonical: intro
   sources:
@@ -788,6 +1272,29 @@ lectures/linear_equations.md:
     digest: 2e253e7da94837bd2dc454163a477c3f7f544f09fe0480998d84739919f8bcdf
   promoted_at:
     intro: 530ede2b348321d3924f7c900691b7daf165757c
+  assets: []
+  rewrites: []
+lectures/linear_models.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: linear_models.md
+    digest: ae2e5175b70733a105c01aadcc939fe7514023163d4b7c9eece890ca11263470
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets:
+  - _static/linear_models/iteration_notes.pdf
+  rewrites:
+  - from: https://python.quantecon.org/_static/lecture_specific/linear_models/iteration_notes.pdf
+    to: _static/linear_models/iteration_notes.pdf
+lectures/lln_clt.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: lln_clt.md
+    digest: 26198954db8296f65dbc6a07a8009a983055c5904efdad02e69eca72bde24ddb
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
   assets: []
   rewrites: []
 lectures/lln_clt_intro.md:
@@ -815,6 +1322,16 @@ lectures/long_run_growth.md:
     to: _static/long_run_growth/tooze_ch1_graph.png
   - from: _static/lecture_specific/long_run_growth/tooze_ch1_graph.png
     to: _static/long_run_growth/tooze_ch1_graph.png
+lectures/long_run_risk_operator.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: long_run_risk_operator.md
+    digest: f9ffbfbc2c5e4473c69b37e63b2e380b0bfee5c11805da092f6a69a4f3bef685
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
 lectures/lp_intro.md:
   canonical: intro
   sources:
@@ -823,6 +1340,16 @@ lectures/lp_intro.md:
     digest: d3196d5f45d589d561e3fc09019a93ad8ce3b436591a015af639011c151e4963
   promoted_at:
     intro: 530ede2b348321d3924f7c900691b7daf165757c
+  assets: []
+  rewrites: []
+lectures/lq_bewley_complete_markets.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: lq_bewley_complete_markets.md
+    digest: 4c5e0746ae400a68a247d478249d7578cff06bf34ab96a561553deb3c8effc8b
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
   assets: []
   rewrites: []
 lectures/lq_inventories.md:
@@ -838,6 +1365,56 @@ lectures/lq_inventories.md:
   promoted_at:
     intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
     dp: da83d88d8de7ab04a4c722bdbd0ce6e2c8333c7c
+  assets: []
+  rewrites: []
+lectures/lq_mean_field_games.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: lq_mean_field_games.md
+    digest: d76a4de3fc14d91105e39ba1be84a0633a07d800cdafb3baee59fbae5c4504e8
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
+lectures/lq_mean_field_games_extensions.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: lq_mean_field_games_extensions.md
+    digest: 05a4aed390864112fb2bafbfac0f53f4f7300c7f8c6419b052fdf5794e62871c
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
+lectures/lq_permanent_income.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: lq_permanent_income.md
+    digest: b861e7da7c65530c02dce8e46129521e81d4237e6cb6fa69ca30103ec74b10d0
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
+lectures/lq_robust_bewley.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: lq_robust_bewley.md
+    digest: e8687d17ad6525cd47a32edc2ba95137efece7433d5439dd5c1349fe24c15aea
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
+lectures/lq_robust_smoothing.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: lq_robust_smoothing.md
+    digest: 10d45920c053cf89ad531b2098e9f28f185709d89d9571f4b64660d09f0c05e0
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
   assets: []
   rewrites: []
 lectures/lqcontrol.md:
@@ -888,6 +1465,56 @@ lectures/lqramsey.md:
   rewrites:
   - from: _static/lecture_specific/lqramsey/firenze.pdf
     to: _static/lqramsey/firenze.pdf
+lectures/ls_learning.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: ls_learning.md
+    digest: fda84032a15fc4bdc0f4be822d39cfe43169a0de4d059f0f8f696bec87b2dfc9
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
+lectures/lucas_prescott_investment.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: lucas_prescott_investment.md
+    digest: 09dfdb1b837856943103ecf1f367e8b15bc082c65fda46d1631158d8a10cac9f
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
+lectures/marimon_mcgrattan_sargent.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: marimon_mcgrattan_sargent.md
+    digest: 4b0de0dcfa804aa803155113a01c31f0c44b8a4732c372ca32517177d726446d
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
+lectures/market_diffusion.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: market_diffusion.md
+    digest: de6e8fd2ef9a050391a3e8e43407a6766d81c92126a8fad018bab315b9b53c25
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
+lectures/markov_asset.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: markov_asset.md
+    digest: 0e01f3843a19e34159bd45b637e6a810642c81eb06000ef60dd2a2c5eb0433aa
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
 lectures/markov_chains_I.md:
   canonical: intro
   sources:
@@ -938,6 +1565,28 @@ lectures/markov_jump_lq.md:
     dp: da83d88d8de7ab04a4c722bdbd0ce6e2c8333c7c
   assets: []
   rewrites: []
+lectures/markov_perf.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: markov_perf.md
+    digest: 83ccf7a2dc299fa6a367351dfa5c1ae49af4c5173c8855f96a3abc314ea75e4d
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets:
+  - _static/markov_perf/duopoly_mpe.py
+  - _static/markov_perf/judd_fig1.png
+  - _static/markov_perf/judd_fig2.png
+  - _static/markov_perf/mpe_vs_monopolist.png
+  rewrites:
+  - from: /_static/lecture_specific/markov_perf/mpe_vs_monopolist.png
+    to: _static/markov_perf/mpe_vs_monopolist.png
+  - from: /_static/lecture_specific/markov_perf/judd_fig1.png
+    to: _static/markov_perf/judd_fig1.png
+  - from: /_static/lecture_specific/markov_perf/judd_fig2.png
+    to: _static/markov_perf/judd_fig2.png
+  - from: _static/lecture_specific/markov_perf/duopoly_mpe.py
+    to: _static/markov_perf/duopoly_mpe.py
 lectures/matplotlib.md:
   canonical: programming
   sources:
@@ -1056,6 +1705,75 @@ lectures/mccall_q.md:
     dp: da83d88d8de7ab04a4c722bdbd0ce6e2c8333c7c
   assets: []
   rewrites: []
+lectures/mccall_risk.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: mccall_risk.md
+    digest: dbb6fb47ae29af90f710545ff63d0edcf722572e2908aee4ea5e3125ddf2343f
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets:
+  - _static/_shared/_admonition/gpu.md
+  rewrites:
+  - from: _admonition/gpu.md
+    to: _static/_shared/_admonition/gpu.md
+lectures/measurement_models.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: measurement_models.md
+    digest: ae4e54b68394c54742103501807d617627c290ef74ba5367898b4596ed45dbed
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
+lectures/merging_of_opinions.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: merging_of_opinions.md
+    digest: 8e2d10ef998b88b5f7dd303ea1e2e1c6dfea6381b2b74ed81819240818d2f435
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
+lectures/misspecified_recovery.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: misspecified_recovery.md
+    digest: df6c17cf5ed67ef9db887672c45d96fce3cdff47a0d580dfebb0efe1e11f0923
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
+lectures/mix_model.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: mix_model.md
+    digest: 6c476c057711239e2ed09f6781f70f8db4889781995a6d18d0aa5351bdd78a08
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets:
+  - _static/_shared/_admonition/gpu.md
+  rewrites:
+  - from: _admonition/gpu.md
+    to: _static/_shared/_admonition/gpu.md
+lectures/mle.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: mle.md
+    digest: f6b85d0e59f32a2d1401e721072d6db352f5274ef56882e9341d11448d3cc88e
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets:
+  - _static/_shared/_admonition/gpu.md
+  rewrites:
+  - from: _admonition/gpu.md
+    to: _static/_shared/_admonition/gpu.md
 lectures/mle_intro.md:
   canonical: intro
   sources:
@@ -1106,6 +1824,16 @@ lectures/monte_carlo.md:
     intro: 530ede2b348321d3924f7c900691b7daf165757c
   assets: []
   rewrites: []
+lectures/morris_learn.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: morris_learn.md
+    digest: e071d1d8f3928d25ccf588c05612ff7064f8e165c073d2ac5991ebe9cae82272
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
 lectures/msy_fishery.md:
   canonical: intro
   sources:
@@ -1114,6 +1842,26 @@ lectures/msy_fishery.md:
     digest: d9f4a58c1cb4b499732d49ffec611394c43d177d73db7337835730a82ff24ebe
   promoted_at:
     intro: 530ede2b348321d3924f7c900691b7daf165757c
+  assets: []
+  rewrites: []
+lectures/multi_hyper.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: multi_hyper.md
+    digest: b64409944a145fb67948288660bd11325862383e0b3d68682d54c3f505a0bd1a
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
+lectures/multivariate_normal.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: multivariate_normal.md
+    digest: 7f979883b805468d879f2debc56d91fc35374eb75f34b40c52b30be724c803b1
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
   assets: []
   rewrites: []
 lectures/names.md:
@@ -1153,6 +1901,16 @@ lectures/names.md:
     to: _static/_shared/oop_intro/global.png
   - from: /_static/lecture_specific/oop_intro/local1.png
     to: _static/_shared/oop_intro/local1.png
+lectures/navy_captain.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: navy_captain.md
+    digest: b4fc19185bec0a691d721d4e723a85bab110f5dce916c056a7b2f45245cd4a60
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
 lectures/need_for_speed.md:
   canonical: programming
   sources:
@@ -1197,6 +1955,19 @@ lectures/networks.md:
     to: _static/networks/weighted.png
   - from: /_static/lecture_specific/networks/mc.png
     to: _static/networks/mc.png
+lectures/newton_method.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: newton_method.md
+    digest: 2e7c2f3f33d8511747bd14d791eaa7e933dda0fdcf3ec41163762bfe245123a8
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets:
+  - _static/_shared/_admonition/gpu.md
+  rewrites:
+  - from: _admonition/gpu.md
+    to: _static/_shared/_admonition/gpu.md
 lectures/numba.md:
   canonical: programming
   sources:
@@ -1271,6 +2042,26 @@ lectures/olg.md:
     intro: 530ede2b348321d3924f7c900691b7daf165757c
   assets: []
   rewrites: []
+lectures/olg_adaptive_money.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: olg_adaptive_money.md
+    digest: ae2d897378ca5605ec0fd1b8e08e33193e94eb324959bd842865f61c9b81e96d
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
+lectures/ols.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: ols.md
+    digest: ebbd8f2f7e8c54ffcc2c01699e7dd5692ca8d36d2e197497687d094a2a8106e3
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
 lectures/oop_intro.md:
   canonical: programming
   sources:
@@ -1308,6 +2099,39 @@ lectures/opt_tax_recur.md:
     to: _static/_shared/opt_tax_recur/crra_utility.py
   - from: _static/lecture_specific/opt_tax_recur/log_utility.py
     to: _static/_shared/opt_tax_recur/log_utility.py
+lectures/opt_transport.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: opt_transport.md
+    digest: 3493517fdd779384d600caebfd01c11cc7a15e6c591b4e9d9b77fd19443ccf85
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets:
+  - _static/opt_transport/optimal_transport_splitting_experiment.png
+  rewrites:
+  - from: /_static/lecture_specific/opt_transport/optimal_transport_splitting_experiment.png
+    to: _static/opt_transport/optimal_transport_splitting_experiment.png
+lectures/optimal_growth_uncertainty.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: optimal_growth_uncertainty.md
+    digest: baabaac5ff365ba0fd76ed513e29ba6892a8d6504d0b372c5457ecb4865b6b93
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
+lectures/organization_capital.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: organization_capital.md
+    digest: 8437eba3bf830a170838a528d1a39e38475b1f2cffe09cf1d6fc94ae858095a2
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
 lectures/os.md:
   canonical: intermediate
   sources:
@@ -1467,12 +2291,132 @@ lectures/perm_income_cons.md:
     dp: da83d88d8de7ab04a4c722bdbd0ce6e2c8333c7c
   assets: []
   rewrites: []
+lectures/phillips_adaptive.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: phillips_adaptive.md
+    digest: 37eedd2a99fb7aa69d88f81a9b51d15ebe7a8049e523ee65eaf79001f3595737
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
+lectures/phillips_credibility.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: phillips_credibility.md
+    digest: b94aab0eb147f2190eb4cde34009fa80d0139ce967d8c8955d5aca8f9b2cc0dd
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
+lectures/phillips_credible_policies.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: phillips_credible_policies.md
+    digest: 34d5a36704076028fd9330d40dd13cb7be6881e762caf315fdaf7129df6338ed
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
 lectures/phillips_drifts_volatilities.md:
   canonical: intermediate
   sources:
   - series: intermediate
     path: phillips_drifts_volatilities.md
     digest: 6dfe8672b8a93e9eb8293cb0a3cd8de2f9867e78231b17c70c2b76e257e97c67
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
+lectures/phillips_drifts_volatilities_2.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: phillips_drifts_volatilities_2.md
+    digest: b7a7fac69abfead96b2a09eda3d107b475e4d62ba6d82bcfa514f5d673ba13e6
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
+lectures/phillips_escaping_nash.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: phillips_escaping_nash.md
+    digest: 3ba4047609257e2fdc4117800c7b1aa04da54b75bba3ac5b4c1ca7c018c3f32a
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
+lectures/phillips_learning.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: phillips_learning.md
+    digest: e8544d69d1fd9206f0b3a1fd4867ab1b7b9cb88053c484417322c8b864d4efdf
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
+lectures/phillips_lost_conquest.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: phillips_lost_conquest.md
+    digest: 75422f34a681e485d8e990a441a52e3379395edb63bc1fb9f9b51b039883134d
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
+lectures/phillips_misspecified.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: phillips_misspecified.md
+    digest: 786976d0537a11712ec55e7fc397cf5097ac4ef290b5462088964fa6d8cdc27e
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
+lectures/phillips_policy_evaluation.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: phillips_policy_evaluation.md
+    digest: 9772a9a9554c951923e5acb8d08c156ca09c9cf050063d92165c52e59b16a6fd
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
+lectures/phillips_priors.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: phillips_priors.md
+    digest: 0eec3142f3215725e78c1e45e56b0a50ae80e64143c83d664e4834add856f0c6
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
+lectures/phillips_self_confirming.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: phillips_self_confirming.md
+    digest: 3278fbddde06989887c12afd0c6d3e11930c0f2161f29771cf419ad5abb517f6
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
+lectures/phillips_two_stories.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: phillips_two_stories.md
+    digest: afa9f47962a95df0b65f158f81836066aca1dad33454a57b3758f213dd1e4cf9
   promoted_at:
     intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
   assets: []
@@ -1487,6 +2431,16 @@ lectures/polars.md:
     programming: e2d28d003d61f45bf75e790a94b8d478ed0902f2
   assets: []
   rewrites: []
+lectures/pricing_information.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: pricing_information.md
+    digest: 80c02af3dbde984badedfb1dd7646a76c4f0b3a56179f7bc8ee651998ee463fd
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
 lectures/prob_dist.md:
   canonical: intro
   sources:
@@ -1495,6 +2449,36 @@ lectures/prob_dist.md:
     digest: 7cf2adfb0838626d8fbf0fc7750697ea3e47c892501e0102481173be02e5aec5
   promoted_at:
     intro: 530ede2b348321d3924f7c900691b7daf165757c
+  assets: []
+  rewrites: []
+lectures/prob_matrix.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: prob_matrix.md
+    digest: 5f919e78f2941daa4761fcf5bad7135af7f7b3edafbd4279dde1987fb70ef568
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
+lectures/prob_meaning.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: prob_meaning.md
+    digest: 110b592fde19539bf4ef5cab8ef8a7f04e5149580513d8a6fe2528d70940a610
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
+lectures/prospects_bounded_rationality.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: prospects_bounded_rationality.md
+    digest: 978a104b15b8e0ed1bc29bc1be94121824c2f825f6324bd013183685bcfd702e
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
   assets: []
   rewrites: []
 lectures/pv.md:
@@ -1550,6 +2534,76 @@ lectures/python_oop.md:
     programming: e2d28d003d61f45bf75e790a94b8d478ed0902f2
   assets: []
   rewrites: []
+lectures/qr_decomp.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: qr_decomp.md
+    digest: c52641d516a4df92873eac2287a7608d09dbc05f3b56a5f79cb6495b71923f8f
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
+lectures/rand_resp.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: rand_resp.md
+    digest: b3a137c9f031d993f030ab17f79ec5cc75529df616070add440d320af1e1a538
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
+lectures/rational_expectations.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: rational_expectations.md
+    digest: 7121ed59d6008b7184ca0cab4a3ef913597fb61863fc9795c767533df837af98
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
+lectures/rational_learning_re.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: rational_learning_re.md
+    digest: 3457c47e0fc634f1504d501c320ad9900406700aac88321cfc119f43b40e1865
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
+lectures/re_with_feedback.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: re_with_feedback.md
+    digest: d7374e15d756c3d4913adb4e84ac792db049b227c64a04629c96ffd380bb1ffb
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
+lectures/robust_permanent_income.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: robust_permanent_income.md
+    digest: ca410c91ae9d62a2b83f0a0a45a889a36512b838f2d565032cc3f2bc4d3d04c0
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
+lectures/ross_recovery.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: ross_recovery.md
+    digest: 9158acad8fcb958ddfe60df843eea3d93c4333fd5fcf1ad3f914f105e9011efb
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
 lectures/rs_inventory_q.md:
   canonical: intermediate
   sources:
@@ -1563,6 +2617,26 @@ lectures/rs_inventory_q.md:
   promoted_at:
     intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
     dp: da83d88d8de7ab04a4c722bdbd0ce6e2c8333c7c
+  assets: []
+  rewrites: []
+lectures/samuelson.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: samuelson.md
+    digest: a4f65fc75be1341382e77ad32fd2565c2897f86cb63f94d7ad9680c8f0991248
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
+lectures/sargent_surico.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: sargent_surico.md
+    digest: b88272acf9bdb02602f293c7f265876e39ad43e5e156eb667a33719e33655ec6
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
   assets: []
   rewrites: []
 lectures/scalar_dynam.md:
@@ -1632,6 +2706,16 @@ lectures/simple_linear_regression.md:
     intro: 530ede2b348321d3924f7c900691b7daf165757c
   assets: []
   rewrites: []
+lectures/sir_model.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: sir_model.md
+    digest: f5cfa4f839f72c02a3ca15764156bae68e7f949c6cda34a004419cba1a5bb5c5
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
 lectures/smoothing.md:
   canonical: advanced
   sources:
@@ -1662,6 +2746,16 @@ lectures/smoothing_tax.md:
     dp: da83d88d8de7ab04a4c722bdbd0ce6e2c8333c7c
   assets: []
   rewrites: []
+lectures/social_security_depletion.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: social_security_depletion.md
+    digest: 1814d2080be17e7ea7616064da67ad8ac5fd177e76b0761ea15c2906a8b5ae9c
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
 lectures/solow.md:
   canonical: intro
   sources:
@@ -1670,6 +2764,16 @@ lectures/solow.md:
     digest: 1a4352b74eb922991139f965e971a2c671efc634f6c42b4208a273449791e2ce
   promoted_at:
     intro: 530ede2b348321d3924f7c900691b7daf165757c
+  assets: []
+  rewrites: []
+lectures/stats_examples.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: stats_examples.md
+    digest: 8ed0559816d7af14247b2328e73f0c5072065cd7ce8e718cc0c6c0d459752412
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
   assets: []
   rewrites: []
 lectures/supply_demand_heterogeneity.md:
@@ -1690,6 +2794,26 @@ lectures/supply_demand_multiple_goods.md:
     digest: 7bdc255a81c0bdac00fdb5632b42952495239032c4248490cbf9bcb65ccea095
   promoted_at:
     intro: 530ede2b348321d3924f7c900691b7daf165757c
+  assets: []
+  rewrites: []
+lectures/survival_recursive_preferences.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: survival_recursive_preferences.md
+    digest: fd7342dd90f666cd7047b50833eaa607e56c716ffa6676ad3e8eed34ab387002
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
+lectures/svd_intro.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: svd_intro.md
+    digest: e08871528ec9cf39d801aca814597181ce703285940e9108a8e2d148a0fab0fd
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
   assets: []
   rewrites: []
 lectures/sympy.md:
@@ -1757,6 +2881,26 @@ lectures/tax_smoothing_3.md:
     dp: da83d88d8de7ab04a4c722bdbd0ce6e2c8333c7c
   assets: []
   rewrites: []
+lectures/theil_1.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: theil_1.md
+    digest: 4fe36978c54006b5960bf8461e491fc88f8964c84ccea3c05029978d6fe4a97e
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
+lectures/theil_2.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: theil_2.md
+    digest: 19808174382bd0c9dc12fb3faf79088eb5da3a3e8e2aa26304c9f3a2eb89677a
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
 lectures/time_series_with_matrices.md:
   canonical: intro
   sources:
@@ -1767,6 +2911,29 @@ lectures/time_series_with_matrices.md:
     intro: 530ede2b348321d3924f7c900691b7daf165757c
   assets: []
   rewrites: []
+lectures/two_auctions.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: two_auctions.md
+    digest: ce70fd50b5399d2d321885a6e604aa803286500bac747e7160e02a4a4bedf827
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
+lectures/two_computation.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: two_computation.md
+    digest: 525e4113d38ae1875f29e2937ba3917799a543fe518d5efe48117a02d898f6dd
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets:
+  - _static/_shared/_admonition/gpu.md
+  rewrites:
+  - from: _admonition/gpu.md
+    to: _static/_shared/_admonition/gpu.md
 lectures/un_insure.md:
   canonical: advanced
   sources:
@@ -1782,6 +2949,51 @@ lectures/un_insure.md:
     dp: da83d88d8de7ab04a4c722bdbd0ce6e2c8333c7c
   assets: []
   rewrites: []
+lectures/uncertainty_traps.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: uncertainty_traps.md
+    digest: ed188efd4b874830cb9dcdf955c26d4107c54a8f8411849cc69f895f08421427
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets:
+  - _static/uncertainty_traps/uncertainty_traps_45.png
+  - _static/uncertainty_traps/uncertainty_traps_mu.png
+  - _static/uncertainty_traps/uncertainty_traps_sim.png
+  rewrites:
+  - from: /_static/lecture_specific/uncertainty_traps/uncertainty_traps_sim.png
+    to: _static/uncertainty_traps/uncertainty_traps_sim.png
+  - from: /_static/lecture_specific/uncertainty_traps/uncertainty_traps_45.png
+    to: _static/uncertainty_traps/uncertainty_traps_45.png
+  - from: /_static/lecture_specific/uncertainty_traps/uncertainty_traps_mu.png
+    to: _static/uncertainty_traps/uncertainty_traps_mu.png
+lectures/unemployment_linear.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: unemployment_linear.md
+    digest: 8055c20f4943f7f9796c22ec8d98499188971231e0bed4eebe178e2a6f1ac723
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets:
+  - _static/_shared/_admonition/gpu.md
+  rewrites:
+  - from: _admonition/gpu.md
+    to: _static/_shared/_admonition/gpu.md
+lectures/unemployment_shocks.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: unemployment_shocks.md
+    digest: 786d0f1df7d90f4f10b474c7bdd92e4a8b3804225f5d12fde5cbe1b37e2081c6
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets:
+  - _static/_shared/_admonition/gpu.md
+  rewrites:
+  - from: _admonition/gpu.md
+    to: _static/_shared/_admonition/gpu.md
 lectures/unpleasant.md:
   canonical: intro
   sources:
@@ -1790,6 +3002,82 @@ lectures/unpleasant.md:
     digest: cd95f9948bb26911dc5f2f7f6872154648e70b349a0ba326e946c3d3f2e11a20
   promoted_at:
     intro: 530ede2b348321d3924f7c900691b7daf165757c
+  assets: []
+  rewrites: []
+lectures/util_rand_resp.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: util_rand_resp.md
+    digest: f49df0ff149ba1f61e4ce15607c5272483a3bff8a8385ca4e3b555f1792f1c54
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
+lectures/var_dmd.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: var_dmd.md
+    digest: faffa52890e4fc1addb50ca535a60c0083af3bf9d24f61151f6f9c1af396cb1a
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
+lectures/var_subsets.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: var_subsets.md
+    digest: ec26943d42aac530a3760ebddbd2179d68d6f85b61975fa482739ef70f1ae0fa
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
+lectures/von_neumann_model.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: von_neumann_model.md
+    digest: 3d5cf69257a6d6423c05ed95edf3565628cb83d76bd418b482ba0d28be465f3b
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets: []
+  rewrites: []
+lectures/wald_friedman.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: wald_friedman.md
+    digest: f8d923907b6420653f3b90fcf2464478c9e656fd4bef9a7ec88e35bd72f004dd
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets:
+  - _static/wald_friedman/wald_dec_rule.png
+  rewrites:
+  - from: /_static/lecture_specific/wald_friedman/wald_dec_rule.png
+    to: _static/wald_friedman/wald_dec_rule.png
+lectures/wald_friedman_2.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: wald_friedman_2.md
+    digest: 7ed19b24567f1af1de6b10e251bc635a4bc7f8fc256d11f456489f1ebffceefe
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+  assets:
+  - _static/wald_friedman_2/wald_dec_rule.png
+  rewrites:
+  - from: /_static/lecture_specific/wald_friedman_2/wald_dec_rule.png
+    to: _static/wald_friedman_2/wald_dec_rule.png
+lectures/wealth_dynamics.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: wealth_dynamics.md
+    digest: c59bc277330c1a1677e85b900127cb090b95a7bdbca8f862419aa318a5b2a7ce
+  promoted_at:
+    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
   assets: []
   rewrites: []
 lectures/wealth_tax.md:
@@ -2065,6 +3353,42 @@ assets:
     sources:
     - series: advanced
       path: _static/lecture_specific/discrete_dp/finite_dp_simple_og2.png
+  _static/finite_markov/hamilton_graph.png:
+    canonical: intermediate
+    digest: 78a66b5ad9a341710c7334506edf27603f7913df5b3bb6bcf0a70ce39dd85bcc
+    sources:
+    - series: intermediate
+      path: _static/lecture_specific/finite_markov/hamilton_graph.png
+  _static/finite_markov/mc_aperiodicity1.png:
+    canonical: intermediate
+    digest: f7606217b3bb5cb0ce50c160fa3d7c22209746fbdf33f4e1fda0316bc92f135c
+    sources:
+    - series: intermediate
+      path: _static/lecture_specific/finite_markov/mc_aperiodicity1.png
+  _static/finite_markov/mc_aperiodicity2.png:
+    canonical: intermediate
+    digest: 35745aca18ea0ed7cb27f8848f5ba89042d7b525159ca9d951196fae5666a6a2
+    sources:
+    - series: intermediate
+      path: _static/lecture_specific/finite_markov/mc_aperiodicity2.png
+  _static/finite_markov/mc_irreducibility1.png:
+    canonical: intermediate
+    digest: c6e87cd6bc72e0b2c3996f0e0ab2919e111feed66e6803ba5fe7f147d518b604
+    sources:
+    - series: intermediate
+      path: _static/lecture_specific/finite_markov/mc_irreducibility1.png
+  _static/finite_markov/mc_irreducibility2.png:
+    canonical: intermediate
+    digest: 7ebe5c91226dfe21a8b00d2def072ea2ba60705e99f8ff80f1eefc96aad215d7
+    sources:
+    - series: intermediate
+      path: _static/lecture_specific/finite_markov/mc_irreducibility2.png
+  _static/finite_markov/web_graph.png:
+    canonical: intermediate
+    digest: f91a556813d7e53c2631427ad9d190566d47dc97770da2b8adbc01f917831e2f
+    sources:
+    - series: intermediate
+      path: _static/lecture_specific/finite_markov/web_graph.png
   _static/getting_started/debug.png:
     canonical: programming
     digest: 865371d146b89b7636e15eaf58924e8989974e1efd727e803e6b7e0ec2177052
@@ -2131,6 +3455,24 @@ assets:
     sources:
     - series: programming
       path: _static/lecture_specific/getting_started/starting_nb.png
+  _static/kalman/kl_ex1_fig.png:
+    canonical: intermediate
+    digest: 31d8221336efaa60b893908eb141ec0f02099249602a9c2215b87bd52fc79ef1
+    sources:
+    - series: intermediate
+      path: _static/lecture_specific/kalman/kl_ex1_fig.png
+  _static/linear_algebra/course_notes.pdf:
+    canonical: intermediate
+    digest: 8ec22b0f82667bae3d17c503f7be8c38e594db66eceb94bb1c37e33c8d05b7ba
+    sources:
+    - series: intermediate
+      path: _static/lecture_specific/linear_algebra/course_notes.pdf
+  _static/linear_models/iteration_notes.pdf:
+    canonical: intermediate
+    digest: 9b176b927a380370346715f2536a1fc7989f148f8e9150ad8a332bd0ebf6d9f6
+    sources:
+    - series: intermediate
+      path: _static/lecture_specific/linear_models/iteration_notes.pdf
   _static/long_run_growth/tooze_ch1_graph.png:
     canonical: intro
     digest: 2e3e4974290ca9e2e8177feda7285883395804cf4d3a4d8592308dc52db75e8e
@@ -2203,6 +3545,38 @@ assets:
     sources:
     - series: intro
       path: _static/lecture_specific/markov_chains_II/example4.png
+  _static/markov_perf/duopoly_mpe.py:
+    canonical: intermediate
+    digest: c0c552df516949edee5d00140cb682627df7c794afa69cafee9a696a3ecd3368
+    sources:
+    - series: intermediate
+      path: _static/lecture_specific/markov_perf/duopoly_mpe.py
+    - series: advanced
+      path: _static/lecture_specific/markov_perf/duopoly_mpe.py
+  _static/markov_perf/judd_fig1.png:
+    canonical: intermediate
+    digest: e0457cf3b046af14581e73c5643f8073ef2c5cd5c4a84639ee459ba0aab705d4
+    sources:
+    - series: intermediate
+      path: _static/lecture_specific/markov_perf/judd_fig1.png
+    - series: advanced
+      path: _static/lecture_specific/markov_perf/judd_fig1.png
+  _static/markov_perf/judd_fig2.png:
+    canonical: intermediate
+    digest: 42f641b9e69691c94095c68fe7c41dc633a12fe175a816cf05300251b3259e3d
+    sources:
+    - series: intermediate
+      path: _static/lecture_specific/markov_perf/judd_fig2.png
+    - series: advanced
+      path: _static/lecture_specific/markov_perf/judd_fig2.png
+  _static/markov_perf/mpe_vs_monopolist.png:
+    canonical: intermediate
+    digest: f61d837409ab88ecc61ff29959f7ef6c3b12d7ae2b1a29c90dcd226b9433d1d1
+    sources:
+    - series: intermediate
+      path: _static/lecture_specific/markov_perf/mpe_vs_monopolist.png
+    - series: advanced
+      path: _static/lecture_specific/markov_perf/mpe_vs_monopolist.png
   _static/matplotlib/matplotlib_ex1.png:
     canonical: programming
     digest: a4b3bacb5f1e65242e0730d1e618a38b94f1ba6dbeeb3801f84b040c9b2d7009
@@ -2263,6 +3637,12 @@ assets:
     sources:
     - series: advanced
       path: _static/lecture_specific/opt_tax_recur/recursive_allocation.py
+  _static/opt_transport/optimal_transport_splitting_experiment.png:
+    canonical: intermediate
+    digest: 4b8ae643619fe1f35a4c42d174c785c60a7bad0b1232ac76d43b38bbed3483a0
+    sources:
+    - series: intermediate
+      path: _static/lecture_specific/opt_transport/optimal_transport_splitting_experiment.png
   _static/pandas/pandas_indices_pctchange.png:
     canonical: programming
     digest: dfae704a7b9dc102332cb656d31c75b24973aad2c8503e9ace2ff0c5022042c9
@@ -2319,6 +3699,36 @@ assets:
     sources:
     - series: intro
       path: _static/lecture_specific/short_path/graph4.png
+  _static/uncertainty_traps/uncertainty_traps_45.png:
+    canonical: intermediate
+    digest: 758344d2bcd5097f76d78a4a3445aad992312ed0aa6d4b3351adc15a7b4f9d66
+    sources:
+    - series: intermediate
+      path: _static/lecture_specific/uncertainty_traps/uncertainty_traps_45.png
+  _static/uncertainty_traps/uncertainty_traps_mu.png:
+    canonical: intermediate
+    digest: a2be229ac579dee2995c5e113837d35a1cbabf7cabaf8ea1260ce06ec3b13dc0
+    sources:
+    - series: intermediate
+      path: _static/lecture_specific/uncertainty_traps/uncertainty_traps_mu.png
+  _static/uncertainty_traps/uncertainty_traps_sim.png:
+    canonical: intermediate
+    digest: f6e8a8291e53e6c190010e0e5924e9c84f0d51ca5e5422a232753857fb34825e
+    sources:
+    - series: intermediate
+      path: _static/lecture_specific/uncertainty_traps/uncertainty_traps_sim.png
+  _static/wald_friedman/wald_dec_rule.png:
+    canonical: intermediate
+    digest: 7c0b65fa2c25c4cdb51661ccb9612fa7085bdad451ab874e91defc568e10b411
+    sources:
+    - series: intermediate
+      path: _static/lecture_specific/wald_friedman/wald_dec_rule.png
+  _static/wald_friedman_2/wald_dec_rule.png:
+    canonical: intermediate
+    digest: 98cb416585514d92fb16f241873a46e83218f742f6988bc3330010c2f5123f46
+    sources:
+    - series: intermediate
+      path: _static/lecture_specific/wald_friedman_2/wald_dec_rule.png
   _static/workspace/extensions.png:
     canonical: programming
     digest: fe675fc70d1b6a5555a679986faa3ae72f2092712f58632663c5468fc9061582
