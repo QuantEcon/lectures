@@ -6,7 +6,7 @@ This repository is the future single source of truth for the QuantEcon lecture s
 
 It sits **downstream** of six live lecture repositories until each one deliberately cuts over. What exists today:
 
-- **The pool:** 296 lectures in `lectures/`, promoted from the series together with the figures and files they use, each with its provenance recorded in [`sync/ledger.yml`](sync/ledger.yml).
+- **The pool:** 298 lectures in `lectures/`, promoted from the series together with the figures and files they use, each with its provenance recorded in [`sync/ledger.yml`](sync/ledger.yml).
 - **The mirror:** every series' lectures, reconstructed on demand from commits pinned in [`sync/state.yml`](sync/state.yml), which a daily job keeps current.
 - **The drift-check:** run after every sync, it proves each pool lecture still equals its source, opens a pull request to refresh the pool when a source moves, and opens an issue when another series' copy diverges.
 - **The promote tool:** it brings lectures into the pool and refuses a lecture name that two series use for different lectures.
@@ -43,7 +43,7 @@ The repository is organised around three layers. The first two exist today.
 | Layer | What it is | State today |
 | --- | --- | --- |
 | `mirror/<key>/` | A machine-reconstructed, verbatim copy of each live series' allowlisted paths, pinned to an exact commit. Never hand-edited, never committed. | Reconstructed on demand; **gitignored**. |
-| `lectures/` | The curated **pool** — every canonical lecture, held exactly once. | 296 lectures and their assets, each recorded in [`sync/ledger.yml`](sync/ledger.yml). |
+| `lectures/` | The curated **pool** — every canonical lecture, held exactly once. | 298 lectures and their assets, each recorded in [`sync/ledger.yml`](sync/ledger.yml). |
 | `products/` | One folder per published product, each a thin **configuration** that selects and orders lectures from the pool. | Empty: each series' configuration arrives with the publishing workflow. |
 
 ### Why we commit only SHAs, not the mirror
