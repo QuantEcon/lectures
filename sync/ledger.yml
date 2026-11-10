@@ -1343,6 +1343,16 @@ lectures/information_market_equilibrium.md:
     intermediate: a268b8f1dfc49b8eeefbc79ebe822db10ee68e0a
   assets: []
   rewrites: []
+lectures/information_transfer.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: information_transfer.md
+    digest: 5e80dcc9dade31c0a2632effaa10620c139c8352d06d57b6a1a199231e046ccb
+  promoted_at:
+    intermediate: a268b8f1dfc49b8eeefbc79ebe822db10ee68e0a
+  assets: []
+  rewrites: []
 lectures/input_output.md:
   canonical: intro
   sources:
@@ -1852,6 +1862,16 @@ lectures/lucas_prescott_investment.md:
   - series: intermediate
     path: lucas_prescott_investment.md
     digest: 09dfdb1b837856943103ecf1f367e8b15bc082c65fda46d1631158d8a10cac9f
+  promoted_at:
+    intermediate: a268b8f1dfc49b8eeefbc79ebe822db10ee68e0a
+  assets: []
+  rewrites: []
+lectures/lucas_prescott_search.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: lucas_prescott_search.md
+    digest: a2ce7f94c928834d16d9f3d1abfbd0cca125f9a99e9117b1ffede4840687d12c
   promoted_at:
     intermediate: a268b8f1dfc49b8eeefbc79ebe822db10ee68e0a
   assets: []
@@ -2710,7 +2730,7 @@ lectures/pandas_panel.md:
     digest: 61281bfcc1924692ed866f6c078b73bf569c7baec3f91bc2dcd8c7bbe205eb01
   promoted_at:
     programming: e2d28d003d61f45bf75e790a94b8d478ed0902f2
-    intermediate: 4d82fffbb1280f8f6980a45dbe518e677f5c9a39
+    intermediate: a268b8f1dfc49b8eeefbc79ebe822db10ee68e0a
   assets:
   - _static/pandas_panel/venn_diag.png
   rewrites:

@@ -176,11 +176,6 @@ rulings:
     take: intermediate
     because: 'rule: the same fact written two ways (#10): the journal''s own name, Econometrica'
     seal: {intro: 9a9450fab2f23a64, intermediate: c06847c529dc3c77, advanced: 9a9450fab2f23a64, jax: 9a9450fab2f23a64}
-  LucasPrescott1971:
-    take: intermediate
-    set: {author: 'Lucas, Jr., Robert E. and Prescott, Edward C.'}
-    because: 'rule: the same fact written two ways (#10): intermediate''s adds the DOI, volume and number and the journal''s own name; the author keeps the others'' "Jr." in the three-part form (rule 3)'
-    seal: {intro: 9e8772b7fb918409, intermediate: a92e876f5979b24d, advanced: 9e8772b7fb918409, jax: 9e8772b7fb918409}
   LucasStokey1983:
     take: intermediate
     because: 'owner''s ruling of 2026-11-02 (QuantEcon/project-monorepo#10): JME 12(1):55--93; the others have number 3'
