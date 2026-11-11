@@ -4,9 +4,9 @@
 # once what is generated from it (its product manifest, or the pool's
 # selection by `tools/promote --toc`) follows the new toc.
 advanced:
-  accepted_at: '2026-11-09T01:00:48Z'
-  digest: 29e09e37210774d09cfbda06ea786602a3cff569c0ed88f83060822e8b43a28e
-  sha: 6ad797a9fb67a07a89cd1097cfc4eecffb9496c4
+  accepted_at: '2026-11-11T08:59:46Z'
+  digest: 9dc7df699eea3da340204a56cff83c11a8ddd1389764dfc04e6f0a80d28fcd6f
+  sha: aa81cd96fca8e445df16a9097cfe15fb6ee2b984
 dp:
   accepted_at: '2026-11-03T06:44:55Z'
   digest: 20e9bf17df8bd7c49c525583afa4d29940b8d1110d769fcfcee5becda9942967
