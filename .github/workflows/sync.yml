@@ -16,10 +16,13 @@ name: sync
 
 on:
   schedule:
-    # Daily, 06:17 UTC (a low-traffic time; offset off the hour). Pin-only
-    # runs take ~11s, so daily costs nothing and surfaces upstream movement
-    # within a day.
-    - cron: '17 6 * * *'
+    # Daily, 03:47 UTC (14:47 AEDT, 13:47 AEST; offset off the hour). GitHub
+    # starts a scheduled run late: usually 10 to 20 minutes, often an hour
+    # or more. From 03:47 the sync and the drift-check that follows it have
+    # normally reported by 16:00 AEDT, which leaves the maintainer the rest of
+    # the working day to settle what they open. Pin-only runs take ~11s, so
+    # daily costs nothing and surfaces upstream movement within a day.
+    - cron: '47 3 * * *'
   workflow_dispatch:
 
 permissions:
