@@ -1190,6 +1190,16 @@ lectures/house_auction.md:
     intermediate: 007bbd592a4c1f43931ebb0eeb0e64ba36fa8a47
   assets: []
   rewrites: []
+lectures/houthakker_aggregation.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: houthakker_aggregation.md
+    digest: fcb23a10dc4bc82c557ae5cda369d6ec5000df246a83fb5e02563f0b18d8ef24
+  promoted_at:
+    intermediate: 007bbd592a4c1f43931ebb0eeb0e64ba36fa8a47
+  assets: []
+  rewrites: []
 lectures/hs_invertibility_example.md:
   canonical: advanced
   sources:
@@ -2750,7 +2760,7 @@ lectures/pandas_panel.md:
     digest: 61281bfcc1924692ed866f6c078b73bf569c7baec3f91bc2dcd8c7bbe205eb01
   promoted_at:
     programming: 426fb428862613f6bfa7ae8fc962fe004b73ff1d
-    intermediate: f6d51df8cca856e4978d6ca353efe90e84f6ed63
+    intermediate: 007bbd592a4c1f43931ebb0eeb0e64ba36fa8a47
   assets:
   - _static/pandas_panel/venn_diag.png
   rewrites:
