@@ -12,6 +12,9 @@
 # canonical one is either a STALE copy (still at an earlier promoted
 # version while the canonical copy moved on) or a copy equal to the
 # canonical one once asset paths are normalised.
+# An asset `sources` item with its own `digest` and a `stale_since` time
+# is a series' copy of a shared `_admonition/` include that is behind the
+# pool's version (the asset's `digest`); the drift-check reports it.
 # `rewrites` is an ordered list of literal replacements: applying each
 # {from -> to} in turn to the canonical mirror copy reproduces the pool
 # copy byte-for-byte. Each pair is ONE non-rescanning pass with Python

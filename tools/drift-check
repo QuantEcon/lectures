@@ -110,6 +110,12 @@ TOC_STATE_PATH = ROOT / "sync" / "toc.yml"
 DRIFT_LABEL = "drift"
 DIFF_LINE_CAP = 300  # lines of unified diff kept in an issue body
 
+# A series' copy of a shared ``_admonition/`` include may lag the pool's
+# version (``tools/promote`` records it as stale). Behind for longer than
+# this, it is reported as drift, so a series that never follows gets an issue.
+STALE_DAYS = 7
+ADMONITION_DEST = "_static/_shared/_admonition/"
+
 CONSUMER_CLASS = "consumer"
 
 
@@ -319,7 +325,13 @@ def check_lecture(key: str, entry: dict, manifest: dict, consumers: set, finding
         findings.append(Finding(
             "drift", "canonical-removed", key,
             f"{key}: canonical copy {canonical}/lectures/{can_src['path']} no longer exists upstream",
-            detail="The pool copy has no source to follow. Decide whether the lecture was retired, renamed or moved before the next refresh.",
+            detail=(
+                "The pool copy has no source to follow, and the refresh skips it until it is settled. If the lecture "
+                f"was removed or renamed, `tools/promote --toc {canonical}` retires it once it has left that toc and "
+                f"no series holds the name (a renamed lecture is promoted under its new name by the same run); "
+                f"otherwise `tools/promote --retire {key[len('lectures/'):-3]}` does. If it moved to another series, "
+                "promote it by name to re-home it."
+            ),
             issue_title=f"drift({canonical}): lectures/{can_src['path']} removed upstream",
             data={"series": canonical, "path": can_src["path"]},
         ))
@@ -510,6 +522,24 @@ def check_asset(pool_rel: str, meta: dict, consumers: set, findings: list):
             data={"series": canonical, "path": can_src["path"]},
         ))
 
+    # A shared ``_admonition/`` include is judged by promote's rule
+    # (``admonition_version``): each source against the version recorded for
+    # IT (its own ``digest`` when it was behind, else the pool's). A copy that
+    # held the pool's version and changed leads, and the refresh takes it.
+    admonition = pool_rel.startswith(ADMONITION_DEST)
+    leaders = []  # (source, bytes): copies that were current and moved ahead
+    late = []  # (source, bytes): copies that were behind and have changed
+
+    def diverged(s, cur):
+        series = s.get("series")
+        findings.append(Finding(
+            "drift", "asset-diverged", pool_rel,
+            f"lectures/{pool_rel}: the {series} copy lectures/{s['path']} no longer matches its canonical home in {canonical}",
+            diff=unified_diff(can_bytes, cur, f"{canonical}/lectures/{can_src['path']}", f"{series}/lectures/{s['path']}"),
+            issue_title=f"drift({series}): lectures/{s['path']} differs from its canonical copy in {canonical}",
+            data={"series": series, "path": s["path"], "canonical": canonical, "asset_of": pool_rel},
+        ))
+
     for s in sources:
         series = s.get("series")
         if series == canonical or series in consumers:
@@ -525,20 +555,76 @@ def check_asset(pool_rel: str, meta: dict, consumers: set, findings: list):
             continue
         if cur == can_bytes:
             continue
+        was = s.get("digest") or recorded
+        if sha256_bytes(cur) == was:
+            if was == recorded:
+                findings.append(Finding(
+                    "info", "stale-copy", pool_rel,
+                    f"lectures/{pool_rel}: the {series} copy is unchanged while {canonical} moved",
+                    data={"series": series, "path": s["path"]},
+                ))
+                continue
+            # A stamp that cannot be read counts as overdue: never silent.
+            days = days_since(s.get("stale_since"))
+            overdue = days is None or days > STALE_DAYS
+            findings.append(Finding(
+                "drift" if overdue else "info", "stale-copy", pool_rel,
+                f"lectures/{pool_rel}: the {series} copy lectures/{s['path']} is behind the pool's version"
+                + (f" (since {s.get('stale_since')})" if s.get("stale_since") else ""),
+                detail=(
+                    f"The pool took a newer version of this shared include from {canonical}, and every pool lecture "
+                    f"that uses it shows that version. {series} still publishes the earlier one. Make the same "
+                    f"change in {series}; the next refresh then records its copy as current."
+                ) if overdue else "",
+                diff=unified_diff(cur, can_bytes, f"{series}/lectures/{s['path']}", f"{canonical}/lectures/{can_src['path']}") if overdue else None,
+                issue_title=f"drift({series}): lectures/{s['path']} is behind the pool's version" if overdue else None,
+                data={"series": series, "path": s["path"], "stale_since": s.get("stale_since")},
+            ))
+            continue
+        if admonition and not canonical_moved and was == recorded:
+            leaders.append((s, cur))
+            continue
+        if admonition and was != recorded:
+            late.append((s, cur))
+            continue
+        diverged(s, cur)
+
+    # A copy that was behind may catch up: to the pool's version (stale again
+    # only because the canonical copy has since moved), or to the one version
+    # the leaders agree on. Anything else is a fork.
+    ahead = {cur for _, cur in leaders}
+    for s, cur in late:
         if sha256_bytes(cur) == recorded:
             findings.append(Finding(
                 "info", "stale-copy", pool_rel,
-                f"lectures/{pool_rel}: the {series} copy is unchanged while {canonical} moved",
-                data={"series": series, "path": s["path"]},
+                f"lectures/{pool_rel}: the {s.get('series')} copy is at the pool's version while {canonical} moved",
+                data={"series": s.get("series"), "path": s["path"]},
             ))
-            continue
+        elif not (len(ahead) == 1 and cur in ahead):
+            diverged(s, cur)
+
+    if len(ahead) == 1:
+        names = ", ".join(s.get("series") for s, _ in leaders)
         findings.append(Finding(
-            "drift", "asset-diverged", pool_rel,
-            f"lectures/{pool_rel}: the {series} copy lectures/{s['path']} no longer matches its canonical home in {canonical}",
-            diff=unified_diff(can_bytes, cur, f"{canonical}/lectures/{can_src['path']}", f"{series}/lectures/{s['path']}"),
-            issue_title=f"drift({series}): lectures/{s['path']} differs from its canonical copy in {canonical}",
-            data={"series": series, "path": s["path"], "canonical": canonical, "asset_of": pool_rel},
+            "refresh", "asset-moved", pool_rel,
+            f"lectures/{pool_rel}: the copy in {names} changed upstream; the pool takes the newer version",
+            data={"series": leaders[0][0].get("series"), "path": leaders[0][0]["path"]},
         ))
+    else:
+        for s, cur in leaders:
+            diverged(s, cur)
+
+
+def days_since(stamp):
+    """Days, as a fraction, from an ISO time (``stale_since``) to now; None
+    if it cannot be read."""
+    try:
+        then = datetime.fromisoformat(str(stamp).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if then.tzinfo is None:
+        then = then.replace(tzinfo=timezone.utc)
+    return (datetime.now(timezone.utc) - then).total_seconds() / 86400
 
 
 def fetch_at_pin(repo: str, sha: str, path: str):
@@ -584,7 +670,8 @@ def check_tocs(toc_state: dict, manifest: dict, ledger_lectures: dict, findings:
                 f"What is generated from {series}'s toc must follow it before the toc is re-accepted. If the "
                 f"pool's selection is promoted from it, re-run `tools/promote --toc {series}` with the refresh's "
                 f"exclusions (`PROMOTE_EXCLUDE` in `.github/workflows/drift-check.yml`), so a lecture newly listed "
-                f"there reaches the pool; if a product manifest is generated from it, regenerate that; if the "
+                f"there reaches the pool and one it dropped, with its copy gone and its name held by no series, is "
+                f"retired; if a product manifest is generated from it, regenerate that; if the "
                 f"change is a deliberate divergence, there is nothing to regenerate. Then re-accept with "
                 f"`tools/drift-check --accept-toc {series}`. Re-accepting alone clears this issue but promotes nothing."
             ),

@@ -80,16 +80,31 @@ def test_a_canonical_series_that_left_the_manifest_is_named_as_such(make_repo):
     assert "-> none)" in failed[0] and "excluded" not in failed[0]
 
 
-def test_a_canonical_copy_gone_upstream_is_named_as_such(make_repo):
+def test_a_canonical_copy_gone_upstream_is_skipped_and_the_rest_refresh(make_repo):
     repo = make_repo(["advanced", "dp-test"])
     for series in ("advanced", "dp-test"):
         repo.lecture(series, "amss", lecture_text("AMSS"))
-    assert repo.promote("amss").returncode == 0
+    repo.lecture("advanced", "opt_tax", lecture_text("Optimal taxation"))
+    assert repo.promote("amss", "opt_tax").returncode == 0
+    before = repo.entry("amss")
     (repo.root / "mirror" / "advanced" / "lectures" / "amss.md").unlink()
+    repo.lecture("advanced", "opt_tax", lecture_text("Optimal taxation", "Fixed upstream."))
     repo.move_pin("advanced")
 
     res = repo.promote("--refresh")
 
+    # The refresh never retires: the entry and the pool file stay as they
+    # were, and the lecture that did move is refreshed.
+    assert res.returncode == 0, res.stderr
+    assert "[amss] SKIP: its canonical copy is gone from advanced upstream" in res.stdout
+    assert "tools/promote --retire amss" in res.stdout
+    assert repo.entry("amss") == before
+    assert repo.pool("amss.md").is_file()
+    assert "Fixed upstream." in repo.pool("opt_tax.md").read_text(encoding="utf-8")
+    assert "[canonical-removed]" in repo.drift_check().stdout
+
+    # Asked for by name with no other holder considered, it is refused, with the remedy.
+    res = repo.promote("amss", "--exclude", "dp-test")
     assert res.returncode == 1
-    assert "[amss] FAILED: the canonical copy of amss.md is gone from advanced upstream" in res.stderr
-    assert "canonical-removed" in res.stderr
+    assert "amss.md is in the pool, but no canonical-eligible series" in res.stderr
+    assert "tools/promote --retire amss" in res.stderr

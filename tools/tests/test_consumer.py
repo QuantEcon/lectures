@@ -55,7 +55,12 @@ def test_a_pool_lecture_its_home_series_dropped_is_refused_as_removed(make_repo)
     (repo.root / "mirror" / "intermediate" / "lectures" / "lqcontrol.md").unlink()
     repo.move_pin("intermediate")
 
+    # The refresh skips it (it never retires, and the rest must refresh).
     res = repo.promote("--refresh")
+    assert res.returncode == 0, res.stderr
+    assert "[lqcontrol] SKIP: its canonical copy is gone from intermediate upstream" in res.stdout
+
+    res = repo.promote("lqcontrol")
 
     assert res.returncode == 1
     failed = [line for line in res.stderr.splitlines() if line.startswith("[lqcontrol] FAILED")]
