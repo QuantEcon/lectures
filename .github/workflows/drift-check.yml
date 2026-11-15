@@ -70,14 +70,14 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  # Series every refresh leaves out (promote --exclude). `jax` stays out until
-  # its own promotion (QuantEcon/project-monorepo#24), and leaves this list in
-  # that pull request: a refresh fails an entry whose canonical series is
-  # excluded once that series' pin moves. A consumer (`dp`) is never listed:
-  # it cannot collide, and a refresh that excluded it would erase the
-  # `superseded` rows a `--toc dp` run writes (#19). An empty list is fine:
-  # the flag is then left off.
-  PROMOTE_EXCLUDE: jax
+  # Series every refresh leaves out (promote --exclude). None now: `jax`, the
+  # last one listed, left with its own promotion (QuantEcon/project-monorepo#24).
+  # A series with entries in the pool must not be listed: a refresh fails an
+  # entry whose canonical series is excluded once that series' pin moves. A
+  # consumer (`dp`) is never listed: it cannot collide, and a refresh that
+  # excluded it would erase the `superseded` rows a `--toc dp` run writes
+  # (#19). With the list empty, the flag is left off.
+  PROMOTE_EXCLUDE: ''
 
 jobs:
   check:

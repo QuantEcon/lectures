@@ -6,7 +6,7 @@ This repository is the future single source of truth for the QuantEcon lecture s
 
 It sits **downstream** of six live lecture repositories until each one deliberately cuts over. What exists today:
 
-- **The pool:** 301 lectures in `lectures/`, promoted from the series together with the figures and files they use, each with its provenance recorded in [`sync/ledger.yml`](sync/ledger.yml).
+- **The pool:** 328 lectures in `lectures/`, promoted from the series together with the figures and files they use, each with its provenance recorded in [`sync/ledger.yml`](sync/ledger.yml).
 - **The mirror:** every series' lectures, reconstructed on demand from commits pinned in [`sync/state.yml`](sync/state.yml), which a daily job keeps current.
 - **The drift-check:** run after every sync, it proves each pool lecture still equals its source, opens a pull request to refresh the pool when a source moves, and opens an issue when another series' copy diverges.
 - **The promote tool:** it brings lectures into the pool and refuses a lecture name that two series use for different lectures.
@@ -43,7 +43,7 @@ The repository is organised around three layers. The first two exist today.
 | Layer | What it is | State today |
 | --- | --- | --- |
 | `mirror/<key>/` | A machine-reconstructed, verbatim copy of each live series' allowlisted paths, pinned to an exact commit. Never hand-edited, never committed. | Reconstructed on demand; **gitignored**. |
-| `lectures/` | The curated **pool** — every canonical lecture, held exactly once. | 301 lectures and their assets, each recorded in [`sync/ledger.yml`](sync/ledger.yml). |
+| `lectures/` | The curated **pool** — every canonical lecture, held exactly once. | 328 lectures and their assets, each recorded in [`sync/ledger.yml`](sync/ledger.yml). |
 | `products/` | One folder per published product, each a thin **configuration** that selects and orders lectures from the pool. | Empty: each series' configuration arrives with the publishing workflow. |
 
 ### Why we commit only SHAs, not the mirror
@@ -110,7 +110,7 @@ A series' pin (and its timestamp) is only rewritten when the upstream `HEAD` has
 | --- | --- |
 | `tools/promote SLUG …` | Promote the named lectures, each from the highest-priority series that holds it. |
 | `tools/promote --toc SERIES` | Promote every lecture in a series' `_toc.yml`. For a consumer series (`dp`), each lecture comes from its home series. |
-| `tools/promote --refresh` | Re-promote every entry whose canonical series has moved since it was promoted. CI runs it with `--exclude $PROMOTE_EXCLUDE`. |
+| `tools/promote --refresh` | Re-promote every entry whose canonical series has moved since it was promoted. CI adds `--exclude $PROMOTE_EXCLUDE` when that list names a series; it is empty now that every series is promoted. |
 | `tools/promote … --exclude SERIES …` | Leave the named series out of this run. |
 | `tools/promote … --dry-run` | Print the full plan without writing anything. |
 
@@ -128,7 +128,7 @@ A series' pin (and its timestamp) is only rewritten when the upstream `HEAD` has
 | `tools/drift-check --issues` | Open, update and close `drift` issues to match the findings (CI). |
 | `tools/drift-check --accept-toc dp` | Record a series' `_toc.yml` at its current pin as the watched baseline. |
 
-Four outcomes: **refresh** (the canonical copy moved upstream; CI runs `promote --refresh --exclude $PROMOTE_EXCLUDE` and opens a pull request; an entry the refresh refuses is listed with promote's reason, in that pull request when one is opened and always in the red run's refresh step; the usual reason is a same-name copy edited to differ, which `sync/canonical.yml` or upstream settles; while the entry's canonical copy differs from its ledger record the run stays red every night until it is settled, and a settlement applies the next night), **drift** (a non-canonical copy diverged from its canonical home, a copy was removed, a watched toc changed or lists a lecture the pool does not hold, or two published sites hold different lectures under one name; each becomes an issue that closes itself when the finding clears), **violation** (the pool itself was edited; the job goes red), and **info** (a copy is merely stale, or a divergence converged). [`drift-check.yml`](.github/workflows/drift-check.yml) runs it after every `sync`.
+Four outcomes: **refresh** (the canonical copy moved upstream; CI runs `promote --refresh` and opens a pull request; an entry the refresh refuses is listed with promote's reason, in that pull request when one is opened and always in the red run's refresh step; the usual reason is a same-name copy edited to differ, which `sync/canonical.yml` or upstream settles; while the entry's canonical copy differs from its ledger record the run stays red every night until it is settled, and a settlement applies the next night), **drift** (a non-canonical copy diverged from its canonical home, a copy was removed, a watched toc changed or lists a lecture the pool does not hold, or two published sites hold different lectures under one name; each becomes an issue that closes itself when the finding clears), **violation** (the pool itself was edited; the job goes red), and **info** (a copy is merely stale, or a divergence converged). [`drift-check.yml`](.github/workflows/drift-check.yml) runs it after every `sync`.
 
 One kind of copy is never watched. A **consumer** series (`class: consumer` in `sync/manifest.yml`, today `dp`) only republishes other series' lectures, so its copies are recorded as `superseded` and are expected to go stale. Its `_toc.yml` is watched, though: the pool's `dp` selection is promoted from it, so a change there means re-running that promotion with the refresh's exclusions (`PROMOTE_EXCLUDE` in [`drift-check.yml`](.github/workflows/drift-check.yml); today `tools/promote --toc dp --exclude jax`), then `--accept-toc dp`. Accepting alone clears that issue but leaves a newly listed lecture out of the pool, which the check then reports as `toc-unpromoted`.
 
