@@ -1086,6 +1086,10 @@ def admonition_version(src_rel: str, eligible, record, state):
             "into _static/_shared/; reconcile upstream first"
         )
 
+    if not digests:
+        # Not reachable from a lecture's own reference (its canonical series
+        # holds the file, or the closure failed first); kept as a clear error.
+        raise PromoteError(f"no series this run considers holds {src_rel}")
     if not record:
         if len(set(digests.values())) > 1:
             raise differs()
