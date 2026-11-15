@@ -111,10 +111,24 @@ A series' pin (and its timestamp) is only rewritten when the upstream `HEAD` has
 | `tools/promote SLUG …` | Promote the named lectures, each from the highest-priority series that holds it. |
 | `tools/promote --toc SERIES` | Promote every lecture in a series' `_toc.yml`. For a consumer series (`dp`), each lecture comes from its home series. |
 | `tools/promote --refresh` | Re-promote every entry whose canonical series has moved since it was promoted. CI adds `--exclude $PROMOTE_EXCLUDE` when that list names a series; it is empty now that every series is promoted. |
+| `tools/promote --retire SLUG …` | Take the named lectures out of the pool: the pool file and its ledger entry, with the assets no other pool lecture uses. |
 | `tools/promote … --exclude SERIES …` | Leave the named series out of this run. |
 | `tools/promote … --dry-run` | Print the full plan without writing anything. |
 
 `tools/promote` refuses a lecture name held by two canonical-eligible series with different text, naming the lecture and every series involved. It does not pick a winner by run order. A rename or merge upstream fixes it; until then, [`sync/canonical.yml`](sync/canonical.yml) can name the winning series, and the entry is recorded as `interim`. A copy that is merely stale (a recorded source still at a version the pool already took, while the canonical copy moved on) is not a collision: it stays a source, and the refresh goes through. A `sync/canonical.yml` line that names such a stale copy is refused, though, since following it would take the pool back to the lagging text, so delete a line as soon as promote reports that it settles nothing.
+
+### A lecture renamed or removed upstream
+
+A pool lecture whose canonical copy is gone upstream is reported by the drift-check as `canonical-removed`. The daily refresh skips it and refreshes the rest; it never removes a lecture. The lecture leaves the pool by being **retired**:
+
+- `tools/promote --toc SERIES` retires, on its own, each entry canonical in `SERIES` whose lecture has left that series' `_toc.yml`, whose canonical copy is gone, and whose name no series in the manifest still holds. A renamed lecture is retired under its old name and promoted under its new one by the same run. At most five lectures are retired this way in one run: more than that retires none and fails, naming them, since a toc or folder lost upstream by mistake must not empty the pool.
+- `tools/promote --retire SLUG …` retires by name, for anything the rule above leaves alone, such as a lecture a consumer series still holds. It refuses a lecture its canonical series' toc still lists.
+
+Afterwards re-accept the toc with `tools/drift-check --accept-toc SERIES`. Retirement only ever acts on an entry whose canonical series is in `sync/manifest.yml`, so it never touches the lectures of a series the pool has taken over. Git history and the run's summary are the record of a retirement.
+
+### A shared include that one series edits first
+
+Several series carry their own copy of an `_admonition/` include (today `_admonition/gpu.md`), and the pool keeps one, used by every lecture that includes it. When a series whose copy was the pool's version edits it, the refresh takes the new version for all of those lectures at once, and the other series' copies are recorded on the asset as stale, each with its own `digest` and a `stale_since` time. The drift-check reports a stale copy as information for seven days and as drift, with an issue, after that; the copy is current again at the first refresh after its series makes the same change. Two series that edit the include differently are refused, and so is a stale copy that changes to anything but the pool's version: a copy that is behind may only catch up.
 
 ## Running the drift-check
 

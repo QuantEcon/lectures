@@ -34,9 +34,12 @@ name: drift-check
 # and lists each failure with promote's reason, and the run is marked RED.
 # Reasons include a same-name copy edited to differ (settled by
 # sync/canonical.yml or upstream), a sync/canonical.yml line naming a copy
-# that has fallen behind, a canonical copy removed or renamed upstream, an
-# asset that cannot be moved or overwritten, and a canonical series this run
-# excludes. A merely stale copy stays a source and does not fail.
+# that has fallen behind, an asset that cannot be moved or overwritten, and
+# a canonical series this run excludes. A merely stale copy stays a source
+# and does not fail. An entry whose canonical copy was removed or renamed
+# upstream is skipped, not refused: the refresh never retires a lecture, and
+# the drift-check's `canonical-removed` issue tracks it until it is retired
+# (`tools/promote --toc SERIES` or `--retire SLUG`) or re-homed.
 # A refused entry keeps its old ledger record, so while its canonical copy
 # differs from that record the drift-check asks for a refresh every night:
 # the run stays red until the entry is settled, and a settlement applies the
@@ -284,7 +287,7 @@ jobs:
             fi
             if [ -n "$failed" ]; then
               echo
-              echo "**Not refreshed.** \`tools/promote\` refused these entries, so their pool copies stay at the previous pin and the run that opened this PR is red. Each line gives promote's reason. A same-name copy edited to differ is settled by naming the winning series in \`sync/canonical.yml\` or by reconciling the copies upstream. A \`sync/canonical.yml\` line that names a lagging copy is settled by pointing it at the recorded canonical series or removing it. A canonical copy removed or renamed upstream needs a decision, which the drift-check's \`canonical-removed\` issue tracks. The line itself explains the other reasons. An entry whose canonical copy moved is refused again every night, so the run stays red until it is settled; an entry refused when only its series' pin moved is retried when a canonical copy next moves."
+              echo "**Not refreshed.** \`tools/promote\` refused these entries, so their pool copies stay at the previous pin and the run that opened this PR is red. Each line gives promote's reason. A same-name copy edited to differ is settled by naming the winning series in \`sync/canonical.yml\` or by reconciling the copies upstream. A \`sync/canonical.yml\` line that names a lagging copy is settled by pointing it at the recorded canonical series or removing it. The line itself explains the other reasons. An entry whose canonical copy moved is refused again every night, so the run stays red until it is settled; an entry refused when only its series' pin moved is retried when a canonical copy next moves."
               echo
               echo '```'
               echo "$failed"
