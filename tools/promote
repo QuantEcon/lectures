@@ -36,9 +36,9 @@ Series classes (``class:`` on a manifest stanza). The default class is
 canonical-eligible. A ``consumer`` series (one that republishes other series'
 lectures) is never canonical and contributes no lecture to the pool; its
 same-named copies, equal or not, are recorded under ``superseded:`` and are
-NOT watched by the drift-check. No series is excluded by default: ``jax``
-takes part like any other, so until its renames land its colliding names fail
-by the rule above. ``--exclude`` drops series for one run.
+NOT watched by the drift-check. No series is excluded by default, and CI
+excludes none now that ``jax`` is promoted. ``--exclude`` drops series for one
+run.
 
 Asset references are normalised into the pool ``_static`` conventions
 (``_static/<slug>/`` for per-lecture assets, ``_static/_shared/`` for assets
@@ -131,8 +131,9 @@ CONSUMER_CLASS = "consumer"
 SERIES_CLASSES = (SOURCE_CLASS, CONSUMER_CLASS)
 
 # Per-series boilerplate: product pages, not pool content (M3 owns them).
-# `about` is a series' page about itself: what it covers, its level, its credits.
-PRODUCT_PAGES = ("about", "intro", "status", "troubleshooting", "zreferences")
+# `about` is a series' page about itself: what it covers, its level, its credits;
+# `about_jax` is jax's name for the same page.
+PRODUCT_PAGES = ("about", "about_jax", "intro", "status", "troubleshooting", "zreferences")
 
 # The merged bibliography is owned by the separate bib-merge tool.
 BIB_BASENAME = "quant-econ.bib"

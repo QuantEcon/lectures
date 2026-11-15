@@ -105,6 +105,19 @@ lectures/aiyagari_egm.md:
     intermediate: 007bbd592a4c1f43931ebb0eeb0e64ba36fa8a47
   assets: []
   rewrites: []
+lectures/aiyagari_jax.md:
+  canonical: jax
+  sources:
+  - series: jax
+    path: aiyagari_jax.md
+    digest: 3ec2c8f04521cc9af6739d3950c2fa61b1bf15913566a5ee1e5019c41808cc95
+  promoted_at:
+    jax: 7d8050c4298140082a957b0a243e67e41525dcc5
+  assets:
+  - _static/_shared/_admonition/gpu.md
+  rewrites:
+  - from: _admonition/gpu.md
+    to: _static/_shared/_admonition/gpu.md
 lectures/ak2.md:
   canonical: intermediate
   sources:
@@ -263,19 +276,44 @@ lectures/arellano.md:
   promoted_at:
     advanced: aa81cd96fca8e445df16a9097cfe15fb6ee2b984
   assets:
-  - _static/arellano/arellano_bond_prices.png
-  - _static/arellano/arellano_default_probs.png
-  - _static/arellano/arellano_time_series.png
-  - _static/arellano/arellano_value_funcs.png
+  - _static/_shared/arellano/arellano_bond_prices.png
+  - _static/_shared/arellano/arellano_default_probs.png
+  - _static/_shared/arellano/arellano_time_series.png
+  - _static/_shared/arellano/arellano_value_funcs.png
   rewrites:
   - from: /_static/lecture_specific/arellano/arellano_default_probs.png
-    to: _static/arellano/arellano_default_probs.png
+    to: _static/_shared/arellano/arellano_default_probs.png
   - from: /_static/lecture_specific/arellano/arellano_bond_prices.png
-    to: _static/arellano/arellano_bond_prices.png
+    to: _static/_shared/arellano/arellano_bond_prices.png
   - from: /_static/lecture_specific/arellano/arellano_time_series.png
-    to: _static/arellano/arellano_time_series.png
+    to: _static/_shared/arellano/arellano_time_series.png
   - from: /_static/lecture_specific/arellano/arellano_value_funcs.png
-    to: _static/arellano/arellano_value_funcs.png
+    to: _static/_shared/arellano/arellano_value_funcs.png
+lectures/arellano_jax.md:
+  canonical: jax
+  sources:
+  - series: jax
+    path: arellano_jax.md
+    digest: 14500f686177d4c8b811b2891fa0ea647d5e729227f6452280707a8eb12a9eac
+  promoted_at:
+    jax: 7d8050c4298140082a957b0a243e67e41525dcc5
+  assets:
+  - _static/_shared/_admonition/gpu.md
+  - _static/_shared/arellano/arellano_bond_prices.png
+  - _static/_shared/arellano/arellano_default_probs.png
+  - _static/_shared/arellano/arellano_time_series.png
+  - _static/_shared/arellano/arellano_value_funcs.png
+  rewrites:
+  - from: _static/lecture_specific/arellano/arellano_default_probs.png
+    to: _static/_shared/arellano/arellano_default_probs.png
+  - from: _static/lecture_specific/arellano/arellano_bond_prices.png
+    to: _static/_shared/arellano/arellano_bond_prices.png
+  - from: _static/lecture_specific/arellano/arellano_time_series.png
+    to: _static/_shared/arellano/arellano_time_series.png
+  - from: _static/lecture_specific/arellano/arellano_value_funcs.png
+    to: _static/_shared/arellano/arellano_value_funcs.png
+  - from: _admonition/gpu.md
+    to: _static/_shared/_admonition/gpu.md
 lectures/arma.md:
   canonical: advanced
   sources:
@@ -315,8 +353,12 @@ lectures/autodiff.md:
   - series: programming
     path: autodiff.md
     digest: 4a1a441630c1b34a46ff514b60f2ad64e9f0cdb008b4349b25b98d0f4807e621
+  - series: jax
+    path: autodiff.md
+    digest: 4a1a441630c1b34a46ff514b60f2ad64e9f0cdb008b4349b25b98d0f4807e621
   promoted_at:
     programming: 426fb428862613f6bfa7ae8fc962fe004b73ff1d
+    jax: 7d8050c4298140082a957b0a243e67e41525dcc5
   assets:
   - _static/_shared/_admonition/gpu.md
   rewrites:
@@ -1180,6 +1222,19 @@ lectures/hoist_failure.md:
     intermediate: 007bbd592a4c1f43931ebb0eeb0e64ba36fa8a47
   assets: []
   rewrites: []
+lectures/hopenhayn.md:
+  canonical: jax
+  sources:
+  - series: jax
+    path: hopenhayn.md
+    digest: e7666671ac2b52312666a8e6436de9d65b106da8653472c6fd96b0cb853f1412
+  promoted_at:
+    jax: 7d8050c4298140082a957b0a243e67e41525dcc5
+  assets:
+  - _static/_shared/_admonition/gpu.md
+  rewrites:
+  - from: _admonition/gpu.md
+    to: _static/_shared/_admonition/gpu.md
 lectures/house_auction.md:
   canonical: intermediate
   sources:
@@ -1256,6 +1311,19 @@ lectures/ifp_discrete.md:
   rewrites:
   - from: _admonition/gpu.md
     to: _static/_shared/_admonition/gpu.md
+lectures/ifp_dl.md:
+  canonical: jax
+  sources:
+  - series: jax
+    path: ifp_dl.md
+    digest: 3be1b198f94a17baa99ec30e7157fa225200bec4f78c2562394e376487eba471
+  promoted_at:
+    jax: 7d8050c4298140082a957b0a243e67e41525dcc5
+  assets:
+  - _static/_shared/_admonition/gpu.md
+  rewrites:
+  - from: _admonition/gpu.md
+    to: _static/_shared/_admonition/gpu.md
 lectures/ifp_egm.md:
   canonical: intermediate
   sources:
@@ -1269,6 +1337,19 @@ lectures/ifp_egm.md:
   promoted_at:
     intermediate: 007bbd592a4c1f43931ebb0eeb0e64ba36fa8a47
     dp: da83d88d8de7ab04a4c722bdbd0ce6e2c8333c7c
+  assets:
+  - _static/_shared/_admonition/gpu.md
+  rewrites:
+  - from: _admonition/gpu.md
+    to: _static/_shared/_admonition/gpu.md
+lectures/ifp_egm_jax.md:
+  canonical: jax
+  sources:
+  - series: jax
+    path: ifp_egm_jax.md
+    digest: e7a29a92f70cd9c74d6bb5c77762e49f8cf2c6a73e3fcaed38cd5a63decf4d67
+  promoted_at:
+    jax: 7d8050c4298140082a957b0a243e67e41525dcc5
   assets:
   - _static/_shared/_admonition/gpu.md
   rewrites:
@@ -1413,6 +1494,19 @@ lectures/inventory_dynamics.md:
     intermediate: 007bbd592a4c1f43931ebb0eeb0e64ba36fa8a47
   assets: []
   rewrites: []
+lectures/inventory_dynamics_jax.md:
+  canonical: jax
+  sources:
+  - series: jax
+    path: inventory_dynamics_jax.md
+    digest: 4ab3b98ae290d4a51d9f484bb0682ec9d8e577564b5b02eef0b38abea9876086
+  promoted_at:
+    jax: 7d8050c4298140082a957b0a243e67e41525dcc5
+  assets:
+  - _static/_shared/_admonition/gpu.md
+  rewrites:
+  - from: _admonition/gpu.md
+    to: _static/_shared/_admonition/gpu.md
 lectures/inventory_q.md:
   canonical: intermediate
   sources:
@@ -1428,6 +1522,19 @@ lectures/inventory_q.md:
     dp: da83d88d8de7ab04a4c722bdbd0ce6e2c8333c7c
   assets: []
   rewrites: []
+lectures/inventory_ssd.md:
+  canonical: jax
+  sources:
+  - series: jax
+    path: inventory_ssd.md
+    digest: bf20ab29fe6510bb197636aa04fbc0093ae7aa91eefbd2a6996de983732c9803
+  promoted_at:
+    jax: 7d8050c4298140082a957b0a243e67e41525dcc5
+  assets:
+  - _static/_shared/_admonition/gpu.md
+  rewrites:
+  - from: _admonition/gpu.md
+    to: _static/_shared/_admonition/gpu.md
 lectures/irfs_in_hall_model.md:
   canonical: advanced
   sources:
@@ -1446,6 +1553,45 @@ lectures/jax_intro.md:
     digest: a21bb131b93d2649586c06cd3e88aae3efa5bb1aa9e1afccddd0179ffb3d8f7e
   promoted_at:
     programming: 426fb428862613f6bfa7ae8fc962fe004b73ff1d
+  assets:
+  - _static/_shared/_admonition/gpu.md
+  rewrites:
+  - from: _admonition/gpu.md
+    to: _static/_shared/_admonition/gpu.md
+lectures/jax_intro_jax.md:
+  canonical: jax
+  sources:
+  - series: jax
+    path: jax_intro_jax.md
+    digest: 3ccdf5ead5eea5e499def04456e67f7629f892193a3e9ea87fdbe890aa63fc12
+  promoted_at:
+    jax: 7d8050c4298140082a957b0a243e67e41525dcc5
+  assets:
+  - _static/_shared/_admonition/gpu.md
+  rewrites:
+  - from: _admonition/gpu.md
+    to: _static/_shared/_admonition/gpu.md
+lectures/jax_nn.md:
+  canonical: jax
+  sources:
+  - series: jax
+    path: jax_nn.md
+    digest: 15b3e85e3ccfa22c8853a0abae1e3607e49c505ecf21d08676807ae1e1ccaa9d
+  promoted_at:
+    jax: 7d8050c4298140082a957b0a243e67e41525dcc5
+  assets:
+  - _static/_shared/_admonition/gpu.md
+  rewrites:
+  - from: _admonition/gpu.md
+    to: _static/_shared/_admonition/gpu.md
+lectures/job_search.md:
+  canonical: jax
+  sources:
+  - series: jax
+    path: job_search.md
+    digest: aceb7ebb42b9fff881dfaf542cf22314da0f8ff8dfc225914e580e8272d615c2
+  promoted_at:
+    jax: 7d8050c4298140082a957b0a243e67e41525dcc5
   assets:
   - _static/_shared/_admonition/gpu.md
   rewrites:
@@ -1502,6 +1648,19 @@ lectures/kalman_filter_var.md:
     intermediate: 007bbd592a4c1f43931ebb0eeb0e64ba36fa8a47
   assets: []
   rewrites: []
+lectures/keras.md:
+  canonical: jax
+  sources:
+  - series: jax
+    path: keras.md
+    digest: 52ffb2186327f02895f99b468cd02f03836444551f63895170ea36030abc8bcf
+  promoted_at:
+    jax: 7d8050c4298140082a957b0a243e67e41525dcc5
+  assets:
+  - _static/_shared/_admonition/gpu.md
+  rewrites:
+  - from: _admonition/gpu.md
+    to: _static/_shared/_admonition/gpu.md
 lectures/kesten_processes.md:
   canonical: intermediate
   sources:
@@ -1510,6 +1669,19 @@ lectures/kesten_processes.md:
     digest: 236108afaacc71f4d25bc059867ee02eb3fb2dcb40d2ca9eb329c440a910eeeb
   promoted_at:
     intermediate: 007bbd592a4c1f43931ebb0eeb0e64ba36fa8a47
+  assets:
+  - _static/_shared/_admonition/gpu.md
+  rewrites:
+  - from: _admonition/gpu.md
+    to: _static/_shared/_admonition/gpu.md
+lectures/kesten_processes_jax.md:
+  canonical: jax
+  sources:
+  - series: jax
+    path: kesten_processes_jax.md
+    digest: a638e3ce7fe1179f84f45b461bbd777b29f58137e3a9ddfa0198077d88d21d6c
+  promoted_at:
+    jax: 7d8050c4298140082a957b0a243e67e41525dcc5
   assets:
   - _static/_shared/_admonition/gpu.md
   rewrites:
@@ -1886,6 +2058,19 @@ lectures/lucas_model.md:
   rewrites:
   - from: /_static/lecture_specific/lucas_model/solution_mass_ex2.png
     to: _static/lucas_model/solution_mass_ex2.png
+lectures/lucas_model_jax.md:
+  canonical: jax
+  sources:
+  - series: jax
+    path: lucas_model_jax.md
+    digest: cdafa85ae5707835bf20914892e7259c88cc460435c4a75cf94167040a4f0dfd
+  promoted_at:
+    jax: 7d8050c4298140082a957b0a243e67e41525dcc5
+  assets:
+  - _static/_shared/_admonition/gpu.md
+  rewrites:
+  - from: _admonition/gpu.md
+    to: _static/_shared/_admonition/gpu.md
 lectures/lucas_prescott_investment.md:
   canonical: intermediate
   sources:
@@ -1936,6 +2121,19 @@ lectures/markov_asset.md:
     intermediate: 007bbd592a4c1f43931ebb0eeb0e64ba36fa8a47
   assets: []
   rewrites: []
+lectures/markov_asset_jax.md:
+  canonical: jax
+  sources:
+  - series: jax
+    path: markov_asset_jax.md
+    digest: 142453e3c0f6d326a4604663bf8e24c1dc95b9e29d0196e6ef732ac5eb237f36
+  promoted_at:
+    jax: 7d8050c4298140082a957b0a243e67e41525dcc5
+  assets:
+  - _static/_shared/_admonition/gpu.md
+  rewrites:
+  - from: _admonition/gpu.md
+    to: _static/_shared/_admonition/gpu.md
 lectures/markov_chains_I.md:
   canonical: intro
   sources:
@@ -2241,6 +2439,19 @@ lectures/mle_intro.md:
     intro: 530ede2b348321d3924f7c900691b7daf165757c
   assets: []
   rewrites: []
+lectures/mle_jax.md:
+  canonical: jax
+  sources:
+  - series: jax
+    path: mle_jax.md
+    digest: 9fb6af8ed66aa3fb2ef636d76fc08b3b5883055fd76fea1d5e54ba07cad33c77
+  promoted_at:
+    jax: 7d8050c4298140082a957b0a243e67e41525dcc5
+  assets:
+  - _static/_shared/_admonition/gpu.md
+  rewrites:
+  - from: _admonition/gpu.md
+    to: _static/_shared/_admonition/gpu.md
 lectures/mobility.md:
   canonical: intro
   sources:
@@ -2435,6 +2646,19 @@ lectures/newton_method.md:
   rewrites:
   - from: _admonition/gpu.md
     to: _static/_shared/_admonition/gpu.md
+lectures/newtons_method.md:
+  canonical: jax
+  sources:
+  - series: jax
+    path: newtons_method.md
+    digest: 628fb271020a9c89a7700f7498c1b3190a63cd669f8eff0330dd15c98c30c320
+  promoted_at:
+    jax: 7d8050c4298140082a957b0a243e67e41525dcc5
+  assets:
+  - _static/_shared/_admonition/gpu.md
+  rewrites:
+  - from: _admonition/gpu.md
+    to: _static/_shared/_admonition/gpu.md
 lectures/numba.md:
   canonical: programming
   sources:
@@ -2539,6 +2763,45 @@ lectures/oop_intro.md:
     programming: 426fb428862613f6bfa7ae8fc962fe004b73ff1d
   assets: []
   rewrites: []
+lectures/opt_invest.md:
+  canonical: jax
+  sources:
+  - series: jax
+    path: opt_invest.md
+    digest: aa8f4d4ab51833a2be1b63ddad849dfb69930e2911aff56e6acacd16b3b0c9f7
+  promoted_at:
+    jax: 7d8050c4298140082a957b0a243e67e41525dcc5
+  assets:
+  - _static/_shared/_admonition/gpu.md
+  rewrites:
+  - from: _admonition/gpu.md
+    to: _static/_shared/_admonition/gpu.md
+lectures/opt_savings_1.md:
+  canonical: jax
+  sources:
+  - series: jax
+    path: opt_savings_1.md
+    digest: ba25ca6627fd61552115e9bde4696f38ec437a5978eacc096cf5d7e2f1419c22
+  promoted_at:
+    jax: 7d8050c4298140082a957b0a243e67e41525dcc5
+  assets:
+  - _static/_shared/_admonition/gpu.md
+  rewrites:
+  - from: _admonition/gpu.md
+    to: _static/_shared/_admonition/gpu.md
+lectures/opt_savings_2.md:
+  canonical: jax
+  sources:
+  - series: jax
+    path: opt_savings_2.md
+    digest: 3e93a45df2b9aa44c95b0e3add7db7cc920638d7fc16fc1dda5a744ca05212b5
+  promoted_at:
+    jax: 7d8050c4298140082a957b0a243e67e41525dcc5
+  assets:
+  - _static/_shared/_admonition/gpu.md
+  rewrites:
+  - from: _admonition/gpu.md
+    to: _static/_shared/_admonition/gpu.md
 lectures/opt_tax_recur.md:
   canonical: advanced
   sources:
@@ -2730,6 +2993,19 @@ lectures/os_time_iter.md:
     dp: da83d88d8de7ab04a4c722bdbd0ce6e2c8333c7c
   assets: []
   rewrites: []
+lectures/overborrowing.md:
+  canonical: jax
+  sources:
+  - series: jax
+    path: overborrowing.md
+    digest: ddeb59523b2abb202c88064dc1a65b92bc6d85868c5c52cc0bb02203922535ea
+  promoted_at:
+    jax: 7d8050c4298140082a957b0a243e67e41525dcc5
+  assets:
+  - _static/_shared/_admonition/gpu.md
+  rewrites:
+  - from: _admonition/gpu.md
+    to: _static/_shared/_admonition/gpu.md
 lectures/pandas.md:
   canonical: programming
   sources:
@@ -3285,6 +3561,71 @@ lectures/schelling.md:
     intro: 530ede2b348321d3924f7c900691b7daf165757c
   assets: []
   rewrites: []
+lectures/schelling_jax.md:
+  canonical: jax
+  sources:
+  - series: jax
+    path: schelling_jax.md
+    digest: c433613f18a42922c5030ddea7044d0a72fbae7ae5ae4a12a127e3b8d54c216e
+  promoted_at:
+    jax: 7d8050c4298140082a957b0a243e67e41525dcc5
+  assets: []
+  rewrites: []
+lectures/schelling_jax_parallel.md:
+  canonical: jax
+  sources:
+  - series: jax
+    path: schelling_jax_parallel.md
+    digest: d2d694ad8f92f50826e616fb6b5a5e6d4523ef34112afcb3edf9fcb30f81658f
+  promoted_at:
+    jax: 7d8050c4298140082a957b0a243e67e41525dcc5
+  assets: []
+  rewrites: []
+lectures/schelling_numpy.md:
+  canonical: jax
+  sources:
+  - series: jax
+    path: schelling_numpy.md
+    digest: 8a62845ad46324d57aca9ca07de0eb389553f21ef72f892c5c2ad1aaf66f2a56
+  promoted_at:
+    jax: 7d8050c4298140082a957b0a243e67e41525dcc5
+  assets: []
+  rewrites: []
+lectures/schelling_python.md:
+  canonical: jax
+  sources:
+  - series: jax
+    path: schelling_python.md
+    digest: e7b76dd4ad2612bb01603bf0ebabef04ed8317c2a94ab79a5e107bdb91c806d9
+  promoted_at:
+    jax: 7d8050c4298140082a957b0a243e67e41525dcc5
+  assets:
+  - _static/schelling_python/fig/columbus.webp
+  - _static/schelling_python/fig/houston.webp
+  - _static/schelling_python/fig/memphis.webp
+  - _static/schelling_python/fig/miami.webp
+  - _static/schelling_python/fig/washington_dc.webp
+  rewrites:
+  - from: _static/fig/washington_dc.webp
+    to: _static/schelling_python/fig/washington_dc.webp
+  - from: _static/fig/columbus.webp
+    to: _static/schelling_python/fig/columbus.webp
+  - from: _static/fig/houston.webp
+    to: _static/schelling_python/fig/houston.webp
+  - from: _static/fig/memphis.webp
+    to: _static/schelling_python/fig/memphis.webp
+  - from: _static/fig/miami.webp
+    to: _static/schelling_python/fig/miami.webp
+lectures/schelling_shocks.md:
+  canonical: jax
+  sources:
+  - series: jax
+    path: schelling_shocks.md
+    digest: 794a59f877e9ab56ecb8c2caab114f68945be7bd3296ebddf112119f029e8739
+  promoted_at:
+    jax: 7d8050c4298140082a957b0a243e67e41525dcc5
+  assets: []
+  rewrites: []
 lectures/scipy.md:
   canonical: programming
   sources:
@@ -3322,6 +3663,19 @@ lectures/short_path.md:
     to: _static/short_path/graph4.png
   - from: /_static/lecture_specific/short_path/graph.png
     to: _static/short_path/graph.png
+lectures/short_path_jax.md:
+  canonical: jax
+  sources:
+  - series: jax
+    path: short_path_jax.md
+    digest: 779fbe70709df9b783e1834c270a0079af9cffc3af2344dd50d1ae7b4efcf1d8
+  promoted_at:
+    jax: 7d8050c4298140082a957b0a243e67e41525dcc5
+  assets:
+  - _static/_shared/_admonition/gpu.md
+  rewrites:
+  - from: _admonition/gpu.md
+    to: _static/_shared/_admonition/gpu.md
 lectures/simple_linear_regression.md:
   canonical: intro
   sources:
@@ -3755,6 +4109,19 @@ lectures/wealth_dynamics.md:
     intermediate: 007bbd592a4c1f43931ebb0eeb0e64ba36fa8a47
   assets: []
   rewrites: []
+lectures/wealth_dynamics_jax.md:
+  canonical: jax
+  sources:
+  - series: jax
+    path: wealth_dynamics_jax.md
+    digest: 7debc164f86fbe943ab154ffa3b9042e6ed28d219d63a9cc6225bfeb3f08afc3
+  promoted_at:
+    jax: 7d8050c4298140082a957b0a243e67e41525dcc5
+  assets:
+  - _static/_shared/_admonition/gpu.md
+  rewrites:
+  - from: _admonition/gpu.md
+    to: _static/_shared/_admonition/gpu.md
 lectures/wealth_tax.md:
   canonical: intro
   sources:
@@ -3842,6 +4209,8 @@ assets:
       path: _admonition/gpu.md
     - series: intermediate
       path: _admonition/gpu.md
+    - series: jax
+      path: _admonition/gpu.md
   _static/_shared/amss2/crra_utility.py:
     canonical: advanced
     digest: 432913928e89b9daf5a67f7ca99111b3267799ae10e133f195d4e9b9109c817d
@@ -3866,6 +4235,38 @@ assets:
     sources:
     - series: advanced
       path: _static/lecture_specific/amss2/utilities.py
+  _static/_shared/arellano/arellano_bond_prices.png:
+    canonical: advanced
+    digest: 7c5fa84b5916352050a6ccabc36d2d4c2ef4dc353a814657298290005233c22d
+    sources:
+    - series: advanced
+      path: _static/lecture_specific/arellano/arellano_bond_prices.png
+    - series: jax
+      path: _static/lecture_specific/arellano/arellano_bond_prices.png
+  _static/_shared/arellano/arellano_default_probs.png:
+    canonical: advanced
+    digest: 567fa6bfbc06d8db12536ca1c88fa3ebf04f947a670e5c91a2f1bec03d49b552
+    sources:
+    - series: advanced
+      path: _static/lecture_specific/arellano/arellano_default_probs.png
+    - series: jax
+      path: _static/lecture_specific/arellano/arellano_default_probs.png
+  _static/_shared/arellano/arellano_time_series.png:
+    canonical: advanced
+    digest: 0d3089fbc24acb4a30a37167d4c663ec0c2a5464ad536d7a3ff9ac986beafb1a
+    sources:
+    - series: advanced
+      path: _static/lecture_specific/arellano/arellano_time_series.png
+    - series: jax
+      path: _static/lecture_specific/arellano/arellano_time_series.png
+  _static/_shared/arellano/arellano_value_funcs.png:
+    canonical: advanced
+    digest: 513c7407b725ea163e65c05d44d219679d4799c368818a08d9c7e3a3c3c5ef85
+    sources:
+    - series: advanced
+      path: _static/lecture_specific/arellano/arellano_value_funcs.png
+    - series: jax
+      path: _static/lecture_specific/arellano/arellano_value_funcs.png
   _static/_shared/chang_credible/changecon.py:
     canonical: advanced
     digest: 041dbf0ae182687388d00c6fc3472744d41c52386c87aa5397358a4821cd0ac2
@@ -4024,30 +4425,6 @@ assets:
     sources:
     - series: advanced
       path: _static/lecture_specific/amss3/amss3_g3.png
-  _static/arellano/arellano_bond_prices.png:
-    canonical: advanced
-    digest: 7c5fa84b5916352050a6ccabc36d2d4c2ef4dc353a814657298290005233c22d
-    sources:
-    - series: advanced
-      path: _static/lecture_specific/arellano/arellano_bond_prices.png
-  _static/arellano/arellano_default_probs.png:
-    canonical: advanced
-    digest: 567fa6bfbc06d8db12536ca1c88fa3ebf04f947a670e5c91a2f1bec03d49b552
-    sources:
-    - series: advanced
-      path: _static/lecture_specific/arellano/arellano_default_probs.png
-  _static/arellano/arellano_time_series.png:
-    canonical: advanced
-    digest: 0d3089fbc24acb4a30a37167d4c663ec0c2a5464ad536d7a3ff9ac986beafb1a
-    sources:
-    - series: advanced
-      path: _static/lecture_specific/arellano/arellano_time_series.png
-  _static/arellano/arellano_value_funcs.png:
-    canonical: advanced
-    digest: 513c7407b725ea163e65c05d44d219679d4799c368818a08d9c7e3a3c3c5ef85
-    sources:
-    - series: advanced
-      path: _static/lecture_specific/arellano/arellano_value_funcs.png
   _static/arma/time_series_book.pdf:
     canonical: advanced
     digest: 1926f3a73ff84ee5152250dc7a5bbb8beafe7b2258462d5a78aaebbe942c7c8d
@@ -4530,6 +4907,36 @@ assets:
     sources:
     - series: advanced
       path: _static/lecture_specific/robustness/kg_small_theta.png
+  _static/schelling_python/fig/columbus.webp:
+    canonical: jax
+    digest: 9a5b91704f21cd3780518cb507e7c5d4ec17355d3243000cdc0faffde4d8e56a
+    sources:
+    - series: jax
+      path: _static/fig/columbus.webp
+  _static/schelling_python/fig/houston.webp:
+    canonical: jax
+    digest: 0f445cb10976dc5cbc6f563bbb88380a24d8d079a5107186362cee1bda706792
+    sources:
+    - series: jax
+      path: _static/fig/houston.webp
+  _static/schelling_python/fig/memphis.webp:
+    canonical: jax
+    digest: 4512efe0d3d8bb9904b3b5fd22de4d2477434114d1c3641427de0c3d784d81b0
+    sources:
+    - series: jax
+      path: _static/fig/memphis.webp
+  _static/schelling_python/fig/miami.webp:
+    canonical: jax
+    digest: aa1978d77112881917cce06bb64ce01de138c7c32fab85beb2806bb3faf96fe5
+    sources:
+    - series: jax
+      path: _static/fig/miami.webp
+  _static/schelling_python/fig/washington_dc.webp:
+    canonical: jax
+    digest: 334e8e6eae2861826b0e35e30bca7128fc7cea1d2bb8472dfa4d6fcdff35ca9a
+    sources:
+    - series: jax
+      path: _static/fig/washington_dc.webp
   _static/short_path/graph.png:
     canonical: intro
     digest: a5e73bd5729df6131fcc41410d3e4ebf9d9edb88c934e295927dd8cb8255b844

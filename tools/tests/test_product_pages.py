@@ -3,7 +3,7 @@
 
 from conftest import lecture_text
 
-PRODUCT_PAGES = ["intro", "about", "status", "troubleshooting", "zreferences"]
+PRODUCT_PAGES = ["intro", "about", "about_jax", "status", "troubleshooting", "zreferences"]
 
 
 def test_a_toc_run_skips_every_product_page_and_the_toc_watch_agrees(make_repo):
@@ -16,7 +16,7 @@ def test_a_toc_run_skips_every_product_page_and_the_toc_watch_agrees(make_repo):
     res = repo.promote("--toc", "intro")
 
     assert res.returncode == 0, res.stdout
-    assert "1 promoted, 0 unchanged, 5 skipped, 0 failed" in res.stdout
+    assert "1 promoted, 0 unchanged, 6 skipped, 0 failed" in res.stdout
     for slug in PRODUCT_PAGES:
         assert f"[{slug}] SKIP: product page" in res.stdout
         assert not repo.pool(f"{slug}.md").exists()

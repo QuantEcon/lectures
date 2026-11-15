@@ -628,7 +628,7 @@ The first figure shows the bond price schedule and replicates Figure 3 of
 Arellano, where $y_L$ and $Y_H$ are particular below average and above average
 values of output $y$.
 
-```{figure} _static/arellano/arellano_bond_prices.png
+```{figure} _static/_shared/arellano/arellano_bond_prices.png
 
 ```
 
@@ -649,7 +649,7 @@ The figure shows that
 The next figure plots value functions and replicates the right hand panel of Figure 4 of
 {cite}`arellano2008default`.
 
-```{figure} _static/arellano/arellano_value_funcs.png
+```{figure} _static/_shared/arellano/arellano_value_funcs.png
 
 ```
 
@@ -658,7 +658,7 @@ defined in {eq}`delta`.
 
 The next plot shows these default probabilities over $(B', y)$ as a heat map.
 
-```{figure} _static/arellano/arellano_default_probs.png
+```{figure} _static/_shared/arellano/arellano_default_probs.png
 
 ```
 
@@ -669,7 +669,7 @@ Next let's run a time series simulation of $\{y_t\}$, $\{B_t\}$ and $q(B_{t+1}, 
 
 The grey vertical bars correspond to periods when the economy is excluded from financial markets because of a past default.
 
-```{figure} _static/arellano/arellano_time_series.png
+```{figure} _static/_shared/arellano/arellano_time_series.png
 
 ```
 
