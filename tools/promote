@@ -104,7 +104,8 @@ Flags
     --retire           with SLUG...: retire the named pool lectures. Refused
                        for a lecture its canonical series' toc still lists
                        (or, with no toc in the mirror, whose canonical copy
-                       still exists), and for an entry whose canonical series
+                       still exists), for a lecture another canonical-eligible
+                       series still holds and lists, and for an entry whose canonical series
                        is not in the manifest or is excluded from the run.
                        All or nothing: one refusal retires none.
     --exclude SERIES [SERIES...]
@@ -1094,7 +1095,7 @@ def admonition_version(src_rel: str, eligible, record, state):
         if len(set(digests.values())) > 1:
             raise differs()
         series = next(iter(digests))
-        return {"digest": digests[series], "series": series, "stale": {}}
+        return {"digest": digests[series], "series": series, "stale": {}, "was": None, "since": ""}
 
     pool = ledger_asset_digest(ADMONITION_DEST + src_rel[len(ADMONITION_SRC):], record)
     prev = {s.get("series"): s for s in record.get("sources") or []}
@@ -1137,7 +1138,14 @@ def admonition_version(src_rel: str, eligible, record, state):
             synced = [str((state.get(h) or {}).get("synced_at") or "") for h in holders]
             since = max(synced) or now_iso()
         stale[series] = str(since)
-    return {"digest": agreed, "series": holders[0], "stale": stale}
+    synced = [str((state.get(h) or {}).get("synced_at") or "") for h in holders]
+    return {
+        "digest": agreed,
+        "series": holders[0],
+        "stale": stale,
+        "was": pool,
+        "since": max(synced) or now_iso(),
+    }
 
 
 def now_iso() -> str:
@@ -1282,6 +1290,17 @@ def retire_refusal(slug, ledger_lectures, order, considered, consumers):
             f"{canonical}'s _toc.yml still lists it — it is still published "
             "there; remove it upstream first"
         )
+    publishing = [
+        s for s in considered
+        if s != canonical and s not in consumers and holds(s, slug) and toc_lists(s, slug)
+    ]
+    if publishing:
+        return (
+            f"{', '.join(publishing)} still "
+            + ("holds it and lists it in its" if len(publishing) == 1 else "hold it and list it in their")
+            + f" _toc.yml — it is still published; `tools/promote {slug}` "
+            "re-homes it there"
+        )
     if listed is None and holds(canonical, slug):
         return (
             f"its canonical copy still exists in {canonical}, whose mirror "
@@ -1341,7 +1360,7 @@ def refresh_targets(ledger_lectures, state, considered, consumers, order=None):
             )
             skip = why
         else:
-            if not (mirror_lectures(canonical) / f"{slug}.md").is_file():
+            if not (mirror_lectures(canonical) / key[len("lectures/"):]).is_file():
                 # The refresh never retires, and one lecture gone upstream
                 # must not stop the rest refreshing. The drift-check reports
                 # it (canonical-removed) until it is retired or re-homed.
@@ -1557,7 +1576,9 @@ def main(argv=None):
         # Retire what this series dropped, before the batch is planned, so a
         # retired lecture's assets are not counted as still in use.
         for key in sorted(ledger_lectures):
-            slug = slug_of(posixpath.basename(key))
+            # The slug with any folder, as the toc spells it: a lecture moved
+            # into a subfolder is retired here and promoted there.
+            slug = slug_of(key[len("lectures/"):])
             if (
                 args.toc in consumers
                 or ledger_lectures[key].get("canonical") != args.toc
@@ -1896,9 +1917,19 @@ def main(argv=None):
             # A series this run leaves out keeps its recorded item, stale or
             # not: dropping it would stop the drift-check watching the copy
             # and make it a never-recorded one at the next full run.
+            # Its copy was not read. If the pool's version changes in this
+            # run, an item recorded as current is no longer known to be: it
+            # is recorded as stale at the version it was last seen at, so the
+            # next full run judges it (still there, caught up, or forked) and
+            # it can never be taken for a holder of the new version.
+            version = admonitions.get(rec["src_rel"]) or {}
             for item in (ledger_assets.get(dest) or {}).get("sources") or []:
                 if item.get("series") in order and item.get("series") not in considered:
-                    sources.append(dict(item))
+                    item = dict(item)
+                    if "digest" not in item and version.get("was") not in (None, rec["digest"]):
+                        item["digest"] = version["was"]
+                        item["stale_since"] = version["since"]
+                    sources.append(item)
             sources.sort(key=lambda item: order.index(item["series"]))
         return {
             "canonical": next(s for s in sources if "digest" not in s)["series"],
@@ -2035,12 +2066,20 @@ def main(argv=None):
         # the pool lacks, which the drift-check reports (pool-missing) and a
         # second `--retire` finishes; an unrecorded pool lecture would be
         # seen by no check.
-        kept_names = {posixpath.basename(k).lower() for k in new_lectures}
         for slug in retired:
-            # On a case-insensitive file system a surviving entry that
-            # differs only in case is the same file: leave it.
-            if f"{slug}.md".lower() not in kept_names:
-                (POOL_DIR / f"{slug}.md").unlink(missing_ok=True)
+            target = POOL_DIR / f"{slug}.md"
+            # On a case-insensitive file system a surviving entry whose name
+            # differs only in case is the SAME file: leave it.
+            twins = [
+                REPO_ROOT / k for k in new_lectures
+                if k.lower() == f"lectures/{slug}.md".lower()
+            ]
+            if not any(t.exists() and target.exists() and os.path.samefile(t, target) for t in twins):
+                target.unlink(missing_ok=True)
+                parent = target.parent
+                while parent != POOL_DIR and not any(parent.iterdir()):
+                    parent.rmdir()
+                    parent = parent.parent
             print(f"[{slug}] retired: lectures/{slug}.md and its ledger entry removed")
         if ok or stale or retired:
             body = dump_ledger(new_lectures, new_assets)

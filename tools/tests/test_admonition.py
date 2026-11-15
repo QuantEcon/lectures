@@ -313,3 +313,29 @@ def test_a_stale_since_that_cannot_be_read_is_drift(make_repo):
 
     dc = repo.drift_check()
     assert dc.returncode == 1 and "DRIFT" in dc.stdout
+
+
+def test_a_series_left_out_while_the_version_changes_is_not_taken_for_a_holder(make_repo):
+    repo = three_series(make_repo)
+    lead(repo, "intermediate", V2)
+
+    res = repo.promote("--refresh", "--exclude", "jax")
+    assert res.returncode == 0, res.stderr
+    record = repo.ledger()["assets"][ASSET]
+    got = sources(repo)
+    # jax's copy was not read: it is recorded at the version it was last seen at.
+    assert got["jax"]["digest"] == got["programming"]["digest"] != record["digest"]
+    assert got["jax"]["stale_since"]
+
+    dc = repo.drift_check()
+    assert dc.returncode == 0, dc.stdout
+    assert "asset-moved" not in dc.stdout
+
+    # The next full refresh keeps the leader's version.
+    repo.lecture("programming", "numba", lecture_text("Numba", INCLUDE + "\n\nFixed upstream."))
+    repo.move_pin("programming")
+    res = repo.promote("--refresh")
+    assert res.returncode == 0, res.stderr
+    assert repo.pool(ASSET).read_text(encoding="utf-8") == V2
+    assert repo.ledger()["assets"][ASSET]["canonical"] == "intermediate"
+    assert "digest" not in sources(repo)["intermediate"]

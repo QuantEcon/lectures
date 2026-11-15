@@ -251,3 +251,55 @@ def test_retiring_warns_of_lectures_that_link_to_it(make_repo):
 
     assert res.returncode == 0, res.stderr
     assert "[lqcontrol] WARN: 1 pool lecture(s) link to lqcontrol with {doc} and will not resolve it: mccall" in res.stdout
+
+
+def test_a_lecture_moved_into_a_subfolder_is_retired_and_promoted_there(make_repo):
+    repo = promoted(make_repo)
+    drop(repo, "intermediate", "lqcontrol")
+    repo.lecture("intermediate", "sub/lqcontrol", lecture_text("lqcontrol"))
+    repo.toc("intermediate", ["mccall", "sub/lqcontrol"])
+    repo.move_pin("intermediate")
+
+    res = repo.promote("--toc", "intermediate")
+    assert res.returncode == 0, res.stderr
+    ledger = repo.ledger()
+    assert "lectures/lqcontrol.md" not in ledger and "lectures/sub/lqcontrol.md" in ledger
+    assert not repo.pool("lqcontrol.md").exists() and repo.pool("sub/lqcontrol.md").is_file()
+
+    # A second run retires nothing and does not stop, and the refresh does
+    # not take the moved lecture for one whose copy is gone.
+    res = repo.promote("--toc", "intermediate")
+    assert res.returncode == 0, res.stderr
+    assert "retired" not in res.stdout
+    repo.move_pin("intermediate", 3)
+    res = repo.promote("--refresh")
+    assert "canonical copy is gone" not in res.stdout + res.stderr
+
+    # Moved back out, the subfolder entry is the one retired, and its folder goes.
+    drop(repo, "intermediate", "sub/lqcontrol")
+    repo.lecture("intermediate", "lqcontrol", lecture_text("lqcontrol"))
+    repo.toc("intermediate", ["mccall", "lqcontrol"])
+    res = repo.promote("--toc", "intermediate")
+    assert res.returncode == 0, res.stderr
+    assert "lectures/sub/lqcontrol.md" not in repo.ledger()
+    assert not repo.pool("sub").exists() and repo.pool("lqcontrol.md").is_file()
+
+
+def test_retire_refuses_a_lecture_another_source_series_still_publishes(make_repo):
+    repo = make_repo(["intermediate", "advanced"])
+    for series in repo.order:
+        repo.lecture(series, "lqcontrol", lecture_text("LQ"))
+    repo.toc("intermediate", ["lqcontrol"])
+    repo.toc("advanced", ["lqcontrol"])
+    assert repo.promote("--toc", "intermediate").returncode == 0
+    drop(repo, "intermediate", "lqcontrol")
+    repo.toc("intermediate", ["other"])
+    repo.lecture("intermediate", "other", lecture_text("Other"))
+
+    res = repo.promote("--retire", "lqcontrol")
+    assert res.returncode == 1
+    assert "advanced still holds it and lists it in its _toc.yml" in res.stderr
+    assert "`tools/promote lqcontrol` re-homes it there" in res.stderr
+
+    assert repo.promote("lqcontrol").returncode == 0
+    assert repo.entry("lqcontrol")["canonical"] == "advanced"
