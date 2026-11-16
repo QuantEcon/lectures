@@ -133,6 +133,32 @@ jobs:
           path: drift-report.json
           if-no-files-found: ignore
 
+      - name: Report the assets
+        # tools/assets-report reads the mirror the drift-check just rebuilt:
+        # per series, the files beside the lectures that are used, linked by
+        # address, used by the configuration or orphaned; collisions across
+        # series; the largest files; the pool's files and their users; and
+        # the files lectures fetch from GitHub by address. Information only:
+        # it never fails the run (its index check is pool-check's). The
+        # report goes to the run's summary and, with its JSON, an artefact.
+        if: success() || failure()
+        run: |
+          if uv run --script tools/assets-report --out assets-report.md --json assets-report.json; then
+            cat assets-report.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::tools/assets-report could not produce the report; see its error above."
+          fi
+
+      - name: Keep the assets report
+        if: success() || failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: assets-report
+          path: |
+            assets-report.md
+            assets-report.json
+          if-no-files-found: ignore
+
       - name: Check the merged bibliography
         id: bib
         # Runs whatever the drift-check found, so both reports are in the log.
@@ -223,6 +249,15 @@ jobs:
           rc=${PIPESTATUS[0]}
           set -e
           echo "rc=$rc" >> "$GITHUB_OUTPUT"
+
+      - name: Regenerate the shared-asset index
+        # A refresh can add, move or drop a file in lectures/_static/_shared/,
+        # whose README.md lists each file's users; pool-check fails a pull
+        # request whose index is stale, so the refresh carries its own. Unlike
+        # the report in the check job, this step is not information: if the
+        # index cannot be written (an error, exit 2), no pull request is
+        # opened and the run is red, since pool-check would fail it anyway.
+        run: uv run --script tools/assets-report --write-index
 
       - name: Open or update the refresh pull request
         env:

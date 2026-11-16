@@ -11,6 +11,7 @@ It sits **downstream** of six live lecture repositories until each one deliberat
 - **The drift-check:** run after every sync, it proves each pool lecture still equals its source, opens a pull request to refresh the pool when a source moves, and opens an issue when another series' copy diverges.
 - **The promote tool:** it brings lectures into the pool and refuses a lecture name that two series use for different lectures.
 - **The merged bibliography:** one [`lectures/_static/quant-econ.bib`](lectures/_static/quant-econ.bib), generated from the series' own files and the rulings in [`sync/bib.yml`](sync/bib.yml), and refreshed with the pool.
+- **The assets report:** after every sync, an audit of the files beside the lectures, in every series and in the pool, and a generated index of who uses each shared file, [`lectures/_static/_shared/README.md`](lectures/_static/_shared/README.md).
 
 See [The plan](#the-plan) for what comes next.
 
@@ -59,8 +60,9 @@ The repository is organised around three layers. The first two exist today.
 .
 ├── _base/            # (later) shared toolchain defaults — placeholder
 ├── lectures/         # the pool: every canonical lecture once
-│   └── _static/      #   their assets: _static/<slug>/ per lecture, _static/_shared/ for shared files,
-│                     #   and quant-econ.bib, the merged bibliography (bib-merge-written)
+│   └── _static/      #   their assets: _static/<slug>/ per lecture, _static/_shared/ for shared files
+│                     #   (with README.md, its generated index of users), and quant-econ.bib, the
+│                     #   merged bibliography (bib-merge-written)
 ├── products/         # (later) one configuration per published product — empty
 ├── mirror/           # reconstructed, verbatim, GITIGNORED — never committed
 ├── docs/tech/        # the technology register (see below)
@@ -77,11 +79,12 @@ The repository is organised around three layers. The first two exist today.
 │   ├── drift-check   # proves the pool still equals its sources; issues, refresh PR
 │   ├── bib-merge     # merges the series' bibliographies into the pool's one file; checks it
 │   ├── pool-check    # checks the pool keeps its layout conventions
-│   └── tests/        # pytest suite for promote, drift-check, bib-merge and pool-check (scratch repos)
+│   ├── assets-report # audits the files beside the lectures; writes and checks the _shared/ index
+│   └── tests/        # pytest suite for the tools above (scratch repos)
 └── .github/workflows/
     ├── sync.yml         # daily job that refreshes the pinned SHAs (pin-only)
-    ├── drift-check.yml  # runs after sync: drift issues, refresh PR (pool and bibliography), red on a pool edit or a refused refresh
-    ├── pool-check.yml   # runs tools/pool-check on pull requests that touch the pool
+    ├── drift-check.yml  # runs after sync: drift issues, refresh PR (pool and bibliography), red on a pool edit or a refused refresh; the assets report
+    ├── pool-check.yml   # runs tools/pool-check and the _shared/ index check on pull requests that touch the pool
     └── tests.yml        # runs tools/tests on pull requests
 ```
 
@@ -162,6 +165,26 @@ Lecture names are unique across the published sites, not only in the pool: a lin
 [`tools/pool-check`](tools/pool-check) checks that the pool keeps the layout `tools/promote` writes, whoever edits it next. `lectures/` holds lectures (`<slug>.md`, no name starting with `_`, no two names that differ only in case) and `_static/`. Every folder at the top of `_static/` is a lecture's own (`_static/<slug>/`, beside `<slug>.md`) or `_shared/`, and the merged bibliography is the one file there. A file in `_static/<slug>/` is used by `<slug>.md` alone, so an asset two lectures use goes in `_shared/`. Every asset reference is file-relative (`_static/<slug>/fig.png`, never `/_static/...`) and stays inside `lectures/`. Every `{doc}` link resolves: a plain target names a pool lecture or a product page, and a prefixed one (`intro:cobweb`) has a series key from `sync/manifest.yml` as its prefix and, after it, a product page or a pool lecture that series holds by the ledger. Three older prefixes (`dynam`, `pyprog`, `tools`) are accepted until the cross-reference policy settles what a link that leaves the product is written as. So a refresh that brings in a link to a lecture the pool does not hold yet fails this check until that lecture is promoted. It finds asset references with promote's own parser and `{doc}` links with its own pattern (text in code cells, literal blocks, inline literals and comments is not read as a link), reads `lectures/`, the series keys in `sync/manifest.yml` and the ledger's record of which series hold a lecture, and needs no mirror. Exit 0 clean, 1 a rule broken, 2 an error.
 
 It also counts the labels that more than one pool lecture defines, targets (`(name)=`, `:name:`) and equation labels (`:label:`, `$$ … $$ (name)`) apart, and `tools/pool-check --labels` lists them. That is information, never a failure: labels must be unique within a product, which is checked where a product is built. [`pool-check.yml`](.github/workflows/pool-check.yml) runs it on every pull request that touches the pool.
+
+## The assets report
+
+[`tools/assets-report`](tools/assets-report) is the audit of static assets, regenerated after every sync rather than written once. [`drift-check.yml`](.github/workflows/drift-check.yml) runs it on the mirror the drift-check rebuilds and puts the report in the run's summary and in an `assets-report` artefact (Markdown and JSON). It is information and never fails that run. It reports:
+
+- **Per series,** every file under the series' `lectures/` that is not a lecture or its `_config.yml` or `_toc.yml`: used by a lecture (by promote's parser, including through an include), linked by address (a lecture links to it in the series' own repository on GitHub), used by the configuration (named in `_config.yml`, branding, or the bibliography), or orphaned. Orphaned figure sources are counted apart: a `.tex`, `.gv` or `.dot` file, a file named like an image a lecture uses in the same folder, less the extension, or a notebook in a folder that holds such an image.
+- **Collisions:** one path in two or more series with different bytes.
+- **The largest files,** the candidates for trimming a dataset.
+- **The pool:** every file under `lectures/_static/`, the lectures that use it (by its text, or by the asset list in its ledger entry), the orphans and the `_shared/` files one lecture alone uses. Files under a name starting with `.`, such as `.DS_Store`, are not the pool's and are skipped.
+- **Files on GitHub, by address:** every link in a pool lecture to a file on GitHub, by repository and the ref it names. Most are data the lectures read from [QuantEcon/data-lectures](https://github.com/QuantEcon/data-lectures) on its default branch; a link into a series' own repository breaks if the series moves the file at its cutover.
+
+It also writes [`lectures/_static/_shared/README.md`](lectures/_static/_shared/README.md): for each shared file, the pool lectures that use it and the series that publish them, by the ledger. GitHub shows it under the folder, so whoever changes a shared file sees what it reaches. It is generated, never edited by hand: [`pool-check.yml`](.github/workflows/pool-check.yml) regenerates it and fails a pull request whose copy differs, and fails on an orphan, a file under `_static/` that no pool lecture uses. Its path is reserved: if the ledger records an asset there, the tool stops with an error. A `_shared/` file that one lecture alone uses is listed, not failed: promote places a family folder's files and the `_admonition/` includes there whatever their count. The nightly refresh regenerates the index with the pool; after promoting by hand, run `tools/assets-report --write-index` and commit the result.
+
+| Command | What it does |
+| --- | --- |
+| `tools/assets-report` | Print the report as Markdown. It needs the mirror. |
+| `tools/assets-report --out report.md --json report.json` | Write the report to files. |
+| `tools/assets-report --reconstruct` | Rebuild `mirror/` first. |
+| `tools/assets-report --write-index` | Regenerate `lectures/_static/_shared/README.md`. It reads the pool and the ledger only. |
+| `tools/assets-report --check-index` | Exit 1 if the index is stale or missing, or the pool holds an orphan; 0 clean, 2 an error. |
 
 ## Running the bibliography merge
 
