@@ -670,3 +670,52 @@ def test_an_optional_pull_in_that_cannot_be_re_promoted_does_not_fail_the_run(ma
     assert repo.entry("aaa")["assets"] == []
     assert repo.entry("bbb")["assets"] == ["_static/_shared/fig.png"] and repo.pool("_static/_shared/fig.png").is_file()
     assert repo.pool_check().returncode == 0
+
+    # The next night the record asks to be rewritten through bbb, and the
+    # refresh fails on bbb's real divergence until it is settled.
+    dc = repo.drift_check()
+    assert "[asset-record]" in dc.stdout
+    res = repo.promote("--refresh")
+    assert res.returncode == 1
+    assert "[bbb] FAILED: bbb.md differs across series" in res.stderr
+    repo.write_canonical_map({"bbb": "intermediate"})
+    res = repo.promote("--refresh")
+    assert res.returncode == 0, res.stderr
+    assert repo.entry("bbb")["assets"] == ["_static/bbb/fig.png"]
+    assert repo.drift_check().returncode == 0
+
+
+def test_a_new_lecture_with_an_identical_file_is_not_taken_for_a_rename(make_repo):
+    # aaa (intermediate) and kkk (advanced) share x.png. intermediate drops
+    # aaa and its file, and adds an unrelated zzz whose own file has the
+    # same bytes: zzz's file is a new asset, not aaa's renamed.
+    FAM = "_static/lecture_specific/fam/x.png"
+    repo = make_repo(["intermediate", "advanced"])
+    for s in repo.order:
+        repo.mirror_file(s, FAM, b"x")
+    repo.lecture("intermediate", "aaa", lecture_text("A", refs=[FAM]))
+    repo.lecture("advanced", "kkk", lecture_text("K", refs=[FAM]))
+    repo.toc("intermediate", ["aaa"])
+    assert repo.promote("--toc", "intermediate").returncode == 0
+    assert repo.promote("kkk").returncode == 0
+    shared = "_static/_shared/fam/x.png"
+    assert repo.entry("kkk")["assets"] == [shared]
+
+    (repo.root / "mirror" / "intermediate" / "lectures" / "aaa.md").unlink()
+    (repo.root / "mirror" / "intermediate" / "lectures" / FAM).unlink()
+    repo.mirror_file("intermediate", "_static/zzz/x.png", b"x")
+    repo.lecture("intermediate", "zzz", lecture_text("Z", refs=["_static/zzz/x.png"]))
+    repo.toc("intermediate", ["zzz"])
+    repo.move_pin("intermediate")
+    res = repo.promote("--toc", "intermediate")
+
+    assert res.returncode == 0, res.stderr
+    assert repo.entry("zzz")["assets"] == ["_static/zzz/x.png"]
+    assert sources(repo, "_static/zzz/x.png").keys() == {"intermediate"}
+    # zzz edits its image: kkk's figure is not affected.
+    repo.mirror_file("intermediate", "_static/zzz/x.png", b"zzz's own")
+    repo.move_pin("intermediate", 3)
+    assert repo.promote("--refresh").returncode == 0
+    for path in repo.entry("kkk")["assets"]:
+        assert repo.pool(path).read_bytes() == b"x"
+    assert repo.pool_check().returncode == 0

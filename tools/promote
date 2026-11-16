@@ -1839,8 +1839,13 @@ def main(argv=None):
         found = recorded_at.get((plan.canonical, src_rel)) or src_to_pool.get((src_rel, digest))
         if found is None:
             # The series moved or renamed the file: the same bytes, and its
-            # recorded path is gone. It is still that asset, at a new path.
+            # recorded path is gone. It is still that asset, at a new path,
+            # but only for a lecture that already used it: a new lecture
+            # that happens to carry an identical file is a new asset.
+            used = set((ledger_lectures.get(f"lectures/{plan.slug}.md") or {}).get("assets") or [])
             for pool_path in by_bytes.get(digest, ()):
+                if pool_path not in used:
+                    continue
                 for src in ledger_assets[pool_path].get("sources") or []:
                     if (
                         src.get("series") == plan.canonical
@@ -2338,7 +2343,8 @@ def main(argv=None):
     for slug in sorted(declined):
         print(
             f"[{slug}] WARN: not re-promoted with the lecture that stopped using a file they shared "
-            f"({declined[slug]}); the file's record is rewritten when {slug} next refreshes"
+            f"({declined[slug]}). From the next run the drift-check asks for the file's record to be "
+            f"rewritten through {slug}, and the refresh fails on {slug} until that is settled"
         )
     for slug in sorted(pulled):
         if any(p.slug == slug for p in plans):
