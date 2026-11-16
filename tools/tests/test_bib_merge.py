@@ -656,3 +656,17 @@ def test_a_dropped_entry_a_lecture_still_cites_upstream_fails_the_check(make_rep
     res = repo.bib_merge("--refresh-follows")
     assert res.returncode == 2
     assert "[closure] Hog1938" in res.stdout and "Traceback" not in res.stderr
+
+
+def test_a_citation_the_pool_alone_dropped_from_the_bibliography_is_not_excused(make_repo):
+    # The canonical copy has not moved, so no refresh is coming for it.
+    repo = repo_with(make_repo, entry("Smith2000", SMITH), "")
+    repo.lecture("intro", "cobweb", "# Cobweb\n\nSee {cite:t}`Smith2000`.\n")
+    assert repo.promote("cobweb").returncode == 0
+    assert repo.bib_merge("--write").returncode == 0
+    repo.pool("cobweb.md").write_text("# Cobweb\n\nSee {cite}`Typo1`.\n", encoding="utf-8")
+
+    res = repo.bib_merge("--refresh-follows")
+
+    assert res.returncode == 2
+    assert "[closure] Typo1: cited by cobweb.md but not in the merged file" in res.stdout

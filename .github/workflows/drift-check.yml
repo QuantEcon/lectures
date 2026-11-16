@@ -142,12 +142,17 @@ jobs:
         if: success() || failure()
         run: |
           set +e
-          # After a sync or on a manual run, the refresh job follows this one
-          # and writes the file again, so a citation that refresh removes is
-          # not a failure here (--refresh-follows). A pull request has no
-          # refresh job, so there every unresolved citation fails.
-          follows=--refresh-follows
-          [ "${{ github.event_name }}" = "pull_request" ] && follows=
+          # After a sync, or on a manual run of the default branch, the
+          # refresh job follows this one on the same commit and writes the
+          # file again, so a citation that refresh removes is not a failure
+          # here (--refresh-follows). A pull request has no refresh job, and
+          # a manual run of another branch is refreshed from the default
+          # branch, not from what was checked: there every unresolved
+          # citation fails.
+          follows=
+          if [ "${{ github.event_name }}" = "workflow_run" ] || { [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.ref_name }}" = "${{ github.event.repository.default_branch }}" ]; }; then
+            follows=--refresh-follows
+          fi
           uv run --script tools/bib-merge --reconstruct $follows
           rc=$?
           set -e

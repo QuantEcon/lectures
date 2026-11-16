@@ -80,9 +80,11 @@ SHARED_DIR = "_shared"
 # strings in code cells): only one whose target exists refers to a file.
 HEURISTIC_KINDS = ("link", "code-str")
 
-# A ``{doc}`` role: ``{doc}`target``` or ``{doc}`link text <target>```.
-DOC_RE = re.compile(r"\{doc\}`([^`]+)`")
-DOC_TITLED_RE = re.compile(r"^.*<([^<>]+)>\s*$", re.S)
+# A ``{doc}`` role: ``{doc}`target``` or ``{doc}`link text <target>```, in
+# one backtick or a longer run. Link text is not empty: Sphinx reads
+# ``{doc}`<x>``` as the target ``<x>``.
+DOC_RE = re.compile(r"\{doc\}(`+)(.+?)\1(?!`)", re.S)
+DOC_TITLED_RE = re.compile(r"^.*\S.*<([^<>]+)>\s*$", re.S)
 # Prefixes lectures use for links to another site that are not series keys:
 # older names for a series' site. Recorded, not endorsed: the cross-reference
 # policy (QuantEcon/project-monorepo#22) decides what a link that leaves the
@@ -110,28 +112,41 @@ def prose(text: str) -> str:
     """``text`` without what is not MyST prose: the bodies of code cells and
     literal fenced blocks, ``%`` comment lines and inline literals. A
     directive's fence (``{note}``, ``{figure}``, ``{math}``) is prose, and
-    its option lines stay. Line structure is kept."""
-    out, open_fences = [], []  # open_fences: (fence, is code) innermost last
-    for line in text.split("\n"):
+    its option lines stay. Line structure is kept.
+
+    Fences are read as CommonMark reads them: a block runs from its opening
+    fence to the first later fence of the same character, at least as long,
+    with nothing after it (or to the end), and nothing inside it opens or
+    closes anything. A directive's body is then read the same way, as MyST
+    parses it. A backtick fence's info string holds no backtick, so a line
+    that opens with inline code is not a fence."""
+
+    def is_closing(line, fence):
         m = FENCE_RE.match(line)
-        in_code = bool(open_fences) and open_fences[-1][1]
-        if m and open_fences and not m.group(2).strip():
-            fence = open_fences[-1][0]
-            if m.group(1)[0] == fence[0] and len(m.group(1)) >= len(fence):
-                open_fences.pop()  # the innermost block closes
-                out.append("")
+        return bool(m) and m.group(1)[0] == fence[0] and len(m.group(1)) >= len(fence) and not m.group(2).strip()
+
+    def read(lines):
+        out, i = [], 0
+        while i < len(lines):
+            m = FENCE_RE.match(lines[i])
+            if not m or (m.group(1)[0] == "`" and "`" in m.group(2)):
+                out.append("" if lines[i].lstrip().startswith("%") else lines[i])
+                i += 1
                 continue
-        if in_code:
-            out.append("")
-            continue
-        if m:
+            end = next((j for j in range(i + 1, len(lines)) if is_closing(lines[j], m.group(1))), len(lines))
+            body = lines[i + 1 : end]
             info = m.group(2).strip()
-            open_fences.append((m.group(1), not info.startswith("{") or info.startswith(CODE_DIRECTIVES)))
+            code = not info.startswith("{") or info.startswith(CODE_DIRECTIVES)
             out.append("")
-            continue
-        out.append("" if line.lstrip().startswith("%") else line)
-    # An inline literal: a run of two or more backticks, to the same run.
-    return re.sub(r"(?<!`)(``+)(?!`).*?(?<!`)\1(?!`)", "", "\n".join(out))
+            out.extend([""] * len(body) if code else read(body))
+            if end < len(lines):
+                out.append("")
+            i = end + 1
+        return out
+
+    # An inline literal: a run of two or more backticks, to the same run. A
+    # run straight after a role's name (``{doc}``x````) is that role's text.
+    return re.sub(r"(?<![`}])(``+)(?!`).*?(?<!`)\1(?!`)", "", "\n".join(read(text.split("\n"))))
 
 
 class PoolCheckError(Exception):
@@ -266,8 +281,8 @@ def check_doc_targets(pool: Path, lectures, product_pages, series_keys, held):
         where = f"lectures/{slug}.md"
         seen = set()
         for m in DOC_RE.finditer(prose(read_lecture(pool, slug))):
-            titled = DOC_TITLED_RE.match(m.group(1))
-            target = (titled.group(1) if titled else m.group(1)).strip()
+            titled = DOC_TITLED_RE.match(m.group(2))
+            target = (titled.group(1) if titled else m.group(2)).strip()
             if target in seen:
                 continue
             seen.add(target)

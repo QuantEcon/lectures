@@ -245,3 +245,31 @@ def test_labels_defined_twice_are_reported_and_never_fail(make_repo):
     assert "  eq1 (equation): lake, mccall" in res.stdout and "  eq2 (equation): lake, mccall" in res.stdout
     assert "  model: lake, mccall" in res.stdout
     assert "own" not in res.stdout and "  eq1: " not in res.stdout
+
+
+def test_links_are_found_as_myst_reads_the_text(make_repo):
+    repo = make_repo(["intro"])
+    body = "\n".join([
+        "A role in two backticks: {doc}``gone1``, and one with no link text: {doc}`<lake>`.",
+        "",
+        "```x``` opens this line with inline code, and {doc}`gone2` follows.",
+        "",
+        "```{note}",
+        "```{code-cell} ipython3",
+        "s = '{doc}`nosuch`'",
+        "```",
+        "The first bare fence closed the note, so this is prose: {doc}`gone3`.",
+        "",
+        "```",
+        "{doc}`nosuch`",
+        "```",
+    ])
+    write(repo, "lake.md", lecture_text("Lake", body=body))
+
+    res = repo.pool_check()
+
+    assert res.returncode == 1
+    assert tags(res) == ["doc-target"] * 4, res.stdout
+    for target in ("gone1", "<lake>", "gone2", "gone3"):
+        assert f"{{doc}}`{target}`" in res.stdout
+    assert "nosuch" not in res.stdout

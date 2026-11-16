@@ -772,14 +772,25 @@ def cited_keys(directory: Path):
 def refresh_settles(key: str, files, ledger) -> bool:
     """Does the refresh this run starts take ``key`` out of every pool lecture
     that cites it? True when each of ``files`` is a pool lecture whose
-    canonical copy, as the mirror now holds it, no longer cites the key: the
-    series dropped the citation with its entry, and ``tools/promote
-    --refresh`` brings the pool copy into line."""
+    canonical copy has moved upstream since promotion and, as the mirror now
+    holds it, no longer cites the key: the series dropped the citation with
+    its entry, and ``tools/promote --refresh`` brings the pool copy into
+    line."""
     for name in files:
         entry = ledger.get(f"lectures/{name}")
         canonical = entry.get("canonical") if isinstance(entry, dict) else None
-        source = MIRROR_DIR / str(canonical) / "lectures" / name
-        if not canonical or not source.is_file():
+        recorded = next(
+            (s for s in (entry.get("sources") or []) if isinstance(s, dict) and s.get("series") == canonical),
+            None,
+        ) if canonical else None
+        if not recorded or not recorded.get("path"):
+            return False
+        source = MIRROR_DIR / str(canonical) / "lectures" / str(recorded["path"])
+        if not source.is_file():
+            return False
+        # Only a copy that MOVED upstream is refreshed: one still at its
+        # promoted digest means the pool copy itself was changed.
+        if hashlib.sha256(source.read_bytes()).hexdigest() == recorded.get("digest"):
             return False
         text = source.read_text(encoding="utf-8", errors="replace")
         if any(key in (k.strip() for k in m.group(1).split(",")) for m in CITE_RE.finditer(text)):
