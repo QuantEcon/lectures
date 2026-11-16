@@ -49,8 +49,11 @@ too, so a site's folder stays true to the pool it is built from:
 * ``site-page``     — a site page's name is not a pool lecture's, and no file
   under the site's ``_static/`` is a pool file, since staging copies them
   into ``lectures/`` (``tools/stage-site``) and would overwrite it.
-* ``site-config``   — the files ``_config.yml`` names as branding (``logo``,
-  ``html_favicon``, ``dark_logo``) are in the site's ``_static/``; the
+* ``site-config``   — ``_config.yml`` is well formed where it is read; it
+  sets ``only_build_toc_files: true`` and the site's own execution cache,
+  ``execute.cache: _build/jupyter_cache/<key>``; the files it names as
+  branding (``logo``, ``html_favicon``, ``dark_logo``) are in the site's
+  ``_static/``; the
   cross-reference rules hold (QuantEcon/project-monorepo#22): the site sets
   ``intersphinx_disabled_reftypes: []``, maps no consumer series (``dp``)
   in ``intersphinx_mapping``, and, unless it is a consumer, maps itself, to
@@ -432,10 +435,38 @@ def check_site_config(key: str, config, site_yml, site_dir: Path, consumers, pro
     if not isinstance(config, dict):
         problems.append(("site-config", f"{where} is not a mapping"))
         return
-    sphinx = (config.get("sphinx") or {}).get("config") or {}
-    theme = sphinx.get("html_theme_options") or {}
+
+    def section(parent, name, shown):
+        """``parent[name]`` when it is a mapping; {} when it is absent; {}
+        and a problem when it is something else."""
+        value = parent.get(name)
+        if value is None:
+            return {}
+        if not isinstance(value, dict):
+            problems.append(("site-config", f"{where}: `{shown}` is not a mapping"))
+            return {}
+        return value
+
+    sphinx = section(section(config, "sphinx", "sphinx"), "config", "sphinx.config")
+    theme = section(sphinx, "html_theme_options", "sphinx.config.html_theme_options")
+    mapping = section(sphinx, "intersphinx_mapping", "sphinx.config.intersphinx_mapping")
+    execute = section(config, "execute", "execute")
+    html = section(config, "html", "html")
+    if config.get("only_build_toc_files") is not True:
+        problems.append((
+            "site-config",
+            f"{where} does not set `only_build_toc_files: true`: without it Jupyter Book builds every lecture in "
+            "the pool, not the site's contents",
+        ))
+    cache = f"_build/jupyter_cache/{key}"
+    if execute.get("cache") != cache:
+        problems.append((
+            "site-config",
+            f"{where}: `execute.cache` is {execute.get('cache')!r}, not {cache}: each site keeps its own execution "
+            "cache",
+        ))
     branding = [("logo", config.get("logo")), ("html_favicon", sphinx.get("html_favicon"))]
-    if theme.get("dark_logo"):
+    if isinstance(theme.get("dark_logo"), str) and theme["dark_logo"]:
         # The theme reads dark_logo inside html_static_path.
         branding.append(("dark_logo", f"_static/{theme['dark_logo']}"))
     for name, rel in branding:
@@ -447,7 +478,6 @@ def check_site_config(key: str, config, site_yml, site_dir: Path, consumers, pro
             f"{where} does not set `intersphinx_disabled_reftypes: []`: a link with no target in the site must "
             "resolve on the lecture's home site",
         ))
-    mapping = sphinx.get("intersphinx_mapping") or {}
     for name in sorted(set(mapping) & set(consumers)):
         problems.append((
             "site-config",
@@ -465,7 +495,7 @@ def check_site_config(key: str, config, site_yml, site_dir: Path, consumers, pro
             ))
         elif isinstance(site_yml, dict) and "url" in site_yml and target != site_yml["url"]:
             problems.append(("site-config", f"{where} maps `{key}` to {target!r}, not to its site.yml url {site_yml.get('url')!r}"))
-    baseurl = (config.get("html") or {}).get("baseurl")
+    baseurl = html.get("baseurl")
     if isinstance(site_yml, dict) and "url" in site_yml and site_yml["url"] != baseurl:
         problems.append(("site-yml", f"sites/{key}/site.yml: url {site_yml['url']!r} is not html.baseurl in _config.yml ({baseurl!r})"))
 

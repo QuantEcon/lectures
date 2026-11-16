@@ -3,11 +3,11 @@ author: Thomas J. Sargent & John Stachurski
 logo: _static/qe-logo.png
 description: This website presents a set of lectures on python programming for economics, designed and written by Thomas J. Sargent and John Stachurski.
 
-# site addition, sites/README.md: build only the pages _toc.yml lists, not every lecture in the pool
-only_build_toc_files: true
+# site addition: build only the pages _toc.yml lists, not every lecture in the pool (sites/README.md)
+only_build_toc_files: true  # site addition
 execute:
-  # site addition, sites/README.md: this site's own execution cache, read from the directory jb is run from
-  cache: _build/jupyter_cache/programming
+  # site addition: this site's own execution cache, read from the directory jb is run from (sites/README.md)
+  cache: _build/jupyter_cache/programming  # site addition
   execute_notebooks: "cache"
   timeout: 600 # 10 minutes
 
@@ -76,13 +76,13 @@ sphinx:
         notebook_interface        : classic  # The interface interactive links will activate ["classic", "jupyterlab"]
         colab_url                 : https://colab.research.google.com
         thebe                     : false  # Add a thebe button to pages (requires the repository to run on Binder)
-    # site addition, sites/README.md: a link with no target in this site resolves on the lecture's home site
-    intersphinx_disabled_reftypes: []
+    # site addition: a link with no target in this site resolves on the lecture's home site (sites/README.md)
+    intersphinx_disabled_reftypes: []  # site addition
     intersphinx_mapping: 
-      # site addition, sites/README.md: this site maps itself
-      programming:
-        - "https://python-programming.quantecon.org/"
-        - null
+      # site addition: this site maps itself (sites/README.md)
+      programming:  # site addition
+        - "https://python-programming.quantecon.org/"  # site addition
+        - null  # site addition
       jax: 
         - "https://jax.quantecon.org/"
         - null

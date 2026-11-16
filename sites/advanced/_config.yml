@@ -16,11 +16,11 @@ parse:
     - smartquotes
     - substitution
 
-# site addition, sites/README.md: build only the pages _toc.yml lists, not every lecture in the pool
-only_build_toc_files: true
+# site addition: build only the pages _toc.yml lists, not every lecture in the pool (sites/README.md)
+only_build_toc_files: true  # site addition
 execute:
-  # site addition, sites/README.md: this site's own execution cache, read from the directory jb is run from
-  cache: _build/jupyter_cache/advanced
+  # site addition: this site's own execution cache, read from the directory jb is run from (sites/README.md)
+  cache: _build/jupyter_cache/advanced  # site addition
   execute_notebooks: "cache"
   timeout: 7200   # 2 Hours
 
@@ -37,13 +37,13 @@ latex:
 sphinx:
   extra_extensions: [sphinx_multitoc_numbering, sphinxext.rediraffe, sphinx_tojupyter, sphinx_exercise, sphinx_togglebutton, sphinx_proof, sphinx.ext.intersphinx]
   config:
-    # site addition, sites/README.md: a link with no target in this site resolves on the lecture's home site
-    intersphinx_disabled_reftypes: []
+    # site addition: a link with no target in this site resolves on the lecture's home site (sites/README.md)
+    intersphinx_disabled_reftypes: []  # site addition
     intersphinx_mapping:
-      # site addition, sites/README.md: this site maps itself
-      advanced:
-        - "https://python-advanced.quantecon.org/"
-        - null
+      # site addition: this site maps itself (sites/README.md)
+      advanced:  # site addition
+        - "https://python-advanced.quantecon.org/"  # site addition
+        - null  # site addition
       intro:
         - "https://intro.quantecon.org/"
         - null

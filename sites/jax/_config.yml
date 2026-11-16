@@ -19,8 +19,8 @@ parse:
 
 only_build_toc_files: true
 execute:
-  # site addition, sites/README.md: this site's own execution cache, read from the directory jb is run from
-  cache: _build/jupyter_cache/jax
+  # site addition: this site's own execution cache, read from the directory jb is run from (sites/README.md)
+  cache: _build/jupyter_cache/jax  # site addition
   execute_notebooks: "cache"
   timeout: 2400
 
@@ -102,13 +102,13 @@ sphinx:
         macros:
           "argmax" : "arg\\,max"
           "argmin" : "arg\\,min"
-    # site addition, sites/README.md: a link with no target in this site resolves on the lecture's home site
-    intersphinx_disabled_reftypes: []
+    # site addition: a link with no target in this site resolves on the lecture's home site (sites/README.md)
+    intersphinx_disabled_reftypes: []  # site addition
     intersphinx_mapping: 
-      # site addition, sites/README.md: this site maps itself
-      jax:
-        - "https://jax.quantecon.org/"
-        - null
+      # site addition: this site maps itself (sites/README.md)
+      jax:  # site addition
+        - "https://jax.quantecon.org/"  # site addition
+        - null  # site addition
       intermediate: 
         - "https://python.quantecon.org/"
         - null

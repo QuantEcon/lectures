@@ -2,7 +2,7 @@
 
 Each folder here is one published site, built on Jupyter Book 1 from the pool (`lectures/`) by selecting and ordering its lectures. Today there is one site per series, under the series' key from [`sync/manifest.yml`](../sync/manifest.yml): `intro`, `programming`, `intermediate`, `advanced`, `dp` and `jax`. A future course or reader is also a site, a new folder with a new `type` in its `site.yml`, not a new layout.
 
-Nothing here is generated from a shared base. Each site's `_config.yml` and `_toc.yml` are the series' own files, copied verbatim from the series at the pin in [`sync/state.yml`](../sync/state.yml), with only the additions the build from the pool needs, each marked in place with a `# site addition, sites/README.md:` comment so the rest stays diffable against the series (QuantEcon/project-monorepo#21).
+Nothing here is generated from a shared base. Each site's `_config.yml` and `_toc.yml` are the series' own files, copied verbatim from the series at the pin in [`sync/state.yml`](../sync/state.yml), with only the additions the build from the pool needs (QuantEcon/project-monorepo#21). An addition is always a whole line, and every added line holds the marker `# site addition`: a comment line that says why, then each line of YAML it adds with `  # site addition` after it. Removing every line that holds the marker gives back the series' file exactly, which is how the drift-check compares them.
 
 ## What a site's folder holds
 
@@ -53,7 +53,7 @@ Today's values, read from each series at its pin on 2026-11-17 (each `site.yml` 
 
 ## The deviations from verbatim
 
-Every one of them, per site. A diff of a site's `_config.yml` or `_toc.yml` against the series' own file shows these and nothing else.
+Every one of them, per site. A diff of a site's `_config.yml` or `_toc.yml` against the series' own file shows these and nothing else, and every line of them holds the `# site addition` marker.
 
 | Addition | Why | Sites |
 | --- | --- | --- |
@@ -70,7 +70,7 @@ Two things that are not additions:
 
 ## Staging and building a site locally
 
-Sphinx reads only inside its source folder, and every site's root page is called `intro.md`, so a site's own pages are copied into `lectures/` just before the build and removed after. [`tools/stage-site`](../tools/stage-site) does the copy: every `sites/<key>/<name>.md` to `lectures/<name>.md`, and every file under `sites/<key>/_static/` to the same path under `lectures/_static/`. It never overwrites a file with other bytes, so one site is staged at a time, and `--clean` removes only the files that are still the site's.
+Sphinx reads only inside its source folder, and every site's root page is called `intro.md`, so a site's own pages are copied into `lectures/` just before the build and removed after. [`tools/stage-site`](../tools/stage-site) does the copy: every `sites/<key>/<name>.md` to `lectures/<name>.md`, and every file under `sites/<key>/_static/` to the same path under `lectures/_static/`. It never overwrites: a destination that already exists, whatever its bytes, stops the run before anything is copied. It writes what it copies, and the folders it makes, to a record outside the pool, `_build/stage-site.json` (`_build/` is ignored by git), and `--clean` removes only what that record lists, each file only while its bytes are still the ones it copied, so it can never remove a pool file. One site is staged at a time: staging refuses while a record exists.
 
 From the repository's root, with Jupyter Book 1 and the series' packages installed (each series' `environment.yml`):
 
@@ -82,6 +82,8 @@ uv run --script tools/stage-site --clean dp
 
 Give `--toc` as an absolute path: Jupyter Book 1 reads a relative one from inside `lectures/`. Clean before committing, or before running `tools/pool-check` and `tools/assets-report --check-index`, which read a staged page or file as the pool's.
 
+**`-n -W` is stricter than two series build today.** intro's and advanced's own publish builds run their HTML without `-n` or `-W`, and their PDF with `-n` only; programming, intermediate and jax build with `-n -W`, and dp through `QuantEcon/actions`' `build-lectures`. So a strict build of the intro or advanced site may fail on warnings those series tolerate today. How strict each site's build is, is QuantEcon/project-monorepo#25's to settle per site; `site.yml` does not carry it.
+
 ## The rules
 
 [`tools/pool-check`](../tools/pool-check) keeps them on every pull request that touches `lectures/` or `sites/` ([`pool-check.yml`](../.github/workflows/pool-check.yml)), except the third, which needs the mirror and is the drift-check's.
@@ -92,5 +94,8 @@ Give `--toc` as an absolute path: Jupyter Book 1 reads a relative one from insid
 4. **A link with no target in the site resolves to the lecture's home site,** through `intersphinx_disabled_reftypes: []`, by rules 1 to 3.
 5. **Every `_toc.yml` entry is a pool lecture or a page of the site,** a site page never has a pool lecture's name, and no file under a site's `_static/` is also a pool file: staging would overwrite it.
 6. **`site.yml` has every field above, each with a valid value,** and the branding a `_config.yml` names is in the site's `_static/`.
+7. **The additions a build needs stay:** every site sets `only_build_toc_files: true` and its own cache, `execute.cache: _build/jupyter_cache/<key>`, and `_config.yml` is well formed where these rules read it.
 
-When a series' own `_toc.yml` or `_config.yml` changes upstream, the site's copy is brought into step by hand, keeping the additions above. The drift-check's `toc-changed` issue says so for a watched toc.
+## Keeping the copies true to the series
+
+A site's files are copies of its series' files, so they follow the series until its cutover. After every sync the drift-check ([`tools/drift-check`](../tools/drift-check)) compares every file in each series' site folder but `site.yml` with the series' `lectures/<path>` at the pin: the pages and the `_static/` files byte for byte, and `_config.yml` and `_toc.yml` with every `# site addition` line removed. Each file that differs, or that the series no longer has, is `site-stale`, a `drift` finding: the nightly run opens an issue for it, with the diff, and closes the issue once the copy matches again. To settle one, copy the series' file at the pin over the site's and put back the lines marked `# site addition`. A change the site must not take is a decision to record here, as a marked addition, not a copy to leave stale.

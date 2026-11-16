@@ -18,8 +18,8 @@ parse:
 
 only_build_toc_files: true
 execute:
-  # site addition, sites/README.md: this site's own execution cache, read from the directory jb is run from
-  cache: _build/jupyter_cache/intermediate
+  # site addition: this site's own execution cache, read from the directory jb is run from (sites/README.md)
+  cache: _build/jupyter_cache/intermediate  # site addition
   execute_notebooks: "cache"
   timeout: 2400
 
@@ -100,10 +100,10 @@ sphinx:
     # site (pandas_panel, shared with programming, links to its pandas lecture).
     intersphinx_disabled_reftypes: []
     intersphinx_mapping: 
-      # site addition, sites/README.md: this site maps itself
-      intermediate:
-        - "https://python.quantecon.org/"
-        - null
+      # site addition: this site maps itself (sites/README.md)
+      intermediate:  # site addition
+        - "https://python.quantecon.org/"  # site addition
+        - null  # site addition
       intro: 
         - "https://intro.quantecon.org/"
         - null

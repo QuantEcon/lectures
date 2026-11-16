@@ -14,25 +14,31 @@ under ``sites/<key>/_static/`` (the site's branding, and files its pages use)
 to the same path under ``lectures/_static/``. ``_config.yml``, ``_toc.yml``
 and ``site.yml`` are not copied: the build reads them where they are.
 
-It never overwrites: a file already at a destination with other bytes (a
-pool file, or another site's page still staged) stops the run before
-anything is copied. One site is staged at a time; ``--clean`` takes a site's
-copies out again, removing only files whose bytes are still the site's.
-``tools/pool-check`` keeps a site's names apart from the pool's, so neither
-direction can touch a pool file.
+It never overwrites, and it never removes a file it did not copy. A
+destination that already exists, whatever its bytes, stops the run before
+anything is copied. What a run copies, and the folders it makes, are written
+first to a record outside the pool, ``_build/stage-site.json`` (``_build/``
+is ignored by git), and ``--clean`` removes only what that record lists: each
+file whose bytes are still the ones it copied, then each folder the run made
+once it is empty, then the record. One site is staged at a time: while a record
+exists, staging refuses.
 
 Usage
 -----
     tools/stage-site dp           # stage dp's pages and files into lectures/
     tools/stage-site --clean dp   # remove them again
 
-Exit status: 0 done, 1 refused (a destination differs, or no such site),
-2 an error. It never commits anything.
+Exit status: 0 done, 1 refused (no such site, a destination exists, or a
+site is staged already, or another site is), 2 an error. It never commits
+anything.
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
+import re
 import shutil
 import sys
 from pathlib import Path
@@ -40,15 +46,32 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 POOL_DIR = ROOT / "lectures"
 SITES_DIR = ROOT / "sites"
-# Read by the build where they are; never copied.
-SITE_FILES = ("_config.yml", "_toc.yml", "site.yml")
+RECORD_PATH = ROOT / "_build" / "stage-site.json"
+# Read by the build where they are; never copied. The first two mark a
+# folder as a site.
+SITE_FILES = ("_toc.yml", "site.yml", "_config.yml")
+KEY_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]*")
+
+
+def digest(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def shown(path: Path) -> str:
+    return path.relative_to(ROOT).as_posix()
+
+
+def site_keys():
+    if not SITES_DIR.is_dir():
+        return []
+    return sorted(p.name for p in SITES_DIR.iterdir() if p.is_dir() and all((p / f).is_file() for f in SITE_FILES[:2]))
 
 
 def staged_files(site: Path):
     """``[(source, destination)]`` for every file staging ``site`` copies."""
     pairs = []
     for p in sorted(site.iterdir()):
-        if p.is_file() and p.suffix == ".md" and p.name not in SITE_FILES:
+        if p.is_file() and p.suffix == ".md":
             pairs.append((p, POOL_DIR / p.name))
     static = site / "_static"
     if static.is_dir():
@@ -57,64 +80,121 @@ def staged_files(site: Path):
     return pairs
 
 
+def read_record():
+    if not RECORD_PATH.is_file():
+        return None
+    record = json.loads(RECORD_PATH.read_text(encoding="utf-8"))
+    if not (
+        isinstance(record, dict)
+        and isinstance(record.get("files"), list)
+        and all(isinstance(f, dict) and isinstance(f.get("path"), str) and isinstance(f.get("sha256"), str)
+                for f in record["files"])
+        and isinstance(record.get("dirs"), list)
+        and all(isinstance(d, str) for d in record["dirs"])
+    ):
+        raise ValueError(f"{shown(RECORD_PATH)} is not a stage-site record")
+    return record
+
+
+def inside_pool(rel: str) -> Path:
+    """``ROOT / rel``, refused unless it lies inside ``lectures/``."""
+    path = (ROOT / rel).resolve()
+    if POOL_DIR.resolve() not in path.parents:
+        raise ValueError(f"{shown(RECORD_PATH)} names {rel}, which is not inside lectures/")
+    return ROOT / rel
+
+
+def stage(key: str, site: Path) -> int:
+    record = read_record()
+    if record is not None:
+        print(
+            f"stage-site {key}: refused, nothing copied: sites/{record.get('site')} is staged "
+            f"({shown(RECORD_PATH)}); run `tools/stage-site --clean {record.get('site')}` first."
+        )
+        return 1
+    pairs = staged_files(site)
+    present = [dst for _, dst in pairs if dst.exists() or dst.is_symlink()]
+    if present:
+        for dst in present:
+            print(f"  [exists] {shown(dst)}")
+        print(
+            f"stage-site {key}: refused, nothing copied: staging never overwrites. A pool file here is a "
+            "broken pool-check rule (site-page); anything else is left from an earlier build, to remove first."
+        )
+        return 1
+    dirs = []
+    for _, dst in pairs:
+        parent = dst.parent
+        missing = []
+        while not parent.exists() and parent != POOL_DIR:
+            missing.append(parent)
+            parent = parent.parent
+        for d in reversed(missing):
+            if shown(d) not in dirs:
+                dirs.append(shown(d))
+    RECORD_PATH.parent.mkdir(parents=True, exist_ok=True)
+    RECORD_PATH.write_text(
+        json.dumps(
+            {"site": key, "files": [{"path": shown(dst), "sha256": digest(src)} for src, dst in pairs], "dirs": dirs},
+            indent=2,
+        ) + "\n",
+        encoding="utf-8",
+    )
+    for src, dst in pairs:
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(src, dst)
+    print(f"stage-site {key}: {len(pairs)} file(s) copied into lectures/ (recorded in {shown(RECORD_PATH)})")
+    return 0
+
+
+def clean(key: str) -> int:
+    record = read_record()
+    if record is None:
+        print(f"stage-site --clean {key}: nothing is staged ({shown(RECORD_PATH)} does not exist)")
+        return 0
+    if record.get("site") != key:
+        print(f"stage-site --clean {key}: refused: the staged site is sites/{record.get('site')}, not sites/{key}")
+        return 1
+    removed, kept = 0, []
+    for item in record["files"]:
+        rel = item["path"]
+        dst = inside_pool(rel)
+        if not dst.is_file():
+            continue
+        if digest(dst) != item["sha256"]:
+            kept.append(rel)
+            continue
+        dst.unlink()
+        removed += 1
+    for rel in reversed(record["dirs"]):
+        d = inside_pool(rel)
+        if d.is_dir() and not any(d.iterdir()):
+            d.rmdir()
+    for rel in kept:
+        print(f"  kept {rel}: its bytes are not the ones staging copied")
+    RECORD_PATH.unlink()
+    print(f"stage-site --clean {key}: {removed} file(s) removed")
+    return 0
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(prog="tools/stage-site", description=__doc__.split("\n\n")[0])
-    parser.add_argument("key", help="the site: a folder under sites/")
+    parser.add_argument("key", help="the site: a folder under sites/ holding _toc.yml and site.yml")
     parser.add_argument("--clean", action="store_true", help="remove the site's staged copies instead")
     args = parser.parse_args(argv)
-    site = SITES_DIR / args.key
-    if not (args.key and "/" not in args.key and site.is_dir()):
-        known = sorted(p.name for p in SITES_DIR.iterdir() if p.is_dir()) if SITES_DIR.is_dir() else []
-        sys.stderr.write(f"error: there is no site sites/{args.key}/ (sites: {', '.join(known) or 'none'})\n")
+    if not (KEY_RE.fullmatch(args.key) and args.key in site_keys()):
+        sys.stderr.write(f"error: there is no site sites/{args.key}/ (sites: {', '.join(site_keys()) or 'none'})\n")
         return 1
     if not POOL_DIR.is_dir():
         sys.stderr.write(f"error: {POOL_DIR} does not exist\n")
         return 2
-    pairs = staged_files(site)
-    shown = lambda p: p.relative_to(ROOT).as_posix()  # noqa: E731
-
-    if args.clean:
-        removed, kept = 0, []
-        for src, dst in pairs:
-            if not dst.is_file():
-                continue
-            if dst.read_bytes() != src.read_bytes():
-                kept.append(dst)
-                continue
-            dst.unlink()
-            removed += 1
-            parent = dst.parent
-            while parent != POOL_DIR and parent.is_dir() and not any(parent.iterdir()):
-                parent.rmdir()
-                parent = parent.parent
-        for dst in kept:
-            print(f"  kept {shown(dst)}: its bytes are not sites/{args.key}'s")
-        print(f"stage-site --clean {args.key}: {removed} file(s) removed")
-        return 0
-
-    clashes = [dst for src, dst in pairs if dst.exists() and (not dst.is_file() or dst.read_bytes() != src.read_bytes())]
-    if clashes:
-        for dst in clashes:
-            print(f"  [differs] {shown(dst)} is already there with other bytes")
-        print(
-            f"stage-site {args.key}: refused, nothing copied. Clean the site staged before "
-            f"(`tools/stage-site --clean <key>`); a pool file here is a broken pool-check rule (site-page)."
-        )
-        return 1
-    copied = 0
-    for src, dst in pairs:
-        if dst.is_file():
-            continue  # already staged, the same bytes
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(src, dst)
-        copied += 1
-    print(f"stage-site {args.key}: {copied} file(s) copied into lectures/, {len(pairs) - copied} already there")
-    return 0
+    site = SITES_DIR / args.key
+    return clean(args.key) if args.clean else stage(args.key, site)
 
 
 if __name__ == "__main__":
     try:
         sys.exit(main())
-    except OSError as exc:
+    except (OSError, ValueError) as exc:
         sys.stderr.write(f"error: {exc}\n")
         sys.exit(2)

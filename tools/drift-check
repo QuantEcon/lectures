@@ -19,8 +19,9 @@ same lecture. This script compares all of that against the reconstructed
   or asset, recorded as a source) no longer matches its canonical home, or a
   copy was removed upstream, or a watched ``_toc.yml`` changed or lists a
   lecture the pool does not hold, or two published sites hold different
-  lectures under one name. Each becomes a GitHub issue (``--issues``) that
-  closes itself when the finding clears.
+  lectures under one name, or a site's copy of its series' files no longer
+  matches them. Each becomes a GitHub issue (``--issues``) that closes itself
+  when the finding clears.
 * ``violation`` — the POOL itself no longer equals rewrites(canonical), or a
   pool asset changed: someone edited the pool directly, which the upstream-
   first rule forbids. Exit code 2; a red run is the alarm.
@@ -45,7 +46,7 @@ Usage
 -----
     tools/drift-check                      # report against the existing mirror/
     tools/drift-check --reconstruct        # rebuild mirror/ for the series the
-                                           # checks read, then report
+                                           # checks read (sites/ included), then report
     tools/drift-check --json PATH          # also write a machine-readable report
     tools/drift-check --issues             # open/update/close `drift` issues
                                            # on GitHub (needs `gh`, authenticated)
@@ -73,6 +74,17 @@ names are unique across the published sites. Every canonical-eligible series'
 ``_toc.yml`` is read, whether its lectures are in the pool or not, and a name
 two of them list must be one lecture in both, by the rule above
 (``name-shared``). A consumer only republishes, so its toc is not read for it.
+
+The sites check: each series' site, ``sites/<key>/``, holds copies of the
+series' own files (``sites/README.md``), and a copy must follow its series.
+Every file in the folder but ``site.yml`` is compared with the series'
+``lectures/<path>`` at the pin: the pages and the ``_static/`` files byte for
+byte, and ``_config.yml`` and ``_toc.yml`` once the site's additions are
+removed. An addition is a whole line holding the marker ``# site addition``
+(a comment line, or a trailing comment), so removing every such line gives
+back the series' file exactly. Each file that differs, or that the series no
+longer has, is ``site-stale``. A folder whose name is not a series key in the
+manifest is not a series' copy and is not compared.
 """
 
 from __future__ import annotations
@@ -82,6 +94,7 @@ import difflib
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -106,6 +119,7 @@ LEDGER_PATH = ROOT / "sync" / "ledger.yml"
 STATE_PATH = ROOT / "sync" / "state.yml"
 MANIFEST_PATH = ROOT / "sync" / "manifest.yml"
 TOC_STATE_PATH = ROOT / "sync" / "toc.yml"
+SITES_DIR = ROOT / "sites"
 
 DRIFT_LABEL = "drift"
 DIFF_LINE_CAP = 300  # lines of unified diff kept in an issue body
@@ -116,6 +130,13 @@ DIFF_LINE_CAP = 300  # lines of unified diff kept in an issue body
 STALE_DAYS = 7
 
 CONSUMER_CLASS = "consumer"
+
+# A site's addition to its series' _config.yml or _toc.yml: a whole line
+# holding the marker, as a comment of its own or after the YAML it adds.
+SITE_ADDITION_RE = re.compile(r"(?:^|\s)# site addition\b")
+# Read by the build where they are; the site's own, not a series' file.
+SITE_OWN_FILES = ("site.yml",)
+SITE_STRIPPED_FILES = ("_config.yml", "_toc.yml")
 
 
 # --------------------------------------------------------------------------- #
@@ -797,6 +818,73 @@ def check_names(manifest: dict, consumers: set, ledger_lectures: dict, findings:
             ))
 
 
+def strip_site_additions(data: bytes) -> bytes:
+    """A site's ``_config.yml`` or ``_toc.yml`` with every line holding the
+    ``# site addition`` marker removed: the series' file, if the site only
+    added whole marked lines. Every other byte is kept, line endings
+    included."""
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        return data
+    kept = [line for line in text.splitlines(keepends=True) if not SITE_ADDITION_RE.search(line)]
+    return "".join(kept).encode("utf-8")
+
+
+def series_sites(manifest: dict):
+    """The ``sites/<key>/`` folders whose key is a series in the manifest."""
+    if not SITES_DIR.is_dir():
+        return []
+    return [p.name for p in sorted(SITES_DIR.iterdir()) if p.is_dir() and p.name in manifest]
+
+
+def check_sites(manifest: dict, findings: list):
+    """Each series' site still holds its series' files: ``site-stale`` for
+    every file that differs from the series' copy at the pin, additions
+    aside, or that the series no longer has."""
+    for key in series_sites(manifest):
+        site = SITES_DIR / key
+        for path in sorted(q for q in site.rglob("*") if q.is_file()):
+            rel = path.relative_to(site).as_posix()
+            if rel in SITE_OWN_FILES or any(part.startswith(".") for part in rel.split("/")):
+                continue
+            ours = read_bytes(path)
+            stripped = rel in SITE_STRIPPED_FILES
+            if stripped:
+                ours = strip_site_additions(ours)
+            theirs = read_bytes(mirror_lectures(key) / rel)
+            subject = f"sites/{key}/{rel}"
+            remedy = (
+                f"`sites/{key}/` copies {key}'s own files verbatim (`sites/README.md`), so the copy follows the "
+                f"series. Copy {key}'s `lectures/{rel}` at the pin over `sites/{key}/{rel}`"
+                + (", then put back the lines marked `# site addition`" if stripped else "")
+                + ". A change the site must not take is a decision to record in `sites/README.md`, not a copy to "
+                "leave stale."
+            )
+            if theirs is None:
+                findings.append(Finding(
+                    "drift", "site-stale", subject,
+                    f"{subject}: {key} no longer has lectures/{rel} upstream",
+                    detail=remedy + f" If {key} removed or renamed the file, remove or rename the site's copy too, "
+                    f"and the `_toc.yml` entry or `_config.yml` setting that names it.",
+                    issue_title=f"drift({key}): {subject} is gone upstream",
+                    data={"series": key, "path": rel},
+                ))
+                continue
+            if ours == theirs:
+                continue
+            name = f"{subject} (additions removed)" if stripped else subject
+            findings.append(Finding(
+                "drift", "site-stale", subject,
+                f"{subject} no longer matches {key}'s lectures/{rel}"
+                + (" once the site's additions are removed" if stripped else ""),
+                detail=remedy,
+                diff=unified_diff(ours, theirs, name, f"{key}/lectures/{rel}@current"),
+                issue_title=f"drift({key}): {subject} no longer matches the series",
+                data={"series": key, "path": rel},
+            ))
+
+
 def accept_tocs(series_list, state: dict, toc_state: dict):
     for series in series_list:
         p = mirror_lectures(series) / "_toc.yml"
@@ -980,7 +1068,7 @@ def build_parser():
     p = argparse.ArgumentParser(prog="tools/drift-check", description=__doc__.split("\n\n")[0])
     p.add_argument("--reconstruct", action="store_true",
                    help="rebuild mirror/ for every series the checks read (every canonical-eligible series, "
-                   "and a consumer whose toc is watched) before checking")
+                   "a consumer whose toc is watched, and every series with a site in sites/) before checking")
     p.add_argument("--json", metavar="PATH", help="write the findings as JSON to PATH")
     p.add_argument("--issues", action="store_true",
                    help="open, update and close `drift` issues on GitHub to match the findings")
@@ -1017,6 +1105,7 @@ def run(argv=None):
             return 0
 
         needed = series_in_ledger(ledger_lectures, ledger_assets, toc_state, consumers, manifest)
+        needed += [s for s in series_sites(manifest) if s not in needed]
         if args.reconstruct:
             reconstruct(needed)
         missing = [s for s in needed if not mirror_lectures(s).exists()]
@@ -1043,6 +1132,7 @@ def run(argv=None):
             check_asset(pool_rel, ledger_assets[pool_rel], consumers, findings, user_series)
         check_tocs(toc_state, manifest, ledger_lectures, findings)
         check_names(manifest, consumers, ledger_lectures, findings)
+        check_sites(manifest, findings)
         findings.sort(key=lambda f: (SEVERITY_ORDER[f.severity], f.subject, f.kind))
 
         pins = {s: state.get(s) for s in needed}

@@ -12,7 +12,7 @@ parts:
   - file: mccall_model_with_separation
   - file: mccall_model_with_sep_markov
   - file: mccall_fitted_vfi
-  - file: mccall_risk  # site addition, sites/README.md: intermediate's Job Search lecture lecture-dp lacks
+  - file: mccall_risk  # site addition: intermediate's Job Search lecture lecture-dp lacks (sites/README.md)
   - file: mccall_persist_trans
   - file: career
   - file: jv

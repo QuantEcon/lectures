@@ -19,8 +19,8 @@ parse:
 
 only_build_toc_files: true
 execute:
-  # site addition, sites/README.md: this site's own execution cache, read from the directory jb is run from
-  cache: _build/jupyter_cache/intro
+  # site addition: this site's own execution cache, read from the directory jb is run from (sites/README.md)
+  cache: _build/jupyter_cache/intro  # site addition
   execute_notebooks: "cache"
   timeout: 600 # 10 minutes
   exclude_patterns:
@@ -111,8 +111,8 @@ sphinx:
       launch_buttons:
         colab_url                 : https://colab.research.google.com
         thebe                     : false  # Add a thebe button to pages (requires the repository to run on Binder)
-    # site addition, sites/README.md: a link with no target in this site resolves on the lecture's home site
-    intersphinx_disabled_reftypes: []
+    # site addition: a link with no target in this site resolves on the lecture's home site (sites/README.md)
+    intersphinx_disabled_reftypes: []  # site addition
     intersphinx_mapping:
       intermediate: 
         - https://python.quantecon.org/
