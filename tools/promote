@@ -1823,8 +1823,10 @@ def main(argv=None):
     # keeps one version of it (``asset_version``).
     src_to_pool = {}  # (src_rel, digest) -> pool path already in the ledger
     recorded_at = {}  # (series, src_rel) -> pool path already in the ledger
+    by_bytes = {}  # digest -> pool paths recorded with those bytes
     for pool_path, meta in ledger_assets.items():
         digest = ledger_asset_digest(pool_path, meta)
+        by_bytes.setdefault(digest, []).append(pool_path)
         for src in meta.get("sources") or []:
             src_to_pool.setdefault((src.get("path"), digest), pool_path)
             if not src.get("differs"):
@@ -1835,13 +1837,33 @@ def main(argv=None):
     def recorded_asset(plan, src_rel, digest):
         """The pool path of the recorded asset a reference belongs to, if any."""
         found = recorded_at.get((plan.canonical, src_rel)) or src_to_pool.get((src_rel, digest))
+        if found is None:
+            # The series moved or renamed the file: the same bytes, and its
+            # recorded path is gone. It is still that asset, at a new path.
+            for pool_path in by_bytes.get(digest, ()):
+                for src in ledger_assets[pool_path].get("sources") or []:
+                    if (
+                        src.get("series") == plan.canonical
+                        and not src.get("differs")
+                        and not (mirror_lectures(plan.canonical) / str(src.get("path"))).is_file()
+                    ):
+                        found = pool_path
         if found is None and src_rel.startswith(ADMONITION_SRC):
             dest = ADMONITION_DEST + src_rel[len(ADMONITION_SRC):]
             found = dest if dest in ledger_assets else None
         return found
 
     pulled = {}  # slug -> the slug whose asset move pulled it into the batch
+    optional = set()  # pulled in only so a record could follow its users
+    declined = {}  # optional pull-ins that could not be re-promoted -> why
     while True:
+        # An optional pull-in that cannot be re-promoted is let go, with a
+        # note: its own pin did not move, and nothing in this run needs it.
+        for plan in [p for p in plans if p.slug in optional and p.error is not None]:
+            declined[plan.slug] = plan.error
+            optional.discard(plan.slug)
+            pulled.pop(plan.slug, None)
+            plans.remove(plan)
         replanned = {p.slug for p in ok}
         kept_entries = {  # ledger lectures NOT being re-promoted
             slug_of(key[len("lectures/"):]): entry
@@ -1875,7 +1897,10 @@ def main(argv=None):
             ) | set(entry["extra"])
             copies = record_copies(record, series_of_users, considered, consumer_series, order)
             for series, path in entry["extra"].items():
-                copies.setdefault(series, path)
+                # The path a lecture uses now wins over a recorded one that
+                # is gone upstream (the file was moved or renamed).
+                if series not in copies or not (mirror_lectures(series) / str(copies[series])).is_file():
+                    copies[series] = path
             copies = {x: copies[x] for x in order if x in copies}
             recorded = {i.get("series") for i in (record or {}).get("sources") or [] if not i.get("differs")}
             tolerated = set(copies) - recorded - entry["homes"]
@@ -1946,9 +1971,25 @@ def main(argv=None):
                     consumers.setdefault((path, digest), set()).add(slug)
                     counted_via.setdefault((path, digest), {})[slug] = pool_path
 
+        # A recorded asset is ONE file however its series spell its path:
+        # every reference to it shares its users, and its pool path is the
+        # one the copy the pool takes would have.
+        one_asset = {}  # (src_rel, digest) -> (the path that decides, all its users)
+        for pool_path, version in versions.items():
+            if pool_path not in ledger_assets:
+                continue
+            paths = set(version["copies"].values()) | {
+                src.get("path") for src in ledger_assets[pool_path].get("sources") or []
+            }
+            keys = [k for k in consumers if k[1] == version["digest"] and k[0] in paths]
+            everyone = set().union(*(consumers[k] for k in keys)) if keys else set()
+            for k in keys:
+                consumers[k] = everyone
+                one_asset[k] = version["path"]
+
         dest_map = {}
         for (src_rel, digest), cons in consumers.items():
-            dest_map[(src_rel, digest)] = plan_destination(src_rel, sorted(cons))
+            dest_map[(src_rel, digest)] = plan_destination(one_asset.get((src_rel, digest), src_rel), sorted(cons))
 
         # A previously promoted asset whose destination decision has now
         # changed (a second consumer arrived, so it belongs in _shared/)
@@ -1966,6 +2007,8 @@ def main(argv=None):
         def stuck_reason(slug):
             """Why a kept lecture cannot be pulled into this batch, or None."""
             known = {p.slug: p for p in plans}
+            if slug in declined:
+                return declined[slug]
             if slug in known:
                 return known[slug].error or "it was dropped from this batch"
             if slug in {x for x, _ in skips}:
@@ -2020,15 +2063,17 @@ def main(argv=None):
                 if dropped in now:
                     continue
                 for slug in sorted(kept_consumers.get(dropped, ())):
-                    if stuck_reason(slug) is None:
+                    if stuck_reason(slug) is None and slug not in declined:
                         wanted.setdefault(slug, (plan, dropped, False))
         if any(p.error is not None for p in ok):
             ok = [p for p in ok if p.error is None]
             continue
         if wanted:
-            for slug, (needing, old, _) in wanted.items():
+            for slug, (needing, old, needed) in wanted.items():
                 plan = Plan(slug, kept_entries[slug].get("canonical"))
                 pulled[slug] = (needing.slug, old)
+                if not needed:
+                    optional.add(slug)
                 plans.append(plan)
                 prepare(plan)
                 if plan.error is None:
@@ -2042,9 +2087,12 @@ def main(argv=None):
         # both refused: which file the pool keeps never falls out of run
         # order.
         claims = {}  # dest -> {digest: [(plan, series, src_rel)]}
+        record_of = {}  # dest -> the pool path its record is under (it may be moving)
         for plan in ok:
             for _, _, src_rel, digest in plan.refs:
                 dest = dest_map[(src_rel, digest)]
+                if (src_rel, digest) in asset_of:
+                    record_of.setdefault(dest, asset_of[(src_rel, digest)])
                 version = versions.get(asset_of.get((src_rel, digest)) or dest)
                 series, path = (version["series"], version["path"]) if version else (plan.canonical, src_rel)
                 claims.setdefault(dest, {}).setdefault(digest, []).append((plan, series, path))
@@ -2092,9 +2140,13 @@ def main(argv=None):
             if target.is_file() and sha256_file(target) != rec["digest"]:
                 kept = kept_consumers.get(dest)
                 was = (ledger_assets.get(dest) or {}).get("digest")
-                if dest in versions and was and sha256_file(target) != was and (kept or was != rec["digest"]):
-                    # (With every user in the batch and the version
-                    # unchanged, re-promotion restores the recorded file.)
+                if dest in versions and was and sha256_file(target) != was and (
+                    kept or was != rec["digest"] or dest.startswith("_static/_shared/")
+                ):
+                    # (A lecture's OWN file, with the version unchanged, is
+                    # restored by re-promoting the lecture. A shared file
+                    # never is: the edit may be something its other users
+                    # were meant to see.)
                     blocked[dest] = "the pool file differs from its recorded digest (edited directly?)"
                 elif kept and not (dest in versions and was not in (None, rec["digest"])):
                     blocked[dest] = (
@@ -2170,10 +2222,21 @@ def main(argv=None):
         canonical is the highest-priority series that is canonical for one
         of its users and holds the pool's bytes."""
         rec = planned[dest]
-        version = versions.get(dest)
+        # The record may be under another pool path than ``dest``: the asset
+        # is moving in this run, and its history moves with it.
+        origin = record_of.get(dest, dest)
+        version = versions.get(origin)
         users = [p for p in ok if dest in p.assets]
         kept = [e for e in kept_entries.values() if dest in (e.get("assets") or [])]
         series_of_users = users_series(kept) | {x for p in users for x in [p.canonical, *p.sources]}
+        # A series this run leaves out was not read. It stays a user series
+        # if the ledger has it as one: canonical for, or a recorded source
+        # of, a lecture that used the asset.
+        left_out_users = set()
+        for entry in ledger_lectures.values():
+            if origin in (entry.get("assets") or []):
+                left_out_users.add(entry.get("canonical"))
+                left_out_users |= {i.get("series") for i in entry.get("sources") or []}
         homes = {p.canonical for p in users} | {e.get("canonical") for e in kept}
         sources = []
         for series in eligible:
@@ -2207,8 +2270,8 @@ def main(argv=None):
         # version it was last seen at, so the next full run judges it (still
         # there, caught up, or forked) and it can never be taken for a holder
         # of the new version.
-        for item in (ledger_assets.get(dest) or {}).get("sources") or []:
-            if item.get("series") in not_considered and item.get("series") in series_of_users:
+        for item in (ledger_assets.get(origin) or {}).get("sources") or []:
+            if item.get("series") in not_considered and item.get("series") in left_out_users:
                 item = dict(item)
                 if "digest" not in item and version and version.get("was") not in (None, rec["digest"]):
                     item["digest"] = version["was"]
@@ -2272,11 +2335,16 @@ def main(argv=None):
         print(f"[{slug}] SKIP: {reason}")
     for line in retire_notes:
         print(line)
+    for slug in sorted(declined):
+        print(
+            f"[{slug}] WARN: not re-promoted with the lecture that stopped using a file they shared "
+            f"({declined[slug]}); the file's record is rewritten when {slug} next refreshes"
+        )
     for slug in sorted(pulled):
         if any(p.slug == slug for p in plans):
             print(f"[{slug}] PULLED IN: it shares {pulled[slug][1]} with {pulled[slug][0]}, and lectures that share a file are promoted together")
     for dest in sorted(planned):
-        version = versions.get(dest)
+        version = versions.get(record_of.get(dest, dest))
         if version and version["stale"]:
             print(
                 f"[{dest}] STALE: {', '.join(version['stale'])} "

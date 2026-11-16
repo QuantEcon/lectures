@@ -548,3 +548,125 @@ def test_two_spellings_of_one_file_are_one_asset(make_repo):
     assert {r["to"] for r in entry["rewrites"]} == {"_static/long_run_growth/tooze.png"}
     assert repo.drift_check().returncode == 0
     assert repo.pool_check().returncode == 0
+
+
+# --------------------------------------------------------------------------- #
+# The record keeps its history when the asset moves, is renamed or is left out #
+# --------------------------------------------------------------------------- #
+def test_a_stale_record_survives_the_assets_move(make_repo):
+    FIG = "_static/lecture_specific/lq/fig.png"
+    repo = make_repo(["intermediate", "advanced"])
+    for s in repo.order:
+        repo.mirror_file(s, FIG, b"v1")
+        repo.lecture(s, "lq", lecture_text("LQ", refs=[FIG]))
+    assert repo.promote("lq").returncode == 0
+    repo.mirror_file("intermediate", FIG, b"v2")
+    repo.move_pin("intermediate")
+    assert repo.promote("--refresh").returncode == 0
+    since = sources(repo, "_static/lq/fig.png")["advanced"]["stale_since"]
+
+    # A second lecture starts to use the figure: it moves to _shared/.
+    repo.lecture("intermediate", "lq2", lecture_text("LQ 2", refs=[FIG]))
+    res = repo.promote("lq2")
+
+    assert res.returncode == 0, res.stderr
+    got = sources(repo, "_static/_shared/lq/fig.png")
+    assert got["advanced"]["stale_since"] == since and "differs" not in got["advanced"]
+    assert "STALE: advanced" in res.stdout
+
+    # advanced forks: drift, as before the move.
+    repo.mirror_file("advanced", FIG, b"a fork")
+    repo.move_pin("advanced")
+    assert "[asset-diverged]" in repo.drift_check().stdout
+
+
+def test_a_hand_edited_shared_file_is_never_restored_silently(make_repo):
+    FIG = "_static/fig.png"
+    repo = make_repo(["intro", "intermediate"])
+    for s in repo.order:
+        repo.mirror_file(s, FIG, b"fig")
+    repo.lecture("intro", "aaa", lecture_text("A", refs=[FIG]))
+    repo.lecture("intermediate", "bbb", lecture_text("B", refs=[FIG]))
+    assert repo.promote("aaa", "bbb").returncode == 0
+    repo.pool("_static/_shared/fig.png").write_bytes(b"edited in the pool")
+
+    res = repo.promote("aaa", "bbb")  # every user in the batch, no version change
+
+    assert res.returncode == 1
+    assert "differs from its recorded digest" in res.stderr
+    assert repo.pool("_static/_shared/fig.png").read_bytes() == b"edited in the pool"
+
+
+def test_a_series_left_out_that_only_holds_a_copy_keeps_its_record(make_repo):
+    FIG, DEST = "_static/lecture_specific/numba/fig.png", "_static/numba/fig.png"
+    repo = make_repo(["programming", "intermediate"])
+    for s in repo.order:
+        repo.mirror_file(s, FIG, b"v1")
+        repo.lecture(s, "numba", lecture_text("Numba", refs=[FIG]))
+    assert repo.promote("numba").returncode == 0
+    repo.mirror_file("programming", FIG, b"v2")
+    repo.move_pin("programming")
+
+    res = repo.promote("--refresh", "--exclude", "intermediate")
+
+    assert res.returncode == 0, res.stderr
+    got = sources(repo, DEST)
+    assert got["intermediate"]["stale_since"] and "differs" not in got["intermediate"]
+
+
+def test_a_file_renamed_upstream_is_still_the_one_shared_file(make_repo):
+    OLD = "_static/lecture_specific/markov_perf/sub/duopoly_mpe.py"
+    NEW = "_static/markov_perf/sub/duopoly_mpe.py"
+    DEST = "_static/_shared/markov_perf/sub/duopoly_mpe.py"
+    repo = make_repo(["intermediate", "advanced"])
+    for s in repo.order:
+        repo.mirror_file(s, OLD, "v1\n")
+    repo.lecture("intermediate", "markov_perf", loads("MPE", OLD))
+    repo.lecture("advanced", "rob_markov_perf", loads("Robust MPE", OLD))
+    assert repo.promote("markov_perf", "rob_markov_perf").returncode == 0
+
+    (repo.root / "mirror" / "intermediate" / "lectures" / OLD).unlink()
+    repo.mirror_file("intermediate", NEW, "v1\n")
+    repo.lecture("intermediate", "markov_perf", loads("MPE", NEW))
+    repo.move_pin("intermediate")
+    assert repo.promote("--refresh").returncode == 0
+
+    assert repo.entry("markov_perf")["assets"] == repo.entry("rob_markov_perf")["assets"] == [DEST]
+    assert sources(repo, DEST)["intermediate"]["path"] == NEW
+    assert repo.drift_check().returncode == 0 and repo.pool_check().returncode == 0
+
+    # Its next version reaches both lectures.
+    repo.mirror_file("intermediate", NEW, "v2\n")
+    repo.move_pin("intermediate", 3)
+    assert "[asset-moved]" in repo.drift_check().stdout
+    res = repo.promote("--refresh")
+    assert res.returncode == 0, res.stderr
+    assert repo.entry("markov_perf")["assets"] == repo.entry("rob_markov_perf")["assets"] == [DEST]
+    assert repo.pool(DEST).read_text(encoding="utf-8") == "v2\n"
+    assert sources(repo, DEST)["advanced"]["stale_since"]
+    assert repo.drift_check().returncode == 0 and repo.pool_check().returncode == 0
+
+
+def test_an_optional_pull_in_that_cannot_be_re_promoted_does_not_fail_the_run(make_repo):
+    FIG = "_static/fig.png"
+    repo = make_repo(["intro", "intermediate", "extra"])
+    for s in repo.order:
+        repo.mirror_file(s, FIG, b"fig")
+    repo.lecture("intro", "aaa", lecture_text("A", refs=[FIG]))
+    for s in ("intermediate", "extra"):
+        repo.lecture(s, "bbb", lecture_text("B", refs=[FIG]))
+    assert repo.promote("aaa", "bbb").returncode == 0
+
+    # aaa stops using the figure; bbb cannot be re-promoted (extra edited its copy).
+    repo.lecture("intro", "aaa", lecture_text("A"))
+    repo.move_pin("intro")
+    repo.lecture("extra", "bbb", lecture_text("B", "extra's own edit", refs=[FIG]))
+    repo.move_pin("extra")
+    res = repo.promote("--refresh")
+
+    assert res.returncode == 0, res.stderr
+    assert "[bbb] WARN: not re-promoted with the lecture that stopped using a file they shared" in res.stdout
+    assert "FAILED" not in res.stderr
+    assert repo.entry("aaa")["assets"] == []
+    assert repo.entry("bbb")["assets"] == ["_static/_shared/fig.png"] and repo.pool("_static/_shared/fig.png").is_file()
+    assert repo.pool_check().returncode == 0
