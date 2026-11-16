@@ -110,11 +110,10 @@ TOC_STATE_PATH = ROOT / "sync" / "toc.yml"
 DRIFT_LABEL = "drift"
 DIFF_LINE_CAP = 300  # lines of unified diff kept in an issue body
 
-# A series' copy of a shared ``_admonition/`` include may lag the pool's
-# version (``tools/promote`` records it as stale). Behind for longer than
+# A series' copy of a file its lectures share with another series' may lag
+# the pool's version (``tools/promote`` records it as stale). Behind for longer than
 # this, it is reported as drift, so a series that never follows gets an issue.
 STALE_DAYS = 7
-ADMONITION_DEST = "_static/_shared/_admonition/"
 
 CONSUMER_CLASS = "consumer"
 
@@ -477,9 +476,24 @@ def check_lecture(key: str, entry: dict, manifest: dict, consumers: set, finding
             ))
 
 
-def check_asset(pool_rel: str, meta: dict, consumers: set, findings: list):
+def check_asset(pool_rel: str, meta: dict, consumers: set, findings: list, user_series=None):
+    """``user_series``: the series the asset's user lectures come from (each
+    user's canonical series and the series recorded as holding the same
+    lecture). A recorded source outside it is a copy no pool lecture is
+    built from, left by a ledger written before sources followed the users:
+    it is not watched. None watches every recorded source."""
     canonical = meta.get("canonical")
-    sources = meta.get("sources") or []
+    sources = [
+        s for s in meta.get("sources") or []
+        if user_series is None or s.get("series") == canonical or s.get("series") in user_series
+    ]
+    if user_series is not None and canonical not in user_series:
+        findings.append(Finding(
+            "refresh", "asset-record", pool_rel,
+            f"lectures/{pool_rel}: its record names {canonical} as canonical, which none of its lectures come from "
+            "any more; the refresh rewrites it",
+            data={"series": canonical},
+        ))
     recorded = meta.get("digest")
     pool_path = ROOT / "lectures" / pool_rel
 
@@ -522,11 +536,10 @@ def check_asset(pool_rel: str, meta: dict, consumers: set, findings: list):
             data={"series": canonical, "path": can_src["path"]},
         ))
 
-    # A shared ``_admonition/`` include is judged by promote's rule
-    # (``admonition_version``): each source against the version recorded for
+    # A copy is judged by promote's rule (``asset_version``): each source
+    # against the version recorded for
     # IT (its own ``digest`` when it was behind, else the pool's). A copy that
     # held the pool's version and changed leads, and the refresh takes it.
-    admonition = pool_rel.startswith(ADMONITION_DEST)
     leaders = []  # (source, bytes): copies that were current and moved ahead
     late = []  # (source, bytes): copies that were behind and have changed
 
@@ -554,6 +567,24 @@ def check_asset(pool_rel: str, meta: dict, consumers: set, findings: list):
             ))
             continue
         if cur == can_bytes:
+            if "digest" in s and not canonical_moved:
+                # Recorded as behind (or as a different file) and now the
+                # pool's version: the record must say so, or the copy is
+                # misjudged the next time it changes.
+                findings.append(Finding(
+                    "refresh", "asset-caught-up", pool_rel,
+                    f"lectures/{pool_rel}: the {series} copy now matches the pool's version; the refresh records it",
+                    data={"series": series, "path": s["path"]},
+                ))
+            continue
+        if s.get("differs"):
+            changed = sha256_bytes(cur) != s.get("digest")
+            findings.append(Finding(
+                "info", "differing-copy", pool_rel,
+                f"lectures/{pool_rel}: the {series} copy lectures/{s['path']} is a different file from the pool's"
+                + (", and has changed" if changed else ""),
+                data={"series": series, "path": s["path"]},
+            ))
             continue
         was = s.get("digest") or recorded
         if sha256_bytes(cur) == was:
@@ -569,22 +600,22 @@ def check_asset(pool_rel: str, meta: dict, consumers: set, findings: list):
             overdue = days is None or days > STALE_DAYS
             findings.append(Finding(
                 "drift" if overdue else "info", "stale-copy", pool_rel,
-                f"lectures/{pool_rel}: the {series} copy lectures/{s['path']} is behind the pool's version"
+                f"lectures/{pool_rel}: the {series} copy lectures/{s['path']} is not at the pool's version"
                 + (f" (since {s.get('stale_since')})" if s.get("stale_since") else ""),
                 detail=(
-                    f"The pool took a newer version of this shared include from {canonical}, and every pool lecture "
-                    f"that uses it shows that version. {series} still publishes the earlier one. Make the same "
+                    f"The pool holds {canonical}'s version of this file, and every pool lecture "
+                    f"that uses it shows that version. {series} publishes a different one. Make the same "
                     f"change in {series}; the next refresh then records its copy as current."
                 ) if overdue else "",
                 diff=unified_diff(cur, can_bytes, f"{series}/lectures/{s['path']}", f"{canonical}/lectures/{can_src['path']}") if overdue else None,
-                issue_title=f"drift({series}): lectures/{s['path']} is behind the pool's version" if overdue else None,
+                issue_title=f"drift({series}): lectures/{s['path']} is not at the pool's version" if overdue else None,
                 data={"series": series, "path": s["path"], "stale_since": s.get("stale_since")},
             ))
             continue
-        if admonition and not canonical_moved and was == recorded:
+        if not canonical_moved and was == recorded:
             leaders.append((s, cur))
             continue
-        if admonition and was != recorded:
+        if was != recorded:
             late.append((s, cur))
             continue
         diverged(s, cur)
@@ -998,7 +1029,17 @@ def run(argv=None):
         for key in sorted(ledger_lectures):
             check_lecture(key, ledger_lectures[key], manifest, consumers, findings)
         for pool_rel in sorted(ledger_assets):
-            check_asset(pool_rel, ledger_assets[pool_rel], consumers, findings)
+            # As promote's ``users_series``: a user's canonical series, and
+            # each recorded source whose copy is still at its recorded digest.
+            user_series = set()
+            for entry in ledger_lectures.values():
+                if pool_rel in (entry.get("assets") or []):
+                    user_series.add(entry.get("canonical"))
+                    for s in entry.get("sources") or []:
+                        cur = read_bytes(mirror_lectures(str(s.get("series"))) / str(s.get("path")))
+                        if cur is not None and sha256_bytes(cur) == s.get("digest"):
+                            user_series.add(s.get("series"))
+            check_asset(pool_rel, ledger_assets[pool_rel], consumers, findings, user_series)
         check_tocs(toc_state, manifest, ledger_lectures, findings)
         check_names(manifest, consumers, ledger_lectures, findings)
         findings.sort(key=lambda f: (SEVERITY_ORDER[f.severity], f.subject, f.kind))
