@@ -18,10 +18,11 @@ Markdown report (and, with ``--json``, the same as data):
   to it in the series' own repository on GitHub, as a download), **used by
   the configuration** (its path appears in ``_config.yml``, or it is branding
   or the bibliography) and **orphaned** (none of these). Orphaned figure
-  sources are counted apart: a ``.tex``, ``.gv`` or ``.dot`` file, or a file
+  sources are counted apart: a ``.tex``, ``.gv`` or ``.dot`` file, a file
   whose name, without its extension, is that of an image a lecture uses in
-  the same folder (a Graphviz source is often written without one). They are
-  the input to the ruling on whether a figure's source moves with it;
+  the same folder (a Graphviz source is often written without one), or a
+  notebook in a folder that holds an image a lecture uses. They are the
+  input to the ruling on whether a figure's source moves with it;
 * collisions across series: one path, in two or more series, with different
   bytes;
 * the largest files, the candidates for trimming a dataset;
@@ -40,8 +41,8 @@ Markdown report (and, with ``--json``, the same as data):
 (the ledger's record of each lecture's copies). It is generated, never edited
 by hand, and GitHub shows it in the folder's view, so an author changing a
 shared file sees which lectures and series it reaches. ``--write-index``
-writes it; ``--check-index`` regenerates it in memory and fails if the
-committed file differs. The check also fails on an orphan in the pool: a file
+writes it; ``--check-index`` regenerates it in memory and fails if the file
+in the working tree differs (in CI, the committed file). The check also fails on an orphan in the pool: a file
 under ``_static/`` that no pool lecture uses (``_shared/README.md`` and the
 merged bibliography aside). A ``_shared/`` file one lecture alone uses is
 listed, not failed: ``tools/promote`` places a family folder's files and the
@@ -139,7 +140,7 @@ def resolve(promote, root: Path, md: Path, kind: str, written: str):
     series' include files are written either way)."""
     if kind == "url":
         idx = written.find("/_static/")
-        candidates = [written[idx + 1:]]
+        candidates = [re.split(r"[?#]", written[idx + 1:], maxsplit=1)[0]]
     else:
         literal = written.split("#", 1)[0]
         if not literal or promote.SCHEME_RE.match(literal):
@@ -235,8 +236,11 @@ def github_addresses(text: str):
             form, parts = f"github.com/{parts[0]}", parts[1:]
         else:
             form = host
+        if parts[:2] in (["refs", "heads"], ["refs", "tags"]):
+            parts = ["/".join(parts[:3])] + parts[3:]
         ref = parts[0] if parts else ""
-        path = "/".join(parts[1:])
+        # Punctuation that ends a sentence or a bracket is not part of a path.
+        path = "/".join(parts[1:]).rstrip(".,;:!]")
         out.append({"repo": f"{owner}/{name}", "form": form, "ref": ref, "path": path})
     return out
 
@@ -245,10 +249,20 @@ IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".gif", ".svg", ".pdf")
 
 
 def figure_source(rel: str, used) -> bool:
+    """A ``.tex``, ``.gv`` or ``.dot`` file; a file named like an image a
+    lecture uses in the same folder, less the extension; or a notebook in a
+    folder that holds an image a lecture uses (the notebook that drew it)."""
     if rel.endswith(FIGURE_SOURCES):
         return True
+    if rel.endswith(IMAGE_EXTS):
+        return False
     stem = posixpath.splitext(rel)[0]
-    return any(stem + ext in used for ext in IMAGE_EXTS) and not rel.endswith(IMAGE_EXTS)
+    if any(stem + ext in used for ext in IMAGE_EXTS):
+        return True
+    folder = posixpath.dirname(rel)
+    return rel.endswith(".ipynb") and any(
+        posixpath.dirname(u) == folder and u.endswith(IMAGE_EXTS) for u in used
+    )
 
 
 def series_report(promote, series: str, repo: str):
@@ -269,7 +283,7 @@ def series_report(promote, series: str, repo: str):
         "series": series,
         "files": len(files),
         "bytes": sum(sizes.values()),
-        "used_by_lecture": len(by_lecture),
+        "used_by_lecture": by_lecture,
         "linked_by_address": by_link,
         "used_by_config": by_config,
         "orphaned": [{"path": rel, "bytes": sizes[rel], "figure_source": figure_source(rel, used)} for rel in orphaned],
@@ -305,28 +319,37 @@ def pool_lectures(pool: Path):
     return sorted(p.stem for p in pool.glob("*.md") if p.is_file())
 
 
-def pool_uses(promote, pool: Path):
+def pool_uses(promote, pool: Path, ledger):
     """``(lectures, files, {file: {lectures}})`` for the pool: every file
-    under ``_static/`` (the index and the bibliography aside) and the pool
-    lectures that use it."""
+    under ``_static/`` (the index, the merged bibliography and anything under
+    a name starting with ``.``, such as ``.DS_Store``, aside) and the pool
+    lectures that use it. A lecture uses a file its text refers to (by
+    promote's parser) or that its ledger entry lists as an asset: promote
+    rewrites some references, such as a published address in a link
+    definition, to a form the parser no longer reads."""
     lectures = pool_lectures(pool)
     static = pool / "_static"
     files = []
     if static.is_dir():
         for p in sorted(static.rglob("*")):
             rel = p.relative_to(pool).as_posix()
+            if any(part.startswith(".") for part in rel.split("/")):
+                continue
             if p.is_file() and rel not in (INDEX_REL, f"_static/{promote.BIB_BASENAME}"):
                 files.append(rel)
     used = uses(promote, pool, [pool / f"{slug}.md" for slug in lectures])
+    for key, entry in ledger.items():
+        if isinstance(entry, dict) and key.startswith("lectures/") and key.endswith(".md") and key[len("lectures/"):-3] in lectures:
+            for asset in entry.get("assets") or []:
+                if isinstance(asset, str):
+                    used[asset].add(key[len("lectures/"):])
     by_file = {rel: sorted(name[:-3] for name in used.get(rel, ())) for rel in files}
     return lectures, files, by_file
 
 
-def publishers(promote):
-    """``{slug: [series that publish it]}`` from the ledger: the canonical
-    series and every series whose copy it records (sources, divergent and
-    superseded copies alike: each is a series site that publishes the
-    lecture today)."""
+def load_ledger(promote):
+    """``sync/ledger.yml`` as a mapping (empty when there is none). The index
+    path is reserved: a ledger that records an asset there is an error."""
     ledger_path = promote.LEDGER_PATH
     if not ledger_path.is_file():
         return {}
@@ -336,6 +359,19 @@ def publishers(promote):
         ledger = yaml.safe_load(ledger_path.read_text(encoding="utf-8")) or {}
     except yaml.YAMLError as exc:
         raise ReportError(f"{ledger_path.name} could not be read: {exc}")
+    if INDEX_REL in (ledger.get("assets") or {}):
+        raise ReportError(
+            f"the ledger records an asset at lectures/{INDEX_REL}, the path of the generated index: "
+            "move the asset before writing or checking the index"
+        )
+    return ledger
+
+
+def publishers(promote, ledger):
+    """``{slug: [series that publish it]}`` from the ledger: the canonical
+    series and every series whose copy it records (sources, divergent and
+    superseded copies alike: each is a series site that publishes the
+    lecture today)."""
     order = list(promote.load_manifest()[0])
     out = {}
     for key, entry in ledger.items():
@@ -424,7 +460,7 @@ def render_report(reports, colls, pool_part, links):
             "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"]
     for r in reports:
         out.append(
-            f"| {r['series']} | {r['files']} | {human(r['bytes'])} | {r['used_by_lecture']} | {len(r['linked_by_address'])} "
+            f"| {r['series']} | {r['files']} | {human(r['bytes'])} | {len(r['used_by_lecture'])} | {len(r['linked_by_address'])} "
             f"| {len(r['used_by_config'])} "
             f"| {len(r['orphaned'])} | {sum(o['figure_source'] for o in r['orphaned'])} |"
         )
@@ -547,8 +583,9 @@ def main(argv=None):
         except SystemExit as exc:  # promote's loader exits on a manifest it cannot read
             raise ReportError(str(exc).removeprefix("error: "))
         SERIES_ORDER.update({s: i for i, s in enumerate(order)})
-        pool_part = pool_uses(promote, POOL_DIR)
-        published = publishers(promote)
+        ledger = load_ledger(promote)
+        pool_part = pool_uses(promote, POOL_DIR, ledger)
+        published = publishers(promote, ledger)
         if args.write_index or args.check_index:
             text = render_index(pool_part[2], published)
             index = POOL_DIR / INDEX_REL

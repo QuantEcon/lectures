@@ -253,7 +253,10 @@ jobs:
       - name: Regenerate the shared-asset index
         # A refresh can add, move or drop a file in lectures/_static/_shared/,
         # whose README.md lists each file's users; pool-check fails a pull
-        # request whose index is stale, so the refresh carries its own.
+        # request whose index is stale, so the refresh carries its own. Unlike
+        # the report in the check job, this step is not information: if the
+        # index cannot be written (an error, exit 2), no pull request is
+        # opened and the run is red, since pool-check would fail it anyway.
         run: uv run --script tools/assets-report --write-index
 
       - name: Open or update the refresh pull request

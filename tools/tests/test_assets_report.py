@@ -66,7 +66,7 @@ def test_each_file_is_sorted_by_what_uses_it(make_repo):
     intro = series_entry(data, "intro")
     assert intro["files"] == 9
     # fig.png, the include and the image the include uses
-    assert intro["used_by_lecture"] == 3
+    assert len(intro["used_by_lecture"]) == 3
     assert intro["linked_by_address"] == ["_static/lecture_specific/lake/data.csv"]
     assert intro["used_by_config"] == ["_static/custom.css", "_static/qe-logo.png"]
     orphaned = {o["path"]: o["figure_source"] for o in intro["orphaned"]}
@@ -246,3 +246,95 @@ def test_the_index_options_take_no_other(make_repo):
 
     assert res.returncode == 2
     assert "--write-index and --check-index take no other option" in res.stderr
+
+
+# --------------------------------------------------------------------------- #
+# From the review of the first version                                         #
+# --------------------------------------------------------------------------- #
+def test_a_file_the_ledger_records_is_used_even_when_its_reference_was_rewritten(make_repo):
+    # promote localises a published address in a link definition to a bare
+    # path the parser no longer reads; the ledger still records the asset.
+    repo = make_repo(["intro"])
+    repo.mirror_file("intro", "_static/lecture_specific/lake/n.pdf", b"notes")
+    repo.lecture("intro", "lake", lecture_text(
+        "Lake", body="See [the notes][n].\n\n[n]: https://intro.quantecon.org/_static/lecture_specific/lake/n.pdf",
+    ))
+    assert repo.promote("lake").returncode == 0
+    assert "_static/lake/n.pdf" in repo.entry("lake")["assets"]
+    assert repo.assets_report("--write-index").returncode == 0
+
+    res = repo.assets_report("--check-index")
+
+    assert res.returncode == 0, res.stdout
+
+
+def test_files_under_a_dot_name_are_not_the_pools(make_repo):
+    repo = make_repo(["intro", "intermediate"])
+    shared_pool(repo)
+    assert repo.assets_report("--write-index").returncode == 0
+    write_pool(repo, "_static/_shared/.DS_Store", b"finder")
+    write_pool(repo, "_static/mccall/.ipynb_checkpoints/x.png", b"jupyter")
+
+    assert repo.assets_report("--check-index").returncode == 0
+    repo.assets_report("--write-index")
+    assert ".DS_Store" not in repo.pool(INDEX).read_text(encoding="utf-8")
+
+
+def test_a_notebook_beside_a_used_figure_is_its_source(make_repo):
+    repo = make_repo(["intro"])
+    repo.mirror_file("intro", "_static/lecture_specific/lake/fig.png", b"png")
+    repo.mirror_file("intro", "_static/lecture_specific/lake/figures.ipynb", b"{}")
+    repo.mirror_file("intro", "_static/lecture_specific/other/notes.ipynb", b"{}")
+    repo.lecture("intro", "lake", lecture_text("Lake", refs=["_static/lecture_specific/lake/fig.png"]))
+
+    _, _, data = report(repo)
+
+    orphaned = {o["path"]: o["figure_source"] for o in series_entry(data, "intro")["orphaned"]}
+    assert orphaned == {
+        "_static/lecture_specific/lake/figures.ipynb": True,
+        "_static/lecture_specific/other/notes.ipynb": False,
+    }
+
+
+def test_a_published_address_with_a_fragment_still_names_its_file(make_repo):
+    repo = make_repo(["intro"])
+    repo.mirror_file("intro", "_static/lecture_specific/lake/n.pdf", b"notes")
+    repo.lecture("intro", "lake", lecture_text(
+        "Lake", body="Read [page 3](https://intro.quantecon.org/_static/lecture_specific/lake/n.pdf#page=3).",
+    ))
+
+    _, _, data = report(repo)
+
+    assert series_entry(data, "intro")["orphaned"] == []
+
+
+def test_addresses_lose_closing_punctuation_and_keep_a_full_ref(make_repo):
+    repo = make_repo(["intro"])
+    body = "\n".join([
+        "The data are at https://github.com/QuantEcon/data-lectures/raw/main/lectures/a.csv.",
+        "Or [b](https://github.com/QuantEcon/data-lectures/raw/refs/heads/main/lectures/b.csv).",
+    ])
+    write_pool(repo, "lake.md", lecture_text("Lake", body=body))
+
+    _, _, data = report(repo)
+
+    assert {(l["ref"], l["path"]) for l in data["github_files"]} == {
+        ("main", "lectures/a.csv"),
+        ("refs/heads/main", "lectures/b.csv"),
+    }
+
+
+def test_the_index_path_is_reserved(make_repo):
+    repo = make_repo(["intro", "intermediate"])
+    for series in ("intro", "intermediate"):
+        repo.mirror_file(series, "_static/README.md", "a file both lectures offer\n")
+    repo.lecture("intro", "a", lecture_text("A", body="{download}`readme <_static/README.md>`"))
+    repo.lecture("intermediate", "b", lecture_text("B", body="{download}`readme <_static/README.md>`"))
+    assert repo.promote("a", "b").returncode == 0
+    assert "_static/_shared/README.md" in repo.ledger()["assets"]
+
+    res = repo.assets_report("--write-index")
+
+    assert res.returncode == 2
+    assert "the path of the generated index" in res.stderr
+    assert repo.pool(INDEX).read_text(encoding="utf-8") == "a file both lectures offer\n"
