@@ -12,6 +12,7 @@ It sits **downstream** of six live lecture repositories until each one deliberat
 - **The promote tool:** it brings lectures into the pool and refuses a lecture name that two series use for different lectures.
 - **The merged bibliography:** one [`lectures/_static/quant-econ.bib`](lectures/_static/quant-econ.bib), generated from the series' own files and the rulings in [`sync/bib.yml`](sync/bib.yml), and refreshed with the pool.
 - **The assets report:** after every sync, an audit of the files beside the lectures, in every series and in the pool, and a generated index of who uses each shared file, [`lectures/_static/_shared/README.md`](lectures/_static/_shared/README.md).
+- **The sites:** one folder per published site in [`sites/`](sites/README.md), each holding its series' `_config.yml` and `_toc.yml` verbatim with the few additions a build from the pool needs, its own pages and branding, and the fields the build workflow reads.
 
 See [The plan](#the-plan) for what comes next.
 
@@ -37,15 +38,15 @@ These rules govern how this repository relates to the six live series until each
 3. **After its cutover, a series is edited here.** Until then, its lectures are edited in the series repository and reach the pool by sync. At its cutover, the pool becomes its source of truth.
 4. **Shadow build, then cut over.** Before a series moves, this repository builds it from the pool and compares the result with the series' own published build, with nothing going live. Each cutover is decided once the builds match.
 
-## The mirror → pool → products model
+## The mirror → pool → sites model
 
-The repository is organised around three layers. The first two exist today.
+The repository is organised around three layers.
 
 | Layer | What it is | State today |
 | --- | --- | --- |
 | `mirror/<key>/` | A machine-reconstructed, verbatim copy of each live series' allowlisted paths, pinned to an exact commit. Never hand-edited, never committed. | Reconstructed on demand; **gitignored**. |
 | `lectures/` | The curated **pool** — every canonical lecture, held exactly once. | 328 lectures and their assets, each recorded in [`sync/ledger.yml`](sync/ledger.yml). |
-| `products/` | One folder per published product, each a thin **configuration** that selects and orders lectures from the pool. | Empty: each series' configuration arrives with the publishing workflow. |
+| `sites/` | One folder per published site, each a thin **configuration** that selects and orders lectures from the pool. | One per series, six in all, with the rules in [`sites/README.md`](sites/README.md); the workflow that builds them comes next. |
 
 ### Why we commit only SHAs, not the mirror
 
@@ -63,7 +64,8 @@ The repository is organised around three layers. The first two exist today.
 │   └── _static/      #   their assets: _static/<slug>/ per lecture, _static/_shared/ for shared files
 │                     #   (with README.md, its generated index of users), and quant-econ.bib, the
 │                     #   merged bibliography (bib-merge-written)
-├── products/         # (later) one configuration per published product — empty
+├── sites/            # one folder per published site: its _config.yml, _toc.yml, site.yml,
+│                     #   own pages and branding (see sites/README.md)
 ├── mirror/           # reconstructed, verbatim, GITIGNORED — never committed
 ├── docs/tech/        # the technology register (see below)
 ├── sync/
@@ -80,11 +82,12 @@ The repository is organised around three layers. The first two exist today.
 │   ├── bib-merge     # merges the series' bibliographies into the pool's one file; checks it
 │   ├── pool-check    # checks the pool keeps its layout conventions
 │   ├── assets-report # audits the files beside the lectures; writes and checks the _shared/ index
+│   ├── stage-site    # copies one site's own pages and files into lectures/ for a build, and out again
 │   └── tests/        # pytest suite for the tools above (scratch repos)
 └── .github/workflows/
     ├── sync.yml         # daily job that refreshes the pinned SHAs (pin-only)
     ├── drift-check.yml  # runs after sync: drift issues, refresh PR (pool and bibliography), red on a pool edit or a refused refresh; the assets report
-    ├── pool-check.yml   # runs tools/pool-check and the _shared/ index check on pull requests that touch the pool
+    ├── pool-check.yml   # runs tools/pool-check and the _shared/ index check on pull requests that touch the pool or the sites
     └── tests.yml        # runs tools/tests on pull requests
 ```
 
@@ -154,17 +157,19 @@ One consequence of keeping a single file: a lecture whose own refresh is refused
 | `tools/drift-check --issues` | Open, update and close `drift` issues to match the findings (CI). |
 | `tools/drift-check --accept-toc dp` | Record a series' `_toc.yml` at its current pin as the watched baseline. |
 
-Four outcomes: **refresh** (the canonical copy moved upstream; CI runs `promote --refresh` and opens a pull request; an entry the refresh refuses is listed with promote's reason, in that pull request when one is opened and always in the red run's refresh step; the usual reason is a same-name copy edited to differ, which `sync/canonical.yml` or upstream settles; while the entry's canonical copy differs from its ledger record the run stays red every night until it is settled, and a settlement applies the next night), **drift** (a non-canonical copy diverged from its canonical home, a copy was removed, a watched toc changed or lists a lecture the pool does not hold, or two published sites hold different lectures under one name; each becomes an issue that closes itself when the finding clears), **violation** (the pool itself was edited; the job goes red), and **info** (a copy is merely stale, or a divergence converged). [`drift-check.yml`](.github/workflows/drift-check.yml) runs it after every `sync`.
+Four outcomes: **refresh** (the canonical copy moved upstream; CI runs `promote --refresh` and opens a pull request; an entry the refresh refuses is listed with promote's reason, in that pull request when one is opened and always in the red run's refresh step; the usual reason is a same-name copy edited to differ, which `sync/canonical.yml` or upstream settles; while the entry's canonical copy differs from its ledger record the run stays red every night until it is settled, and a settlement applies the next night), **drift** (a non-canonical copy diverged from its canonical home, a copy was removed, a watched toc changed or lists a lecture the pool does not hold, or two published sites hold different lectures under one name, or a site's copy of its series' files no longer matches them, `site-stale`, described in [`sites/README.md`](sites/README.md); each becomes an issue that closes itself when the finding clears), **violation** (the pool itself was edited; the job goes red), and **info** (a copy is merely stale, or a divergence converged). [`drift-check.yml`](.github/workflows/drift-check.yml) runs it after every `sync`.
 
 One kind of copy is never watched. A **consumer** series (`class: consumer` in `sync/manifest.yml`, today `dp`) only republishes other series' lectures, so its copies are recorded as `superseded` and are expected to go stale. Its `_toc.yml` is watched, though: the pool's `dp` selection is promoted from it, so a change there means re-running that promotion with the refresh's exclusions (`PROMOTE_EXCLUDE` in [`drift-check.yml`](.github/workflows/drift-check.yml); today `tools/promote --toc dp --exclude jax`), then `--accept-toc dp`. Accepting alone clears that issue but leaves a newly listed lecture out of the pool, which the check then reports as `toc-unpromoted`.
 
-Lecture names are unique across the published sites, not only in the pool: a link that leaves a product resolves by name, so two sites that publish different lectures under one name send readers to the wrong one. The check reads every canonical-eligible series' `_toc.yml`, whether its lectures are in the pool yet or not, and a name two of them list must be one lecture in both, by promote's rule (`name-shared`). A consumer's toc is not read for this: it only republishes.
+Lecture names are unique across the published sites, not only in the pool: a link that leaves a site resolves by name, so two sites that publish different lectures under one name send readers to the wrong one. The check reads every canonical-eligible series' `_toc.yml`, whether its lectures are in the pool yet or not, and a name two of them list must be one lecture in both, by promote's rule (`name-shared`). A consumer's toc is not read for this: it only republishes.
 
 ## Checking the pool's layout
 
-[`tools/pool-check`](tools/pool-check) checks that the pool keeps the layout `tools/promote` writes, whoever edits it next. `lectures/` holds lectures (`<slug>.md`, no name starting with `_`, no two names that differ only in case) and `_static/`. Every folder at the top of `_static/` is a lecture's own (`_static/<slug>/`, beside `<slug>.md`) or `_shared/`, and the merged bibliography is the one file there. A file in `_static/<slug>/` is used by `<slug>.md` alone, so an asset two lectures use goes in `_shared/`. Every asset reference is file-relative (`_static/<slug>/fig.png`, never `/_static/...`) and stays inside `lectures/`. Every `{doc}` link resolves: a plain target names a pool lecture or a product page, and a prefixed one (`intro:cobweb`) has a series key from `sync/manifest.yml` as its prefix and, after it, a product page or a pool lecture that series holds by the ledger. Three older prefixes (`dynam`, `pyprog`, `tools`) are accepted until the cross-reference policy settles what a link that leaves the product is written as. So a refresh that brings in a link to a lecture the pool does not hold yet fails this check until that lecture is promoted. It finds asset references with promote's own parser and `{doc}` links with its own pattern (text in code cells, literal blocks, inline literals and comments is not read as a link), reads `lectures/`, the series keys in `sync/manifest.yml` and the ledger's record of which series hold a lecture, and needs no mirror. Exit 0 clean, 1 a rule broken, 2 an error.
+[`tools/pool-check`](tools/pool-check) checks that the pool keeps the layout `tools/promote` writes, whoever edits it next. `lectures/` holds lectures (`<slug>.md`, no name starting with `_`, no two names that differ only in case) and `_static/`. Every folder at the top of `_static/` is a lecture's own (`_static/<slug>/`, beside `<slug>.md`) or `_shared/`, and the merged bibliography is the one file there. A file in `_static/<slug>/` is used by `<slug>.md` alone, so an asset two lectures use goes in `_shared/`. Every asset reference is file-relative (`_static/<slug>/fig.png`, never `/_static/...`) and stays inside `lectures/`. Every `{doc}` link resolves: a plain target names a pool lecture or a site page, and a prefixed one (`intro:cobweb`) has a series key from `sync/manifest.yml` as its prefix and, after it, a site page or a pool lecture that series holds by the ledger. Three older prefixes (`dynam`, `pyprog`, `tools`) are accepted until the cross-reference policy settles what a link that leaves the site is written as. So a refresh that brings in a link to a lecture the pool does not hold yet fails this check until that lecture is promoted. It finds asset references with promote's own parser and `{doc}` links with its own pattern (text in code cells, literal blocks, inline literals and comments is not read as a link), reads `lectures/`, the series keys in `sync/manifest.yml` and the ledger's record of which series hold a lecture, and needs no mirror. Exit 0 clean, 1 a rule broken, 2 an error.
 
-It also counts the labels that more than one pool lecture defines, targets (`(name)=`, `:name:`) and equation labels (`:label:`, `$$ … $$ (name)`) apart, and `tools/pool-check --labels` lists them. That is information, never a failure: labels must be unique within a product, which is checked where a product is built. [`pool-check.yml`](.github/workflows/pool-check.yml) runs it on every pull request that touches the pool.
+It also counts the labels that more than one pool lecture defines, targets (`(name)=`, `:name:`) and equation labels (`:label:`, `$$ … $$ (name)`) apart, and `tools/pool-check --labels` lists them. That is information, never a failure: labels must be unique within a site, which is checked where a site is built.
+
+It checks the sites too, so each folder in `sites/` stays true to the pool: every entry in a site's `_toc.yml` is a pool lecture or a page of the site; a site page never has a pool lecture's name, and no file under a site's `_static/` is a pool file, since staging would overwrite it; the branding a site's `_config.yml` names is in the site; the site sets `only_build_toc_files: true`, its own execution cache (`_build/jupyter_cache/<key>`) and `intersphinx_disabled_reftypes: []`, maps no consumer series and, unless it is one, maps itself; and `site.yml` has the fields the build reads, each with a valid value. The rules and the fields are in [`sites/README.md`](sites/README.md). [`pool-check.yml`](.github/workflows/pool-check.yml) runs it on every pull request that touches the pool or the sites. Run it with no site staged: a staged site's pages in `lectures/` read as pool lectures.
 
 ## The assets report
 
@@ -185,6 +190,17 @@ It also writes [`lectures/_static/_shared/README.md`](lectures/_static/_shared/R
 | `tools/assets-report --reconstruct` | Rebuild `mirror/` first. |
 | `tools/assets-report --write-index` | Regenerate `lectures/_static/_shared/README.md`. It reads the pool and the ledger only. |
 | `tools/assets-report --check-index` | Exit 1 if the index is stale or missing, or the pool holds an orphan; 0 clean, 2 an error. |
+
+## The sites
+
+Each published site is a folder in [`sites/`](sites/README.md): its series' `_config.yml` and `_toc.yml`, verbatim but for the additions recorded there, its own pages (`intro`, `status` and the like, which are never pool lectures), its branding, and `site.yml`, the fields the build workflow reads (type, runner class, `cell_timeout`, the per-cell execution limit, what it publishes, its address). A site is built from the pool after [`tools/stage-site`](tools/stage-site) copies its own pages and files into `lectures/`, since Sphinx reads only inside its source folder:
+
+| Command | What it does |
+| --- | --- |
+| `tools/stage-site dp` | Copy dp's pages and `_static/` files into `lectures/`, recording what it copied in `_build/stage-site.json`. It refuses, copying nothing, if any destination already exists, or if a site is staged already. |
+| `tools/stage-site --clean dp` | Remove them again: only the files the record lists, each while its bytes are still the ones copied, then the record. |
+
+[`sites/README.md`](sites/README.md) has the `jb build` command, every deviation from the series' files and why, and the cross-reference rules.
 
 ## Running the bibliography merge
 
@@ -210,7 +226,7 @@ The move is planned in ten stages: reorganise first on today's toolchain (Jupyte
 
 1. **Set up** access and tracking.
 2. **Sources in.** Bring every lecture of every series into the pool, reconciling differences in the series repositories.
-3. **One publishing workflow** that builds any product on either engine, rehearsed end to end, including a rollback, on a sandbox series.
+3. **One publishing workflow** that builds any site on either engine, rehearsed end to end, including a rollback, on a sandbox series.
 4. **Shadow builds.** Build each series here from the pool and compare it with its own published build, with nothing going live.
 5. **Cutovers, one series at a time.** Each series is published through a release in its own repository, so every earlier release is a rollback.
 6. **The order of cutovers:** `dp` (a publishing-only move, since it owns no lectures), programming, a go/no-go review, then intro, intermediate, advanced and JAX.
