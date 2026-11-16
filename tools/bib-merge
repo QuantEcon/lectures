@@ -87,7 +87,14 @@ upstream that the normalising removes moves nothing.
 Checks
 ------
 * citation closure: every key a pool lecture cites resolves in the merged
-  file (an error); keys no lecture of any series cites are listed (info);
+  file (an error); keys no lecture of any series cites are listed (info).
+  One case is info under ``--refresh-follows`` (and never with ``--write``):
+  a key cited only by pool lectures whose canonical copies, in the mirror,
+  have dropped the citation. The series removed the citation with its
+  entry, and the refresh that follows brings the pool into line. Only a
+  caller that does run ``tools/promote --refresh`` and then ``--write``
+  passes the flag (CI's check job after a sync): the write checks closure
+  again in full, so a lecture the refresh refused still fails there;
 * style: the non-mechanical rules the normalising cannot apply — the fields
   each entry type needs, names joined by ``and`` (no ``&`` or ``;``, no stray
   or extra commas), a DOI that starts ``10.``, keys unique when case is
@@ -138,6 +145,7 @@ RULINGS_PATH = SYNC_DIR / "bib.yml"
 MANIFEST_PATH = SYNC_DIR / "manifest.yml"
 MIRROR_DIR = ROOT / "mirror"
 POOL_DIR = ROOT / "lectures"
+LEDGER_PATH = ROOT / "sync" / "ledger.yml"
 BIB_BASENAME = "quant-econ.bib"
 POOL_BIB = POOL_DIR / "_static" / BIB_BASENAME
 # A manifest series of this class republishes other series' lectures (as in
@@ -761,12 +769,49 @@ def cited_keys(directory: Path):
     return keys
 
 
-def closure_findings(entries):
-    """(errors, infos): pool citations that do not resolve; keys cited nowhere."""
+def refresh_settles(key: str, files, ledger) -> bool:
+    """Does the refresh this run starts take ``key`` out of every pool lecture
+    that cites it? True when each of ``files`` is a pool lecture whose
+    canonical copy, as the mirror now holds it, no longer cites the key: the
+    series dropped the citation with its entry, and ``tools/promote
+    --refresh`` brings the pool copy into line."""
+    for name in files:
+        entry = ledger.get(f"lectures/{name}")
+        canonical = entry.get("canonical") if isinstance(entry, dict) else None
+        source = MIRROR_DIR / str(canonical) / "lectures" / name
+        if not canonical or not source.is_file():
+            return False
+        text = source.read_text(encoding="utf-8", errors="replace")
+        if any(key in (k.strip() for k in m.group(1).split(",")) for m in CITE_RE.finditer(text)):
+            return False
+    return True
+
+
+def closure_findings(entries, pending_ok=False):
+    """(errors, infos): pool citations that do not resolve; keys cited nowhere.
+
+    With ``pending_ok`` (``--refresh-follows``, and not a write), a key that
+    only the coming refresh's lectures still cite is information: the refresh
+    settles it, and the bibliography written after it is checked again in
+    full."""
     errors, infos = [], []
     lower = {k.lower(): k for k in entries}
+    ledger = {}
+    if pending_ok and LEDGER_PATH.is_file():
+        try:
+            loaded = yaml.safe_load(LEDGER_PATH.read_text(encoding="utf-8"))
+        except yaml.YAMLError:
+            loaded = None  # an unreadable ledger excuses nothing
+        ledger = loaded if isinstance(loaded, dict) else {}
     for key, files in sorted(cited_keys(POOL_DIR).items()):
         if key in entries:
+            continue
+        if pending_ok and refresh_settles(key, files, ledger):
+            infos.append((
+                "closure-pending",
+                f"{key}: cited by {', '.join(sorted(files))} but not in the merged file; each one's canonical copy "
+                "has dropped the citation upstream, so the refresh that follows settles it",
+            ))
             continue
         hint = f" (the file has `{lower[key.lower()]}`)" if key.lower() in lower else ""
         errors.append(f"{key}: cited by {', '.join(sorted(files))} but not in the merged file{hint}")
@@ -951,7 +996,7 @@ def run(args):
     merge.info += [("pybtex", w) for w in pybtex_warnings]
 
     style_errors, style_infos = style_findings(merge.entries)
-    closure_errors, closure_infos = closure_findings(merge.entries)
+    closure_errors, closure_infos = closure_findings(merge.entries, pending_ok=args.refresh_follows and not args.write)
     equivalence_errors = equivalence_findings(text, merge, sources)
     merge.info += style_infos + closure_infos
 
@@ -1031,6 +1076,9 @@ def main(argv=None):
     p.add_argument("--report", nargs="?", const="-", metavar="PATH", help="write the conflict report (markdown) to PATH, or stdout")
     p.add_argument("--propose", action="store_true", help="print sync/bib.yml stubs for every refused key")
     p.add_argument("--reconstruct", action="store_true", help="rebuild mirror/ for every manifest series first")
+    p.add_argument("--refresh-follows", action="store_true",
+                   help="a `tools/promote --refresh` and a `--write` follow this check (CI's nightly check job): "
+                        "a citation that refresh removes is information, not a failure. Ignored with --write.")
     args = p.parse_args(argv)
     try:
         return run(args)
