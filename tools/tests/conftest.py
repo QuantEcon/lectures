@@ -2,8 +2,8 @@
 
 Each test builds a small repository in a temp dir — ``mirror/<series>/
 lectures/``, ``sync/manifest.yml``, ``sync/state.yml``, an empty pool — and
-copies the real ``tools/promote``, ``tools/drift-check``, ``tools/bib-merge``
-and ``tools/pool-check`` into it. The tools resolve every path from their own
+copies the real ``tools/promote``, ``tools/drift-check``, ``tools/bib-merge``,
+``tools/pool-check`` and ``tools/assets-report`` into it. The tools resolve every path from their own
 location, so a copy runs against the scratch repository and never touches the
 real mirror, pool or ledger. They are run as subprocesses, exactly as CI runs
 them.
@@ -45,7 +45,7 @@ class ScratchRepo:
         self.root = root
         self.order = list(series)
         (root / "tools").mkdir(parents=True)
-        for name in ("promote", "drift-check", "bib-merge", "pool-check"):
+        for name in ("promote", "drift-check", "bib-merge", "pool-check", "assets-report"):
             shutil.copy(TOOLS_DIR / name, root / "tools" / name)
         (root / "sync").mkdir()
         (root / "lectures").mkdir()
@@ -126,6 +126,9 @@ class ScratchRepo:
 
     def pool_check(self, *args):
         return self.run("pool-check", *args)
+
+    def assets_report(self, *args):
+        return self.run("assets-report", *args)
 
     # -- outputs ----------------------------------------------------------- #
     @property

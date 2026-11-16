@@ -1,0 +1,603 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.9"
+# dependencies = ["pyyaml"]
+# ///
+"""tools/assets-report — what every file beside the lectures is for, in the series and in the pool.
+
+The audit of static assets, regenerated after every sync instead of written
+once (PLAN.md M2, *Static assets: audit by tooling*). It has two parts.
+
+**The report** reads the reconstructed ``mirror/`` and the pool, and writes a
+Markdown report (and, with ``--json``, the same as data):
+
+* per series, every file under its ``lectures/`` that is not a lecture
+  (``<name>.md`` at the top) or the series' ``_config.yml`` and ``_toc.yml``,
+  sorted into **used by a lecture** (any ``.md`` file in the series refers to
+  it, by ``tools/promote``'s parser), **linked by address** (a lecture links
+  to it in the series' own repository on GitHub, as a download), **used by
+  the configuration** (its path appears in ``_config.yml``, or it is branding
+  or the bibliography) and **orphaned** (none of these). Orphaned figure
+  sources are counted apart: a ``.tex``, ``.gv`` or ``.dot`` file, or a file
+  whose name, without its extension, is that of an image a lecture uses in
+  the same folder (a Graphviz source is often written without one). They are
+  the input to the ruling on whether a figure's source moves with it;
+* collisions across series: one path, in two or more series, with different
+  bytes;
+* the largest files, the candidates for trimming a dataset;
+* the pool: every file under ``lectures/_static/`` and the pool lectures that
+  use it, with the orphans (used by none) and the ``_shared/`` files that one
+  lecture alone uses;
+* data fetched by address: every link in a pool lecture to a file on GitHub
+  (``github.com/<owner>/<repo>/raw|blob/...`` or
+  ``raw.githubusercontent.com``), by repository and by the ref it names. The
+  lectures that read QuantEcon/data-lectures this way depend on that
+  repository's default branch; the ones that read a series repository depend
+  on a file the series' cutover may move.
+
+**The index**, ``lectures/_static/_shared/README.md``: for each file in
+``_shared/``, the pool lectures that use it and the series that publish them
+(the ledger's record of each lecture's copies). It is generated, never edited
+by hand, and GitHub shows it in the folder's view, so an author changing a
+shared file sees which lectures and series it reaches. ``--write-index``
+writes it; ``--check-index`` regenerates it in memory and fails if the
+committed file differs. The check also fails on an orphan in the pool: a file
+under ``_static/`` that no pool lecture uses (``_shared/README.md`` and the
+merged bibliography aside). A ``_shared/`` file one lecture alone uses is
+listed, not failed: ``tools/promote`` places a family folder's files and the
+``_admonition/`` includes in ``_shared/`` whatever their count.
+
+The index and its check need only the pool and ``sync/ledger.yml``; the report
+needs the mirror (``tools/sync`` first, or ``--reconstruct``).
+
+Usage
+-----
+    tools/assets-report                       # the report, as Markdown on stdout
+    tools/assets-report --out report.md --json report.json
+    tools/assets-report --reconstruct --out report.md
+    tools/assets-report --write-index         # regenerate _static/_shared/README.md
+    tools/assets-report --check-index         # fail if it is stale, or on a pool orphan
+
+Exit status: 0 clean, 1 the index is stale or the pool holds an orphan
+(``--check-index``), 2 an error. The report alone never fails on what it
+finds: it is information.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import posixpath
+import re
+import subprocess
+import sys
+import traceback
+from collections import defaultdict
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+POOL_DIR = ROOT / "lectures"
+MIRROR_DIR = ROOT / "mirror"
+PROMOTE_PATH = Path(__file__).resolve().parent / "promote"
+SYNC_PATH = Path(__file__).resolve().parent / "sync"
+
+SHARED_DIR = "_shared"
+INDEX_NAME = "README.md"
+INDEX_REL = f"_static/{SHARED_DIR}/{INDEX_NAME}"
+# The files beside the lectures that configure a series' build, not content.
+SERIES_CONFIG = ("_config.yml", "_toc.yml")
+# Orphans of these kinds are a figure's source, kept beside the figure it made.
+FIGURE_SOURCES = (".tex", ".gv", ".dot")
+LARGEST = 15
+# The kinds promote's parser finds by pattern alone (markdown links, quoted
+# strings in code cells): only one whose target exists refers to a file.
+HEURISTIC_KINDS = ("link", "code-str")
+
+# A file on GitHub, by address: github.com/<owner>/<repo>/(raw|blob|tree)/<ref>/<path>
+# or raw.githubusercontent.com/<owner>/<repo>/<ref>/<path>. The ref is read as
+# its first segment, which is how a branch or a commit is written in practice.
+# Code often writes the start of an address and adds the rest (a string split
+# over lines, or a base address and a file name): what follows the last
+# segment written is then empty, and the link is reported as completed in code.
+GITHUB_ADDRESS_RE = re.compile(
+    r"https?://(github\.com|raw\.githubusercontent\.com)/([\w.-]+)/([\w.-]+?)(?:\.git)?(/[^\s\"'<>()`?#\\]*)?(?=[\s\"'<>()`?#\\]|$)"
+)
+COMMIT_RE = re.compile(r"[0-9a-f]{7,40}")
+
+
+class ReportError(Exception):
+    pass
+
+
+def promote_module():
+    """``tools/promote`` imported as a module, for its parser and loaders."""
+    import importlib.util
+    from importlib.machinery import SourceFileLoader
+
+    loader = SourceFileLoader("qe_promote", str(PROMOTE_PATH))
+    spec = importlib.util.spec_from_loader(loader.name, loader)
+    module = importlib.util.module_from_spec(spec)
+    try:
+        loader.exec_module(module)
+    except SystemExit as exc:  # promote exits when it cannot start (PyYAML missing)
+        raise ReportError(f"tools/promote could not be loaded: it exited with status {exc.code}")
+    return module
+
+
+def read_text(path: Path, shown: str) -> str:
+    try:
+        return path.read_bytes().decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ReportError(f"{shown} is not UTF-8 text: {exc}")
+
+
+def resolve(promote, root: Path, md: Path, kind: str, written: str):
+    """The file under ``root`` a reference in ``md`` names, as a path relative
+    to ``root``, or None when it names no file there. A root-relative path
+    (``/_static/...``) resolves against ``root``; any other against the
+    referring file's folder, then against ``root`` (the pool is flat, and the
+    series' include files are written either way)."""
+    if kind == "url":
+        idx = written.find("/_static/")
+        candidates = [written[idx + 1:]]
+    else:
+        literal = written.split("#", 1)[0]
+        if not literal or promote.SCHEME_RE.match(literal):
+            return None
+        if kind == "link" and literal.endswith(".md"):
+            return None  # a link to another lecture
+        if literal.startswith("/"):
+            candidates = [literal[1:]]
+        else:
+            here = md.parent.relative_to(root).as_posix()
+            candidates = [posixpath.join(here, literal) if here != "." else literal, literal]
+    for candidate in candidates:
+        rel = posixpath.normpath(candidate)
+        if rel in (".", "..") or rel.startswith("../") or rel.startswith("/"):
+            continue
+        if (root / rel).is_file():
+            return rel
+    return None
+
+
+def uses(promote, root: Path, md_files):
+    """``{file: {.md files that use it}}``, every path relative to ``root``."""
+    used = defaultdict(set)
+    for md in md_files:
+        name = md.relative_to(root).as_posix()
+        for kind, written in promote.extract_refs(read_text(md, name)):
+            rel = resolve(promote, root, md, kind, written)
+            if rel is not None and rel != name:
+                used[rel].add(name)
+    return used
+
+
+def series_files(root: Path):
+    """Every file under a series' ``lectures/`` that is not a lecture at the
+    top or the series' configuration, relative to ``root``."""
+    files = []
+    for p in sorted(root.rglob("*")):
+        if not p.is_file():
+            continue
+        rel = p.relative_to(root).as_posix()
+        if "/" not in rel and (rel.endswith(".md") or rel in SERIES_CONFIG):
+            continue
+        files.append(rel)
+    return files
+
+
+def config_paths(root: Path, files, promote):
+    """The files the series' configuration uses: named in ``_config.yml``
+    (by their path, or for a file at the top of ``_static/`` by its name), or
+    branding, or the bibliography."""
+    config = root / "_config.yml"
+    text = config.read_text(encoding="utf-8", errors="replace") if config.is_file() else ""
+    named = set()
+    for rel in files:
+        base = posixpath.basename(rel)
+        top_of_static = rel.count("/") == 1 and rel.startswith("_static/")
+        if (
+            rel in text
+            or (top_of_static and re.search(r"(?<![\w.-])" + re.escape(base) + r"(?![\w.-])", text))
+            or base == promote.BIB_BASENAME
+            or base.startswith(promote.BRANDING_PREFIXES)
+        ):
+            named.add(rel)
+    return named
+
+
+def linked(root: Path, md_files, repo: str):
+    """The files under ``root`` a lecture links to by address in ``repo``
+    (``https://github.com/<repo>/blob/<ref>/lectures/<path>`` and the like)."""
+    out = set()
+    for md in md_files:
+        for link in github_addresses(read_text(md, md.relative_to(root).as_posix())):
+            path = link["path"]
+            if link["repo"].lower() != repo.lower() or not path.startswith("lectures/"):
+                continue
+            rel = posixpath.normpath(path[len("lectures/"):])
+            if (root / rel).is_file():
+                out.add(rel)
+    return out
+
+
+def github_addresses(text: str):
+    """Every address of a file (or the start of one) on GitHub in ``text``, as
+    ``{repo, form, ref, path}``; ``ref`` and ``path`` are empty where code
+    completes them. A link to a repository's own pages is not a file."""
+    out = []
+    for m in GITHUB_ADDRESS_RE.finditer(text):
+        host, owner, name, rest = m.group(1), m.group(2), m.group(3), m.group(4) or ""
+        parts = rest.split("/")[1:]
+        if host == "github.com":
+            if not parts or parts[0] not in ("raw", "blob", "tree"):
+                continue
+            form, parts = f"github.com/{parts[0]}", parts[1:]
+        else:
+            form = host
+        ref = parts[0] if parts else ""
+        path = "/".join(parts[1:])
+        out.append({"repo": f"{owner}/{name}", "form": form, "ref": ref, "path": path})
+    return out
+
+
+IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".gif", ".svg", ".pdf")
+
+
+def figure_source(rel: str, used) -> bool:
+    if rel.endswith(FIGURE_SOURCES):
+        return True
+    stem = posixpath.splitext(rel)[0]
+    return any(stem + ext in used for ext in IMAGE_EXTS) and not rel.endswith(IMAGE_EXTS)
+
+
+def series_report(promote, series: str, repo: str):
+    root = MIRROR_DIR / series / "lectures"
+    if not root.is_dir():
+        raise ReportError(f"mirror/{series}/lectures/ does not exist: run tools/sync first, or pass --reconstruct")
+    files = series_files(root)
+    md_files = [p for p in sorted(root.rglob("*.md")) if p.is_file()]
+    used = uses(promote, root, md_files)
+    configured = config_paths(root, files, promote)
+    sizes = {rel: (root / rel).stat().st_size for rel in files}
+    by_address = linked(root, md_files, repo)
+    by_lecture = [rel for rel in files if rel in used]
+    by_link = [rel for rel in files if rel not in used and rel in by_address]
+    by_config = [rel for rel in files if rel not in used and rel not in by_address and rel in configured]
+    orphaned = [rel for rel in files if rel not in used and rel not in by_address and rel not in configured]
+    return {
+        "series": series,
+        "files": len(files),
+        "bytes": sum(sizes.values()),
+        "used_by_lecture": len(by_lecture),
+        "linked_by_address": by_link,
+        "used_by_config": by_config,
+        "orphaned": [{"path": rel, "bytes": sizes[rel], "figure_source": figure_source(rel, used)} for rel in orphaned],
+        "sizes": sizes,
+        "root": root,
+    }
+
+
+def collisions(reports):
+    """``[(path, {digest: [series]})]`` for each path two or more series hold
+    with different bytes."""
+    seen = defaultdict(dict)
+    for r in reports:
+        for rel in r["sizes"]:
+            seen[rel][r["series"]] = sha256(r["root"] / rel)
+    out = []
+    for rel, by_series in sorted(seen.items()):
+        if len(by_series) > 1 and len(set(by_series.values())) > 1:
+            groups = defaultdict(list)
+            for series, digest in by_series.items():
+                groups[digest].append(series)
+            out.append((rel, dict(groups)))
+    return out
+
+
+def sha256(path: Path) -> str:
+    import hashlib
+
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def pool_lectures(pool: Path):
+    return sorted(p.stem for p in pool.glob("*.md") if p.is_file())
+
+
+def pool_uses(promote, pool: Path):
+    """``(lectures, files, {file: {lectures}})`` for the pool: every file
+    under ``_static/`` (the index and the bibliography aside) and the pool
+    lectures that use it."""
+    lectures = pool_lectures(pool)
+    static = pool / "_static"
+    files = []
+    if static.is_dir():
+        for p in sorted(static.rglob("*")):
+            rel = p.relative_to(pool).as_posix()
+            if p.is_file() and rel not in (INDEX_REL, f"_static/{promote.BIB_BASENAME}"):
+                files.append(rel)
+    used = uses(promote, pool, [pool / f"{slug}.md" for slug in lectures])
+    by_file = {rel: sorted(name[:-3] for name in used.get(rel, ())) for rel in files}
+    return lectures, files, by_file
+
+
+def publishers(promote):
+    """``{slug: [series that publish it]}`` from the ledger: the canonical
+    series and every series whose copy it records (sources, divergent and
+    superseded copies alike: each is a series site that publishes the
+    lecture today)."""
+    ledger_path = promote.LEDGER_PATH
+    if not ledger_path.is_file():
+        return {}
+    import yaml
+
+    try:
+        ledger = yaml.safe_load(ledger_path.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError as exc:
+        raise ReportError(f"{ledger_path.name} could not be read: {exc}")
+    order = list(promote.load_manifest()[0])
+    out = {}
+    for key, entry in ledger.items():
+        if not (isinstance(entry, dict) and key.startswith("lectures/") and key.endswith(".md")):
+            continue
+        series = {entry.get("canonical")}
+        for field in ("sources", "divergent", "superseded"):
+            series |= {item.get("series") for item in entry.get(field) or [] if isinstance(item, dict)}
+        series.discard(None)
+        out[key[len("lectures/"):-3]] = sorted(series, key=lambda s: (order.index(s) if s in order else len(order), s))
+    return out
+
+
+def render_index(by_file, published):
+    """The text of ``_static/_shared/README.md``."""
+    shared = [rel for rel in by_file if rel.startswith(f"_static/{SHARED_DIR}/")]
+    lines = [
+        "# Shared assets: where each is used",
+        "",
+        "<!-- Generated by tools/assets-report --write-index. Do not edit by hand: the pool-check",
+        "     workflow regenerates this file and fails when it differs from the committed copy. -->",
+        "",
+        "Every file in this folder is used by more than one pool lecture, or comes from a folder or",
+        "include that series share. Before changing one, read which lectures use it and which series",
+        "publish them: a change here reaches all of them. A file one lecture alone uses belongs in",
+        "`_static/<slug>/` beside it.",
+        "",
+        f"{len(shared)} files.",
+        "",
+        "| File | Used by | Published in |",
+        "| --- | --- | --- |",
+    ]
+    for rel in shared:
+        users = by_file[rel]
+        series = sorted({s for slug in users for s in published.get(slug, ())}, key=lambda s: SERIES_ORDER.get(s, 99))
+        shown = rel[len(f"_static/{SHARED_DIR}/"):]
+        lines.append(
+            f"| `{shown}` | {', '.join(f'`{u}`' for u in users) or '**none**'} | {', '.join(series) or '—'} |"
+        )
+    return "\n".join(lines) + "\n"
+
+
+SERIES_ORDER = {}
+
+
+def github_files(pool: Path, lectures):
+    """Every link in a pool lecture to a file on GitHub, as dicts."""
+    out = []
+    for slug in lectures:
+        text = read_text(pool / f"{slug}.md", f"lectures/{slug}.md")
+        seen = set()
+        for link in github_addresses(text):
+            key = (link["repo"], link["form"], link["ref"], link["path"])
+            if key in seen:
+                continue
+            seen.add(key)
+            complete = bool(link["path"]) and not link["path"].endswith("/")
+            out.append(link | {"lecture": slug, "pinned": bool(COMMIT_RE.fullmatch(link["ref"])), "complete": complete})
+    return out
+
+
+def series_repos(promote):
+    """``{series: owner/repo}`` from ``sync/manifest.yml``."""
+    import yaml
+
+    manifest = yaml.safe_load(promote.MANIFEST_PATH.read_text(encoding="utf-8")) or {}
+    return {key: (stanza or {}).get("repo", "") for key, stanza in (manifest.get("series") or {}).items()}
+
+
+def human(n: int) -> str:
+    for unit in ("B", "KB", "MB"):
+        if n < 1024 or unit == "MB":
+            return f"{n:.0f} {unit}" if unit == "B" else f"{n:.1f} {unit}"
+        n /= 1024
+    return f"{n:.1f} MB"
+
+
+def render_report(reports, colls, pool_part, links):
+    lectures, files, by_file = pool_part
+    orphans = [rel for rel in files if not by_file[rel]]
+    single = [rel for rel in files if rel.startswith(f"_static/{SHARED_DIR}/") and len(by_file[rel]) == 1]
+    out = ["# Assets report", ""]
+    out += ["## The series", "",
+            "Every file under each series' `lectures/` that is not a lecture or the series' `_config.yml` or `_toc.yml`.", "",
+            "| Series | Files | Size | Used by a lecture | Linked by address | Used by the configuration | Orphaned | of which figure sources |",
+            "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"]
+    for r in reports:
+        out.append(
+            f"| {r['series']} | {r['files']} | {human(r['bytes'])} | {r['used_by_lecture']} | {len(r['linked_by_address'])} "
+            f"| {len(r['used_by_config'])} "
+            f"| {len(r['orphaned'])} | {sum(o['figure_source'] for o in r['orphaned'])} |"
+        )
+    out.append("")
+    linked_any = [(r["series"], rel) for r in reports for rel in r["linked_by_address"]]
+    if linked_any:
+        out += ["Linked by address: a lecture links to the file in its series' repository, so the link breaks if the "
+                "series moves or removes the file at its cutover.", ""]
+        out += [f"- {series}: `{rel}`" for series, rel in linked_any]
+        out.append("")
+    for r in reports:
+        if not r["orphaned"]:
+            continue
+        out += [f"### Orphaned in {r['series']}", ""]
+        for o in r["orphaned"]:
+            mark = " (figure source)" if o["figure_source"] else ""
+            out.append(f"- `{o['path']}`, {human(o['bytes'])}{mark}")
+        out.append("")
+    out += ["## Collisions across series", "",
+            "One path in two or more series, with different bytes. Each group of series holds the same bytes.", ""]
+    if colls:
+        for rel, groups in colls:
+            out.append(f"- `{rel}`: " + "; ".join(", ".join(g) for g in groups.values()))
+    else:
+        out.append("None.")
+    out += ["", f"## The {LARGEST} largest files", "", "| File | Series | Size |", "| --- | --- | ---: |"]
+    biggest = defaultdict(list)
+    for r in reports:
+        for rel, size in r["sizes"].items():
+            biggest[(rel, size)].append(r["series"])
+    for (rel, size), series in sorted(biggest.items(), key=lambda kv: (-kv[0][1], kv[0][0]))[:LARGEST]:
+        out.append(f"| `{rel}` | {', '.join(series)} | {human(size)} |")
+    out += ["", "## The pool", "",
+            f"{len(lectures)} lectures; {len(files)} files under `lectures/_static/` (the merged bibliography and the "
+            f"`_shared/` index aside), {sum(1 for f in files if f.startswith(f'_static/{SHARED_DIR}/'))} of them in `_shared/`.", ""]
+    if orphans:
+        out.append(f"**{len(orphans)} orphaned** (no pool lecture uses them; `--check-index` fails on these):")
+        out += [f"- `{rel}`" for rel in orphans]
+    else:
+        out.append("No orphans: every file is used by a pool lecture.")
+    out.append("")
+    if single:
+        out.append(f"{len(single)} files in `_shared/` are used by one lecture alone (promote places a family folder's "
+                   "files and the `_admonition/` includes there whatever their count):")
+        out += [f"- `{rel}`: `{by_file[rel][0]}`" for rel in single]
+        out.append("")
+    out += ["## Files on GitHub, by address", "",
+            "Links in pool lectures to a file on GitHub: data a lecture reads, a download it offers, source code it "
+            "points to. A link to a branch follows that branch; a link to a series repository breaks if the series "
+            "moves or removes the file at its cutover. An address code completes (a string split over lines, or a "
+            "base address and a file name) is shown as far as it is written.", ""]
+    if links:
+        groups = defaultdict(list)
+        for link in links:
+            groups[link["repo"]].append(link)
+        out += ["| Repository | Links | Lectures | Refs | Forms |", "| --- | ---: | ---: | --- | --- |"]
+        for repo, items in sorted(groups.items(), key=lambda kv: (-len(kv[1]), kv[0])):
+            refs = defaultdict(int)
+            forms = defaultdict(int)
+            for item in items:
+                refs[(item["ref"] or "(in code)") + (" (a commit)" if item["pinned"] else "")] += 1
+                forms[item["form"]] += 1
+            out.append(
+                f"| {repo} | {len(items)} | {len({i['lecture'] for i in items})} | "
+                + ", ".join(f"{k} {v}" for k, v in sorted(refs.items(), key=lambda kv: -kv[1]))
+                + " | " + ", ".join(f"{k} {v}" for k, v in sorted(forms.items(), key=lambda kv: -kv[1])) + " |"
+            )
+        out.append("")
+        for repo, items in sorted(groups.items(), key=lambda kv: (-len(kv[1]), kv[0])):
+            out += [f"### {repo}", ""]
+            by_lecture = defaultdict(list)
+            for item in items:
+                by_lecture[item["lecture"]].append(item)
+            for slug, its in sorted(by_lecture.items()):
+                out.append(f"- `{slug}`: " + ", ".join(
+                    (f"`{i['path']}`" if i["complete"] else f"`{i['path']}…`, completed in code" if i["path"] else "an address completed in code")
+                    + f" ({i['ref'] or 'ref in code'})" for i in its))
+            out.append("")
+    else:
+        out += ["None.", ""]
+    return "\n".join(out)
+
+
+def report_json(reports, colls, pool_part, links):
+    lectures, files, by_file = pool_part
+    return {
+        "series": [
+            {k: v for k, v in r.items() if k not in ("sizes", "root")}
+            | {"largest": sorted(({"path": p, "bytes": s} for p, s in r["sizes"].items()), key=lambda d: -d["bytes"])[:LARGEST]}
+            for r in reports
+        ],
+        "collisions": [{"path": rel, "groups": list(groups.values())} for rel, groups in colls],
+        "pool": {
+            "lectures": len(lectures),
+            "files": {rel: by_file[rel] for rel in files},
+            "orphaned": [rel for rel in files if not by_file[rel]],
+        },
+        "github_files": links,
+    }
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(prog="tools/assets-report", description=__doc__.split("\n\n")[0])
+    parser.add_argument("--out", metavar="PATH", help="write the report as Markdown to PATH (default: stdout)")
+    parser.add_argument("--json", metavar="PATH", help="also write the report as JSON to PATH")
+    parser.add_argument("--reconstruct", action="store_true", help="run tools/sync first, to rebuild mirror/")
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("--write-index", action="store_true", help=f"regenerate lectures/{INDEX_REL} and write nothing else")
+    group.add_argument("--check-index", action="store_true",
+                       help=f"fail if lectures/{INDEX_REL} is stale or the pool holds an orphan; writes nothing")
+    args = parser.parse_args(argv)
+    if (args.write_index or args.check_index) and (args.out or args.json or args.reconstruct):
+        parser.error("--write-index and --check-index take no other option")
+    try:
+        if not POOL_DIR.is_dir():
+            raise ReportError(f"{POOL_DIR} does not exist")
+        promote = promote_module()
+        try:
+            order, consumers = promote.load_manifest()
+        except SystemExit as exc:  # promote's loader exits on a manifest it cannot read
+            raise ReportError(str(exc).removeprefix("error: "))
+        SERIES_ORDER.update({s: i for i, s in enumerate(order)})
+        pool_part = pool_uses(promote, POOL_DIR)
+        published = publishers(promote)
+        if args.write_index or args.check_index:
+            text = render_index(pool_part[2], published)
+            index = POOL_DIR / INDEX_REL
+            if args.write_index:
+                index.parent.mkdir(parents=True, exist_ok=True)
+                index.write_text(text, encoding="utf-8")
+                print(f"wrote lectures/{INDEX_REL}")
+                return 0
+            problems = []
+            committed = index.read_text(encoding="utf-8") if index.is_file() else None
+            if committed != text:
+                problems.append(
+                    f"lectures/{INDEX_REL} is {'missing' if committed is None else 'stale'}: "
+                    "run tools/assets-report --write-index and commit it"
+                )
+            for rel, users in pool_part[2].items():
+                if not users:
+                    problems.append(f"lectures/{rel} is used by no pool lecture: remove it, or restore the reference")
+            if problems:
+                for p in problems:
+                    print(f"  {p}")
+                print(f"{len(problems)} problem(s).")
+                return 1
+            print(f"clean: lectures/{INDEX_REL} is current, and every file under _static/ is used.")
+            return 0
+        if args.reconstruct:
+            done = subprocess.run([sys.executable, str(SYNC_PATH)], cwd=ROOT)
+            if done.returncode:
+                raise ReportError(f"tools/sync failed with status {done.returncode}")
+        repos = series_repos(promote)
+        reports = [series_report(promote, s, repos[s]) for s in order]
+        colls = collisions(reports)
+        links = github_files(POOL_DIR, pool_part[0])
+        text = render_report(reports, colls, pool_part, links)
+        if args.out:
+            Path(args.out).write_text(text, encoding="utf-8")
+        else:
+            sys.stdout.write(text)
+        if args.json:
+            Path(args.json).write_text(json.dumps(report_json(reports, colls, pool_part, links), indent=2) + "\n", encoding="utf-8")
+    except ReportError as exc:
+        sys.stderr.write(f"error: {exc}\n")
+        return 2
+    except Exception as exc:  # anything unforeseen is an error, never a finding
+        traceback.print_exc()
+        sys.stderr.write(f"assets-report: internal error: {type(exc).__name__}: {exc}\n")
+        return 2
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -8,6 +8,12 @@ name: pool-check
 # the series keys in sync/manifest.yml and the ledger, so it needs no mirror
 # and no network.
 #
+# A second step checks the index of shared assets,
+# lectures/_static/_shared/README.md (tools/assets-report --check-index): it
+# regenerates the index from the pool and the ledger and fails if the
+# committed file differs, or if a file under _static/ is used by no lecture.
+# After a promotion, run `tools/assets-report --write-index` and commit it.
+#
 # Names unique across the published sites needs the mirror, so the
 # drift-check runs that check (drift-check.yml).
 #
@@ -21,6 +27,7 @@ on:
     paths:
       - 'lectures/**'
       - 'tools/pool-check'
+      - 'tools/assets-report'
       - 'tools/promote'
       - 'sync/manifest.yml'
       - 'sync/ledger.yml'
@@ -42,3 +49,7 @@ jobs:
 
       - name: Check the pool's conventions
         run: uv run --script tools/pool-check
+
+      - name: Check the shared-asset index and the pool's orphans
+        if: success() || failure()
+        run: uv run --script tools/assets-report --check-index
