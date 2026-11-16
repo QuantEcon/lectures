@@ -12,9 +12,11 @@
 # canonical one is either a STALE copy (still at an earlier promoted
 # version while the canonical copy moved on) or a copy equal to the
 # canonical one once asset paths are normalised.
-# An asset `sources` item with its own `digest` and a `stale_since` time
-# is a series' copy of a shared `_admonition/` include that is behind the
-# pool's version (the asset's `digest`); the drift-check reports it.
+# An asset's `sources` are its copies in the series its user lectures
+# come from. An item with its own `digest` and a `stale_since` time is a
+# copy that has not followed a change to the pool's version (the
+# asset's `digest`) yet; one with `differs: true` was never that version:
+# a different file under the same name. The drift-check reports both.
 # `rewrites` is an ordered list of literal replacements: applying each
 # {from -> to} in turn to the canonical mirror copy reproduces the pool
 # copy byte-for-byte. Each pair is ONE non-rescanning pass with Python
@@ -4710,23 +4712,17 @@ assets:
     sources:
     - series: intermediate
       path: _static/lecture_specific/markov_perf/judd_fig1.png
-    - series: advanced
-      path: _static/lecture_specific/markov_perf/judd_fig1.png
   _static/markov_perf/judd_fig2.png:
     canonical: intermediate
     digest: 42f641b9e69691c94095c68fe7c41dc633a12fe175a816cf05300251b3259e3d
     sources:
     - series: intermediate
       path: _static/lecture_specific/markov_perf/judd_fig2.png
-    - series: advanced
-      path: _static/lecture_specific/markov_perf/judd_fig2.png
   _static/markov_perf/mpe_vs_monopolist.png:
     canonical: intermediate
     digest: f61d837409ab88ecc61ff29959f7ef6c3b12d7ae2b1a29c90dcd226b9433d1d1
     sources:
     - series: intermediate
-      path: _static/lecture_specific/markov_perf/mpe_vs_monopolist.png
-    - series: advanced
       path: _static/lecture_specific/markov_perf/mpe_vs_monopolist.png
   _static/matplotlib/matplotlib_ex1.png:
     canonical: programming

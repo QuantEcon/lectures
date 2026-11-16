@@ -67,7 +67,7 @@ def test_the_pool_takes_the_newer_version_and_the_lagging_copies_are_stale(make_
     res = repo.promote("--refresh")
 
     assert res.returncode == 0, res.stderr
-    assert f"[{ASSET}] STALE: programming, jax hold an earlier version; the pool takes intermediate's" in res.stdout
+    assert f"[{ASSET}] STALE: programming, jax hold a version that is not the pool's; the pool takes intermediate's" in res.stdout
     # One file for every lecture that uses it, in the batch or not.
     assert repo.pool(ASSET).read_text(encoding="utf-8") == V2
     record = repo.ledger()["assets"][ASSET]
@@ -81,7 +81,7 @@ def test_the_pool_takes_the_newer_version_and_the_lagging_copies_are_stale(make_
     dc = repo.drift_check()
     assert dc.returncode == 0, dc.stdout
     assert dc.stdout.count("[stale-copy]") == 2
-    assert "is behind the pool's version" in dc.stdout
+    assert "is not at the pool's version" in dc.stdout
 
 
 def test_a_copy_that_catches_up_is_current_again(make_repo):
@@ -137,8 +137,8 @@ def test_a_copy_behind_for_more_than_a_week_becomes_drift(make_repo):
 
     assert dc.returncode == 1
     assert dc.stdout.count("[stale-copy]") == 2
-    assert "### drift(jax): lectures/_admonition/gpu.md is behind the pool's version" in dc.stdout
-    assert "### drift(programming): lectures/_admonition/gpu.md is behind the pool's version" in dc.stdout
+    assert "### drift(jax): lectures/_admonition/gpu.md is not at the pool's version" in dc.stdout
+    assert "### drift(programming): lectures/_admonition/gpu.md is not at the pool's version" in dc.stdout
     assert "Make the same change in jax" in dc.stdout
 
 
@@ -214,13 +214,16 @@ def test_a_refresh_with_no_lag_writes_no_per_source_digest(make_repo):
     assert repo.drift_check().returncode == 0
 
 
-def test_a_leader_with_no_lecture_of_its_own_using_it_is_still_taken(make_repo):
+def test_a_leader_whose_own_lectures_did_not_move_is_still_taken(make_repo):
+    # numba is one lecture in both series, canonical in programming. Only
+    # intermediate's copy of the include changes, so no canonical pin of a
+    # lecture that uses it moves.
     repo = make_repo(["programming", "intermediate"])
     for series in repo.order:
         repo.mirror_file(series, "_admonition/gpu.md", V1)
-    repo.lecture("programming", "numba", lecture_text("Numba", INCLUDE))
-    repo.lecture("intermediate", "mccall", lecture_text("McCall"))
-    assert repo.promote("numba", "mccall").returncode == 0
+        repo.lecture(series, "numba", lecture_text("Numba", INCLUDE))
+    assert repo.promote("numba").returncode == 0
+    assert set(sources(repo)) == {"programming", "intermediate"}
     lead(repo, "intermediate", V2)
 
     assert "[asset-moved]" in repo.drift_check().stdout
@@ -231,6 +234,26 @@ def test_a_leader_with_no_lecture_of_its_own_using_it_is_still_taken(make_repo):
     assert sources(repo)["programming"]["stale_since"]
     dc = repo.drift_check()
     assert dc.returncode == 0, dc.stdout
+
+
+def test_a_series_none_of_whose_lectures_use_the_file_is_not_a_source(make_repo):
+    # intermediate has a file of the same name, but no pool lecture that uses
+    # it comes from intermediate: its copy is not the pool's business.
+    repo = make_repo(["programming", "intermediate"])
+    for series in repo.order:
+        repo.mirror_file(series, "_admonition/gpu.md", V1)
+    repo.lecture("programming", "numba", lecture_text("Numba", INCLUDE))
+    repo.lecture("intermediate", "mccall", lecture_text("McCall"))
+    assert repo.promote("numba", "mccall").returncode == 0
+    assert set(sources(repo)) == {"programming"}
+
+    lead(repo, "intermediate", V2)
+
+    dc = repo.drift_check()
+    assert dc.returncode == 0, dc.stdout
+    res = repo.promote("--refresh")
+    assert res.returncode == 0, res.stderr
+    assert repo.pool(ASSET).read_text(encoding="utf-8") == V1
 
 
 def test_a_series_left_out_of_a_run_keeps_its_stale_record(make_repo):

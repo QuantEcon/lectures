@@ -12,6 +12,7 @@ them.
 from __future__ import annotations
 
 import hashlib
+from datetime import datetime, timezone
 import os
 import shutil
 import subprocess
@@ -73,6 +74,8 @@ class ScratchRepo:
     def move_pin(self, series, n=2):
         state = yaml.safe_load((self.root / "sync" / "state.yml").read_text(encoding="utf-8"))
         state[series]["sha"] = fake_sha(series, n)
+        # tools/sync stamps the time a pin moves.
+        state[series]["synced_at"] = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
         (self.root / "sync" / "state.yml").write_text(yaml.safe_dump(state, sort_keys=False), encoding="utf-8")
 
     def write_canonical_map(self, mapping):
