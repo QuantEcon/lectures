@@ -25,7 +25,10 @@ name: drift-check
 # is listed in that pull request. Anything bib-merge fails on (a refused key,
 # a failed check, a hand edit, a ruling not regenerated) turns the separate
 # `bibliography` job RED, never the check job, so it cannot hold back the
-# refresh of the pool lectures.
+# refresh of the pool lectures. One case is not a failure of the nightly
+# check: a key cited only by pool lectures whose canonical copies dropped the
+# citation upstream, which the refresh job's promote removes; the write after
+# it checks every citation again, and fails there if that lecture was refused.
 #
 # The refresh lands as a pull request rather than a push to main so a human
 # sees the ledger diff: a refresh can change which entries are `interim`.
@@ -139,7 +142,18 @@ jobs:
         if: success() || failure()
         run: |
           set +e
-          uv run --script tools/bib-merge --reconstruct
+          # After a sync, or on a manual run of the default branch, the
+          # refresh job follows this one on the same commit and writes the
+          # file again, so a citation that refresh removes is not a failure
+          # here (--refresh-follows). A pull request has no refresh job, and
+          # a manual run of another branch is refreshed from the default
+          # branch, not from what was checked: there every unresolved
+          # citation fails.
+          follows=
+          if [ "${{ github.event_name }}" = "workflow_run" ] || { [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.ref_name }}" = "${{ github.event.repository.default_branch }}" ]; }; then
+            follows=--refresh-follows
+          fi
+          uv run --script tools/bib-merge --reconstruct $follows
           rc=$?
           set -e
           echo "bib-merge exit status: $rc (0 clean, 1 behind the series' files, 2 refused, failed or an error)"

@@ -27,6 +27,24 @@ is reported under a tag:
   (``_static/<slug>/fig.png``, never ``/_static/...``), so a lecture
   resolves under any project root.
 * ``escapes``       — no reference leaves ``lectures/``.
+* ``doc-target``    — every ``{doc}`` link resolves. A plain target
+  (``{doc}`mccall```) names a pool lecture or a product page, which each
+  product supplies (``tools/promote``'s ``PRODUCT_PAGES``). A prefixed
+  target (``{doc}`intro:cobweb```) leaves the product: its prefix is a
+  series key in ``sync/manifest.yml``, or one of the prefixes recorded in
+  ``LEGACY_PREFIXES`` until the cross-reference policy settles them
+  (QuantEcon/project-monorepo#22), and what follows names a product page
+  or a pool lecture that series holds (the ledger's record of its copies;
+  not checked for a legacy prefix, or with no ledger). Text in code cells,
+  literal blocks, inline literals and ``%`` comments is not read as a link.
+
+One report is not a rule. A label that more than one pool lecture defines is
+counted on every run and listed by ``--labels``: targets (``(name)=`` and
+``:name:``, compared without case, as Sphinx does) and equation labels
+(``:label:`` and ``$$ ... $$ (name)``), which are separate namespaces.
+Labels must be unique within a product, which is checked where a product is
+built; across the whole pool the list is information. An option written in
+a directive's ``---`` block is not read.
 
 References are found by ``tools/promote``'s own parser, imported for the
 purpose, so the two tools agree on what a lecture refers to. Names unique
@@ -35,16 +53,19 @@ across the published sites needs the mirror, so it is the drift-check's
 
 Usage
 -----
-    tools/pool-check        # check lectures/
+    tools/pool-check            # check lectures/
+    tools/pool-check --labels   # also list the labels more than one lecture defines
 
 Exit status: 0 clean, 1 a rule broken, 2 an error. It reads ``lectures/``
-only and writes nothing.
+the series keys in ``sync/manifest.yml`` and ``sync/ledger.yml``, and
+writes nothing.
 """
 
 from __future__ import annotations
 
 import argparse
 import posixpath
+import re
 import sys
 import traceback
 from collections import defaultdict
@@ -58,6 +79,74 @@ SHARED_DIR = "_shared"
 # The kinds promote's parser finds by pattern alone (markdown links, quoted
 # strings in code cells): only one whose target exists refers to a file.
 HEURISTIC_KINDS = ("link", "code-str")
+
+# A ``{doc}`` role: ``{doc}`target``` or ``{doc}`link text <target>```, in
+# one backtick or a longer run. Link text is not empty: Sphinx reads
+# ``{doc}`<x>``` as the target ``<x>``.
+DOC_RE = re.compile(r"\{doc\}(`+)(.+?)\1(?!`)", re.S)
+DOC_TITLED_RE = re.compile(r"^.*\S.*<([^<>]+)>\s*$", re.S)
+# Prefixes lectures use for links to another site that are not series keys:
+# older names for a series' site. Recorded, not endorsed: the cross-reference
+# policy (QuantEcon/project-monorepo#22) decides what a link that leaves the
+# product is written as, and this list goes when it does.
+LEGACY_PREFIXES = ("dynam", "pyprog", "tools")
+
+# What defines a label. Targets: a MyST target on its own line and a
+# directive's ``:name:``. Equations: a directive's ``:label:`` and the label
+# after a ``$$`` block.
+TARGET_RES = (
+    re.compile(r"^[ \t]*\(([^()\s]+)\)=[ \t]*\r?$", re.M),
+    re.compile(r"^[ \t]*:name:[ \t]*(\S+)[ \t]*\r?$", re.M),
+)
+EQUATION_RES = (
+    re.compile(r"^[ \t]*:label:[ \t]*(\S+)[ \t]*\r?$", re.M),
+    re.compile(r"\$\$[ \t]*\(([^()\s]+)\)[ \t]*\r?$", re.M),
+)
+
+FENCE_RE = re.compile(r"^[ \t]*(`{3,}|~{3,})(.*)$")
+# Fenced blocks whose body is code or literal text, not MyST prose.
+CODE_DIRECTIVES = ("{code-cell}", "{code-block}", "{code}", "{sourcecode}", "{literalinclude}")
+
+
+def prose(text: str) -> str:
+    """``text`` without what is not MyST prose: the bodies of code cells and
+    literal fenced blocks, ``%`` comment lines and inline literals. A
+    directive's fence (``{note}``, ``{figure}``, ``{math}``) is prose, and
+    its option lines stay. Line structure is kept.
+
+    Fences are read as CommonMark reads them: a block runs from its opening
+    fence to the first later fence of the same character, at least as long,
+    with nothing after it (or to the end), and nothing inside it opens or
+    closes anything. A directive's body is then read the same way, as MyST
+    parses it. A backtick fence's info string holds no backtick, so a line
+    that opens with inline code is not a fence."""
+
+    def is_closing(line, fence):
+        m = FENCE_RE.match(line)
+        return bool(m) and m.group(1)[0] == fence[0] and len(m.group(1)) >= len(fence) and not m.group(2).strip()
+
+    def read(lines):
+        out, i = [], 0
+        while i < len(lines):
+            m = FENCE_RE.match(lines[i])
+            if not m or (m.group(1)[0] == "`" and "`" in m.group(2)):
+                out.append("" if lines[i].lstrip().startswith("%") else lines[i])
+                i += 1
+                continue
+            end = next((j for j in range(i + 1, len(lines)) if is_closing(lines[j], m.group(1))), len(lines))
+            body = lines[i + 1 : end]
+            info = m.group(2).strip()
+            code = not info.startswith("{") or info.startswith(CODE_DIRECTIVES)
+            out.append("")
+            out.extend([""] * len(body) if code else read(body))
+            if end < len(lines):
+                out.append("")
+            i = end + 1
+        return out
+
+    # An inline literal: a run of two or more backticks, to the same run. A
+    # run straight after a role's name (``{doc}``x````) is that role's text.
+    return re.sub(r"(?<![`}])(``+)(?!`).*?(?<!`)\1(?!`)", "", "\n".join(read(text.split("\n"))))
 
 
 class PoolCheckError(Exception):
@@ -155,14 +244,123 @@ def check_references(pool: Path, lectures, promote):
     return problems
 
 
+def read_lecture(pool: Path, slug: str) -> str:
+    try:
+        return (pool / f"{slug}.md").read_bytes().decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise PoolCheckError(f"lectures/{slug}.md is not UTF-8 text: {exc}")
+
+
+def holders_by_lecture(ledger_path: Path):
+    """``{slug: series that hold a copy}`` from the ledger, or None when
+    there is no ledger to read."""
+    if not ledger_path.is_file():
+        return None
+    import yaml
+
+    try:
+        ledger = yaml.safe_load(ledger_path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as exc:
+        raise PoolCheckError(f"{ledger_path.name} could not be read: {exc}")
+    held = {}
+    for key, entry in (ledger or {}).items():
+        if not (isinstance(entry, dict) and key.startswith("lectures/") and key.endswith(".md")):
+            continue
+        series = {entry.get("canonical")}
+        for field in ("sources", "divergent", "superseded"):
+            series |= {item.get("series") for item in entry.get(field) or [] if isinstance(item, dict)}
+        held[key[len("lectures/"):-3]] = series
+    return held
+
+
+def check_doc_targets(pool: Path, lectures, product_pages, series_keys, held):
+    """Every ``{doc}`` link that does not resolve, as ``(tag, message)``."""
+    problems = []
+    known = set(lectures) | set(product_pages)
+    for slug in lectures:
+        where = f"lectures/{slug}.md"
+        seen = set()
+        for m in DOC_RE.finditer(prose(read_lecture(pool, slug))):
+            titled = DOC_TITLED_RE.match(m.group(2))
+            target = (titled.group(1) if titled else m.group(2)).strip()
+            if target in seen:
+                continue
+            seen.add(target)
+            link = f"{where} links to {{doc}}`{target}`"
+            prefix, sep, name = target.partition(":")
+            if not sep:
+                prefix, name = None, target
+            elif not re.fullmatch(r"[\w.-]+", prefix):
+                problems.append((
+                    "doc-target",
+                    f"{link}: a target has no spaces, and a colon in it follows a series key; write link text as "
+                    "{doc}`text <target>`",
+                ))
+                continue
+            if prefix is not None and prefix not in series_keys and prefix not in LEGACY_PREFIXES:
+                problems.append((
+                    "doc-target",
+                    f"{link}: `{prefix}` is not a series key in sync/manifest.yml ({', '.join(series_keys)})",
+                ))
+            elif name not in known:
+                hint = f" (a target is written without `.md`: {name[:-3]})" if name.endswith(".md") and name[:-3] in known else ""
+                problems.append((
+                    "doc-target",
+                    f"{link}: there is no lectures/{name}.md, and `{name}` is not a product page{hint}",
+                ))
+            elif (
+                prefix in series_keys
+                and held is not None
+                and name not in product_pages
+                and prefix not in held.get(name, ())
+            ):
+                problems.append((
+                    "doc-target",
+                    f"{link}: by the ledger, {prefix} holds no lecture named {name} "
+                    f"(held by: {', '.join(sorted(s for s in held.get(name, ()) if s)) or 'no series'})",
+                ))
+    return problems
+
+
+def shared_labels(pool: Path, lectures):
+    """``{label: [lectures]}`` for every label more than one lecture defines.
+    Targets are compared without case and shown lower-cased; an equation
+    label is shown as ``eq:<label>``-free text with `` (equation)`` after."""
+    targets, equations = defaultdict(set), defaultdict(set)
+    for slug in lectures:
+        text = prose(read_lecture(pool, slug))
+        for pattern in TARGET_RES:
+            for m in pattern.finditer(text):
+                targets[m.group(1).lower()].add(slug)
+        for pattern in EQUATION_RES:
+            for m in pattern.finditer(text):
+                equations[m.group(1)].add(slug)
+    shared = {label: sorted(slugs) for label, slugs in targets.items() if len(slugs) > 1}
+    shared.update({f"{label} (equation)": sorted(slugs) for label, slugs in equations.items() if len(slugs) > 1})
+    return dict(sorted(shared.items()))
+
+
 def main(argv=None):
-    argparse.ArgumentParser(prog="tools/pool-check", description=__doc__.split("\n\n")[0]).parse_args(argv)
+    parser = argparse.ArgumentParser(prog="tools/pool-check", description=__doc__.split("\n\n")[0])
+    parser.add_argument(
+        "--labels",
+        action="store_true",
+        help="list the labels more than one pool lecture defines (information, never a failure).",
+    )
+    args = parser.parse_args(argv)
     try:
         if not POOL_DIR.is_dir():
             raise PoolCheckError(f"{POOL_DIR} does not exist")
         promote = promote_module()
         lectures, problems = check_layout(POOL_DIR, promote.BIB_BASENAME)
         problems += check_references(POOL_DIR, lectures, promote)
+        try:
+            series_keys, _ = promote.load_manifest()
+        except SystemExit as exc:  # promote's loader exits on a manifest it cannot read
+            raise PoolCheckError(str(exc).removeprefix("error: "))
+        held = holders_by_lecture(promote.LEDGER_PATH)
+        problems += check_doc_targets(POOL_DIR, lectures, promote.PRODUCT_PAGES, series_keys, held)
+        labels = shared_labels(POOL_DIR, lectures)
         static = POOL_DIR / "_static"
         n_files = sum(1 for p in static.rglob("*") if p.is_file()) if static.is_dir() else 0
     except PoolCheckError as exc:
@@ -173,6 +371,14 @@ def main(argv=None):
         sys.stderr.write(f"pool-check: internal error: {type(exc).__name__}: {exc}\n")
         return 2
     print(f"pool-check — {len(lectures)} lectures, {n_files} files under _static/")
+    if labels:
+        print(
+            f"info: {len(labels)} label(s) are defined by more than one lecture"
+            + (":" if args.labels else " (`tools/pool-check --labels` lists them); unique per product is checked where a product is built.")
+        )
+        if args.labels:
+            for label, slugs in labels.items():
+                print(f"  {label}: {', '.join(slugs)}")
     if not problems:
         print("clean: the pool keeps its conventions.")
         return 0

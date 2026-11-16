@@ -598,3 +598,75 @@ def test_the_equivalence_check_names_an_entry_pybtex_reads_differently(make_repo
     assert tool.equivalence_findings(tampered, merge, sources) == [
         "Jones2001: pybtex reads the merged entry differently from intro's copy in author"
     ]
+
+
+def test_a_citation_the_coming_refresh_removes_is_not_a_failure_of_the_check(make_repo):
+    # A series drops a citation and its entry in one commit. Until the
+    # refresh runs, the pool copy still cites the key (QuantEcon/lectures#41).
+    repo = repo_with(make_repo, entry("Smith2000", SMITH) + entry("Hog1938", SMITH), "")
+    repo.lecture("intro", "cobweb", "# Cobweb\n\nSee {cite}`Hog1938` and {cite:t}`Smith2000`.\n")
+    assert repo.promote("cobweb").returncode == 0
+    assert repo.bib_merge("--write").returncode == 0
+
+    repo.lecture("intro", "cobweb", "# Cobweb\n\nSee {cite:t}`Smith2000`.\n")
+    repo.bib("intro", entry("Smith2000", SMITH))
+    repo.move_pin("intro")
+
+    # Checked on its own, with no refresh to follow, it is a failure.
+    res = repo.bib_merge()
+    assert res.returncode == 2
+    assert "[closure] Hog1938" in res.stdout
+
+    # The nightly check, which a refresh follows: a refresh is needed, and
+    # nothing has failed.
+    res = repo.bib_merge("--refresh-follows")
+    assert res.returncode == 1, res.stdout
+    assert "[closure]" not in res.stdout
+    assert "[info:closure-pending] Hog1938: cited by cobweb.md but not in the merged file" in res.stdout
+    assert "[refresh]" in res.stdout
+
+    # A write before the refresh would leave the pool citing a key it lacks.
+    res = repo.bib_merge("--write", "--refresh-follows")
+    assert res.returncode == 2
+    assert "[closure] Hog1938: cited by cobweb.md but not in the merged file" in res.stdout
+
+    # The refresh, then the write, settle it.
+    assert repo.promote("--refresh").returncode == 0
+    res = repo.bib_merge("--write")
+    assert res.returncode == 0, res.stdout
+    assert "Hog1938" not in merged(repo)
+
+
+def test_a_dropped_entry_a_lecture_still_cites_upstream_fails_the_check(make_repo):
+    repo = repo_with(make_repo, entry("Smith2000", SMITH) + entry("Hog1938", SMITH), "")
+    repo.lecture("intro", "cobweb", "# Cobweb\n\nSee {cite}`Hog1938`.\n")
+    assert repo.promote("cobweb").returncode == 0
+    assert repo.bib_merge("--write").returncode == 0
+
+    repo.bib("intro", entry("Smith2000", SMITH))
+    repo.move_pin("intro")
+
+    res = repo.bib_merge("--refresh-follows")
+    assert res.returncode == 2
+    assert "[closure] Hog1938: cited by cobweb.md but not in the merged file" in res.stdout
+
+    # An unreadable ledger excuses nothing.
+    repo.lecture("intro", "cobweb", "# Cobweb\n")
+    repo.ledger_path.write_text("lectures/cobweb.md: intro\n", encoding="utf-8")
+    res = repo.bib_merge("--refresh-follows")
+    assert res.returncode == 2
+    assert "[closure] Hog1938" in res.stdout and "Traceback" not in res.stderr
+
+
+def test_a_citation_the_pool_alone_dropped_from_the_bibliography_is_not_excused(make_repo):
+    # The canonical copy has not moved, so no refresh is coming for it.
+    repo = repo_with(make_repo, entry("Smith2000", SMITH), "")
+    repo.lecture("intro", "cobweb", "# Cobweb\n\nSee {cite:t}`Smith2000`.\n")
+    assert repo.promote("cobweb").returncode == 0
+    assert repo.bib_merge("--write").returncode == 0
+    repo.pool("cobweb.md").write_text("# Cobweb\n\nSee {cite}`Typo1`.\n", encoding="utf-8")
+
+    res = repo.bib_merge("--refresh-follows")
+
+    assert res.returncode == 2
+    assert "[closure] Typo1: cited by cobweb.md but not in the merged file" in res.stdout
