@@ -1,0 +1,142 @@
+title: Quantitative Economics with Python using JAX
+author: Thomas J. Sargent & John Stachurski
+logo: _static/qe-logo-large.png
+description: This website presents a set of lectures on quantitative economic modeling, designed and written by Thomas J. Sargent and John Stachurski.
+only_build_toc_files: false
+
+parse:
+  myst_enable_extensions:
+    - amsmath
+    - colon_fence
+    - deflist
+    - dollarmath
+    - html_admonition
+    - html_image
+    - linkify
+    - replacements
+    - smartquotes
+    - substitution
+
+only_build_toc_files: true
+execute:
+  # site addition, sites/README.md: this site's own execution cache, read from the directory jb is run from
+  cache: _build/jupyter_cache/jax
+  execute_notebooks: "cache"
+  timeout: 2400
+
+bibtex_bibfiles:
+   - _static/quant-econ.bib
+
+html:
+  baseurl: https://jax.quantecon.org/
+
+latex:
+   latex_documents:
+      targetname: quantecon-jax.tex
+
+sphinx:
+  extra_extensions: [sphinx_multitoc_numbering, sphinxext.rediraffe, sphinxcontrib.youtube, sphinx.ext.todo, sphinx_exercise, sphinx_proof, sphinx_togglebutton, sphinx_tojupyter]
+  config:
+    bibtex_reference_style: author_year
+    suppress_warnings: ["mystnb.unknown_mime_type"]
+    nb_merge_streams: true
+    # sphinx-proof
+    proof_minimal_theme: true
+    # sphinx-exercise
+    exercise_style: solution_follow_exercise
+    # myst-nb config
+    nb_render_image_options:
+      width: 80%
+    nb_mime_priority_overrides: [
+      ['html', 'application/vnd.jupyter.widget-view+json', 10],
+      ['html', 'application/javascript', 20],
+      ['html', 'text/html', 30],
+      ['html', 'text/latex', 40],
+      ['html', 'image/svg+xml', 50],
+      ['html', 'image/png', 60],
+      ['html', 'image/jpeg', 70],
+      ['html', 'text/markdown', 80],
+      ['html', 'text/plain', 90],
+      ['jupyter', 'application/vnd.jupyter.widget-view+json', 10],
+      ['jupyter', 'application/javascript', 20],
+      ['jupyter', 'text/html', 30],
+      ['jupyter', 'text/latex', 40],
+      ['jupyter', 'image/svg+xml', 50],
+      ['jupyter', 'image/png', 60],
+      ['jupyter', 'image/jpeg', 70],
+      ['jupyter', 'text/markdown', 80],
+      ['jupyter', 'text/plain', 90],
+      ['latex', 'text/latex', 10],
+      ['latex', 'application/pdf', 20],
+      ['latex', 'image/png', 30],
+      ['latex', 'image/jpeg', 40],
+      ['latex', 'text/markdown', 50],
+      ['latex', 'text/plain', 60]
+    ]
+    html_favicon: _static/lectures-favicon.ico
+    html_theme: quantecon_book_theme
+    html_static_path: ['_static']
+    html_theme_options:
+      authors:
+        - name: Thomas J. Sargent
+          url: http://www.tomsargent.com/
+        - name: John Stachurski
+          url: https://johnstachurski.net/
+      dark_logo: quantecon-logo-transparent.png
+      header_organisation_url: https://quantecon.org
+      header_organisation: QuantEcon
+      repository_url: https://github.com/QuantEcon/lecture-jax
+      nb_repository_url: https://github.com/QuantEcon/lecture-jax.notebooks
+      path_to_docs: lectures
+      twitter: quantecon
+      twitter_logo_url: https://assets.quantecon.org/img/qe-twitter-logo.png
+      og_logo_url: https://assets.quantecon.org/img/qe-og-logo.png
+      description: This website presents a set of lectures on quantitative economic modeling using JAX, designed and written by Thomas J. Sargent and John Stachurski.
+      keywords: Python, JAX, QuantEcon, Quantitative Economics, Economics, Sloan, Alfred P. Sloan Foundation, Tom J. Sargent, John Stachurski
+      analytics:
+        google_analytics_id: G-K1NYBSC1CZ
+      launch_buttons:
+        colab_url: https://colab.research.google.com
+    mathjax3_config:
+      tex:
+        macros:
+          "argmax" : "arg\\,max"
+          "argmin" : "arg\\,min"
+    # site addition, sites/README.md: a link with no target in this site resolves on the lecture's home site
+    intersphinx_disabled_reftypes: []
+    intersphinx_mapping: 
+      # site addition, sites/README.md: this site maps itself
+      jax:
+        - "https://jax.quantecon.org/"
+        - null
+      intermediate: 
+        - "https://python.quantecon.org/"
+        - null
+    mathjax_path: https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+    rediraffe_redirects:
+      index_toc.md: intro.md
+      about.md: about_jax.md
+      arellano.md: arellano_jax.md
+      ifp_egm.md: ifp_egm_jax.md
+      inventory_dynamics.md: inventory_dynamics_jax.md
+      jax_intro.md: jax_intro_jax.md
+      kesten_processes.md: kesten_processes_jax.md
+      markov_asset.md: markov_asset_jax.md
+      mle.md: mle_jax.md
+      schelling.md: schelling_python.md
+      wealth_dynamics.md: wealth_dynamics_jax.md
+      lucas_model.md: lucas_model_jax.md
+      short_path.md: short_path_jax.md
+    tojupyter_static_file_path: ["_static"]
+    tojupyter_target_html: true
+    tojupyter_urlpath: "https://jax.quantecon.org/"
+    tojupyter_image_urlpath: "https://jax.quantecon.org/_static/"
+    tojupyter_lang_synonyms: ["ipython", "ipython3", "python"]
+    tojupyter_kernels:
+      python3:
+        kernelspec:
+          display_name: "Python"
+          language: python3
+          name: python3
+        file_extension: ".py"
+    tojupyter_images_markdown: true

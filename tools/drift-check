@@ -61,14 +61,14 @@ GitHub, not to the checkout.
 
 The toc watch: a series' ``_toc.yml`` is watched once it has been accepted
 (``sync/toc.yml`` records the digest and the pin it was taken at). Accept a
-series when a product manifest is generated from its toc, or when the pool's
+series when a site's ``sites/<key>/_toc.yml`` is copied from its toc, or when the pool's
 selection is promoted from it (``tools/promote --toc``); until then a toc
 change is upstream's business, not the pool's. Accepting a toc clears its
 ``toc-changed`` finding whether or not the pool followed it, so an accepted
 toc that lists a lecture the pool does not hold is a finding of its own
 (``toc-unpromoted``).
 
-The names check: a link that leaves a product resolves by lecture name, so
+The names check: a link that leaves a site resolves by lecture name, so
 names are unique across the published sites. Every canonical-eligible series'
 ``_toc.yml`` is read, whether its lectures are in the pool or not, and a name
 two of them list must be one lecture in both, by the rule above
@@ -398,7 +398,7 @@ def check_lecture(key: str, entry: dict, manifest: dict, consumers: set, finding
             findings.append(Finding(
                 "drift", "source-removed", key,
                 f"{key}: the {series} copy lectures/{s['path']} was removed upstream",
-                detail=f"{series} no longer carries this lecture; its product manifest will need a decision.",
+                detail=f"{series} no longer carries this lecture; its site's _toc.yml will need a decision.",
                 issue_title=f"drift({series}): lectures/{s['path']} removed upstream",
                 data={"series": series, "path": s["path"]},
             ))
@@ -698,11 +698,12 @@ def check_tocs(toc_state: dict, manifest: dict, ledger_lectures: dict, findings:
             "drift", "toc-changed", f"{series}/_toc.yml",
             f"{series}: lectures/_toc.yml changed since it was accepted at {rec.get('sha', '')[:12]}",
             detail=(
-                f"What is generated from {series}'s toc must follow it before the toc is re-accepted. If the "
+                f"What follows {series}'s toc must be brought into step before the toc is re-accepted. If the "
                 f"pool's selection is promoted from it, re-run `tools/promote --toc {series}` with the refresh's "
                 f"exclusions (`PROMOTE_EXCLUDE` in `.github/workflows/drift-check.yml`), so a lecture newly listed "
                 f"there reaches the pool and one it dropped, with its copy gone and its name held by no series, is "
-                f"retired; if a product manifest is generated from it, regenerate that; if the "
+                f"retired; if `sites/{series}/_toc.yml` copies it, bring that copy into step (keeping the additions "
+                f"`sites/README.md` records); if the "
                 f"change is a deliberate divergence, there is nothing to regenerate. Then re-accept with "
                 f"`tools/drift-check --accept-toc {series}`. Re-accepting alone clears this issue but promotes nothing."
             ),
@@ -713,18 +714,18 @@ def check_tocs(toc_state: dict, manifest: dict, ledger_lectures: dict, findings:
 
 
 def toc_lectures(series: str):
-    """The lectures a series' ``_toc.yml`` lists, product pages aside, read by
+    """The lectures a series' ``_toc.yml`` lists, site pages aside, read by
     ``tools/promote``'s own parser so the tools agree on what a toc lists."""
     promote = promote_module()
     try:
         slugs = promote.toc_slugs(series)
     except SystemExit as exc:  # promote's reader exits on a toc it cannot parse
         raise DriftError(str(exc).removeprefix("error: "))
-    return [s for s in slugs if s not in promote.PRODUCT_PAGES]
+    return [s for s in slugs if s not in promote.SITE_PAGES]
 
 
 def check_toc_promoted(series: str, ledger_lectures: dict, findings: list):
-    """Every lecture an accepted toc lists is in the pool, product pages
+    """Every lecture an accepted toc lists is in the pool, site pages
     aside. Read only while the toc is unchanged since it was accepted: a
     changed toc is ``toc-changed``'s, and its remedy covers this one."""
     missing = [s for s in toc_lectures(series) if f"lectures/{s}.md" not in ledger_lectures]
@@ -750,7 +751,7 @@ def check_names(manifest: dict, consumers: set, ledger_lectures: dict, findings:
     canonical-eligible series list in their tocs is one lecture in both, by
     promotion's rule (``same_lecture``). Only the series that list the name
     are compared: a canonical series that stopped listing it publishes no
-    copy. Product pages are each series' own. A series the name's ledger
+    copy. Site pages are each series' own. A series the name's ledger
     entry already records is ``check_lecture``'s."""
     listed = {}
     for series in manifest:
@@ -784,7 +785,7 @@ def check_names(manifest: dict, consumers: set, ledger_lectures: dict, findings:
                 "drift", "name-shared", key,
                 f"{key}: {series} and {base} both publish a lecture named {slug}, and they are different lectures",
                 detail=(
-                    "Lecture names are unique across the published sites: a link that leaves a product resolves "
+                    "Lecture names are unique across the published sites: a link that leaves a site resolves "
                     "by name, so two sites publishing different lectures under one name send readers to the wrong "
                     "one. Reconcile it in the series, never in the pool: rename one copy with a redirect, or merge "
                     f"the two into one lecture, as QuantEcon/project-monorepo#76 did. If the {series} copy is only "
@@ -811,7 +812,7 @@ def accept_tocs(series_list, state: dict, toc_state: dict):
         "# generated by tools/drift-check --accept-toc — do not hand-edit\n"
         "# The watched _toc.yml baselines: digest of lectures/_toc.yml and the pin\n"
         "# it was accepted at. A series is watched once it appears here; re-accept\n"
-        "# once what is generated from it (its product manifest, or the pool's\n"
+        "# once what follows it (its site's sites/<key>/_toc.yml, or the pool's\n"
         "# selection by `tools/promote --toc`) follows the new toc.\n"
     )
     body = yaml.safe_dump(toc_state, sort_keys=True, default_flow_style=False)

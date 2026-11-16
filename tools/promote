@@ -106,9 +106,9 @@ user lectures come from, never one that merely has a file of that name.
 Flags
 -----
     --toc SERIES       take the slug list from mirror/SERIES/lectures/_toc.yml
-                       (product pages — about, intro, status, troubleshooting,
-                       zreferences — are skipped: they become products/<key>/
-                       pages in M3, not pool content). For a consumer series
+                       (site pages — about, intro, status, troubleshooting,
+                       zreferences — are skipped: they are sites/<key>/
+                       pages, not pool content). For a consumer series
                        each lecture comes from its canonical home instead.
     --refresh          re-run the promotion pipeline for every ledger entry
                        whose canonical series pin in sync/state.yml differs
@@ -182,10 +182,10 @@ SOURCE_CLASS = "source"
 CONSUMER_CLASS = "consumer"
 SERIES_CLASSES = (SOURCE_CLASS, CONSUMER_CLASS)
 
-# Per-series boilerplate: product pages, not pool content (M3 owns them).
+# Per-series boilerplate: site pages, not pool content (each lives in sites/<key>/).
 # `about` is a series' page about itself: what it covers, its level, its credits;
 # `about_jax` is jax's name for the same page.
-PRODUCT_PAGES = ("about", "about_jax", "intro", "status", "troubleshooting", "zreferences")
+SITE_PAGES = ("about", "about_jax", "intro", "status", "troubleshooting", "zreferences")
 
 # The most lectures one ``--toc`` run retires on its own. More than this is
 # far likelier a toc or folder lost upstream than that many real removals, so
@@ -999,7 +999,7 @@ def collect_refs(plan: Plan, text: str):
         if base.startswith(BRANDING_PREFIXES):
             raise PromoteError(
                 f"branding asset {literal!r} referenced from lecture text — "
-                "branding is a product/_base concern and must never enter a "
+                "branding is a sites/<key>/ concern and must never enter a "
                 "closure (assertion per _static conventions rule 6)"
             )
         exists = (root / src_rel).is_file()
@@ -1751,14 +1751,14 @@ def main(argv=None):
         if slug in seen_slugs:
             continue
         seen_slugs.add(slug)
-        if posixpath.basename(slug) in PRODUCT_PAGES:
-            # Product pages are never pool content. Encountered via --toc
+        if posixpath.basename(slug) in SITE_PAGES:
+            # Site pages are never pool content. Encountered via --toc
             # they are expected and skipped (the spec's rule); named
             # EXPLICITLY they are refused as an error — an operator asking
             # for one must not get a silent success.
             reason = (
-                "product page (per-series boilerplate) — becomes a "
-                "products/<key>/ page in M3, not pool content"
+                "site page (per-series boilerplate) — a sites/<key>/ "
+                "page, not pool content"
             )
             if args.toc:
                 skips.append((slug, reason))

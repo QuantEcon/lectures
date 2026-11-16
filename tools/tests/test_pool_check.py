@@ -163,7 +163,7 @@ def test_a_doc_link_to_a_lecture_the_pool_lacks_is_a_problem(make_repo):
 
     assert res.returncode == 1
     assert tags(res) == ["doc-target"] * 3  # one per target, however often it is written
-    assert "lectures/mccall.md links to {doc}`cobweb`: there is no lectures/cobweb.md, and `cobweb` is not a product page" in res.stdout
+    assert "lectures/mccall.md links to {doc}`cobweb`: there is no lectures/cobweb.md, and `cobweb` is not a site page" in res.stdout
     assert "{doc}`intro:cobweb`: there is no lectures/cobweb.md" in res.stdout
     assert "{doc}`lake.md`: there is no lectures/lake.md.md" in res.stdout and "written without `.md`: lake" in res.stdout
 

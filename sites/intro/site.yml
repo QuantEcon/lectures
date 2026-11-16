@@ -1,0 +1,11 @@
+# The fields the build workflow reads for this site (sites/README.md, "site.yml").
+# Sources: QuantEcon/lecture-python-intro at 530ede2 (the pin in sync/state.yml), read 2026-11-17.
+type: series
+# what its publish.yml and ci.yml run on
+runner: ubuntu-latest
+# seconds: execute.timeout in _config.yml; no workflow of the series sets a job time limit
+time_limit: 600
+# its publish.yml runs three builds: pdflatex (the PDF), the jupyter builder (notebooks) and HTML
+publishes: [html, pdf, notebooks]
+# html.baseurl in _config.yml
+url: https://intro.quantecon.org/

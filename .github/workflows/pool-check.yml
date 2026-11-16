@@ -4,9 +4,13 @@ name: pool-check
 # lectures/ of <slug>.md files and _static/; every folder in _static/ a
 # lecture's own or _shared/; every asset reference file-relative, inside the
 # pool, and used only by the lecture whose folder holds it; every {doc} link
-# to a pool lecture, a product page or another series. It reads lectures/,
-# the series keys in sync/manifest.yml and the ledger, so it needs no mirror
-# and no network.
+# to a pool lecture, a site page or another series. It also checks the
+# sites, sites/<key>/: every _toc.yml entry is a pool lecture or a page of
+# the site, no site page or file shares a path with the pool's (staging would
+# overwrite it), the branding a _config.yml names is in the site, the
+# cross-reference rules hold, and site.yml has the fields the build reads.
+# It reads lectures/, sites/, the series keys in sync/manifest.yml and the
+# ledger, so it needs no mirror and no network.
 #
 # A second step checks the index of shared assets,
 # lectures/_static/_shared/README.md (tools/assets-report --check-index): it
@@ -26,6 +30,7 @@ on:
   pull_request:
     paths:
       - 'lectures/**'
+      - 'sites/**'
       - 'tools/pool-check'
       - 'tools/assets-report'
       - 'tools/promote'

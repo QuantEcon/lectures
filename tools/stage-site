@@ -1,0 +1,120 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.9"
+# dependencies = []
+# ///
+"""tools/stage-site — copy one site's own pages and files into the pool folder.
+
+Sphinx reads only inside its source directory, and every site's root page is
+called ``intro.md``, so a site's own pages cannot live in the flat pool. They
+live in ``sites/<key>/`` and are copied into ``lectures/`` just before
+``jb build`` (QuantEcon/project-monorepo#58, the owner's ruled approach):
+every ``sites/<key>/<name>.md`` to ``lectures/<name>.md``, and every file
+under ``sites/<key>/_static/`` (the site's branding, and files its pages use)
+to the same path under ``lectures/_static/``. ``_config.yml``, ``_toc.yml``
+and ``site.yml`` are not copied: the build reads them where they are.
+
+It never overwrites: a file already at a destination with other bytes (a
+pool file, or another site's page still staged) stops the run before
+anything is copied. One site is staged at a time; ``--clean`` takes a site's
+copies out again, removing only files whose bytes are still the site's.
+``tools/pool-check`` keeps a site's names apart from the pool's, so neither
+direction can touch a pool file.
+
+Usage
+-----
+    tools/stage-site dp           # stage dp's pages and files into lectures/
+    tools/stage-site --clean dp   # remove them again
+
+Exit status: 0 done, 1 refused (a destination differs, or no such site),
+2 an error. It never commits anything.
+"""
+
+from __future__ import annotations
+
+import argparse
+import shutil
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+POOL_DIR = ROOT / "lectures"
+SITES_DIR = ROOT / "sites"
+# Read by the build where they are; never copied.
+SITE_FILES = ("_config.yml", "_toc.yml", "site.yml")
+
+
+def staged_files(site: Path):
+    """``[(source, destination)]`` for every file staging ``site`` copies."""
+    pairs = []
+    for p in sorted(site.iterdir()):
+        if p.is_file() and p.suffix == ".md" and p.name not in SITE_FILES:
+            pairs.append((p, POOL_DIR / p.name))
+    static = site / "_static"
+    if static.is_dir():
+        for p in sorted(q for q in static.rglob("*") if q.is_file() and not q.name.startswith(".")):
+            pairs.append((p, POOL_DIR / p.relative_to(site)))
+    return pairs
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(prog="tools/stage-site", description=__doc__.split("\n\n")[0])
+    parser.add_argument("key", help="the site: a folder under sites/")
+    parser.add_argument("--clean", action="store_true", help="remove the site's staged copies instead")
+    args = parser.parse_args(argv)
+    site = SITES_DIR / args.key
+    if not (args.key and "/" not in args.key and site.is_dir()):
+        known = sorted(p.name for p in SITES_DIR.iterdir() if p.is_dir()) if SITES_DIR.is_dir() else []
+        sys.stderr.write(f"error: there is no site sites/{args.key}/ (sites: {', '.join(known) or 'none'})\n")
+        return 1
+    if not POOL_DIR.is_dir():
+        sys.stderr.write(f"error: {POOL_DIR} does not exist\n")
+        return 2
+    pairs = staged_files(site)
+    shown = lambda p: p.relative_to(ROOT).as_posix()  # noqa: E731
+
+    if args.clean:
+        removed, kept = 0, []
+        for src, dst in pairs:
+            if not dst.is_file():
+                continue
+            if dst.read_bytes() != src.read_bytes():
+                kept.append(dst)
+                continue
+            dst.unlink()
+            removed += 1
+            parent = dst.parent
+            while parent != POOL_DIR and parent.is_dir() and not any(parent.iterdir()):
+                parent.rmdir()
+                parent = parent.parent
+        for dst in kept:
+            print(f"  kept {shown(dst)}: its bytes are not sites/{args.key}'s")
+        print(f"stage-site --clean {args.key}: {removed} file(s) removed")
+        return 0
+
+    clashes = [dst for src, dst in pairs if dst.exists() and (not dst.is_file() or dst.read_bytes() != src.read_bytes())]
+    if clashes:
+        for dst in clashes:
+            print(f"  [differs] {shown(dst)} is already there with other bytes")
+        print(
+            f"stage-site {args.key}: refused, nothing copied. Clean the site staged before "
+            f"(`tools/stage-site --clean <key>`); a pool file here is a broken pool-check rule (site-page)."
+        )
+        return 1
+    copied = 0
+    for src, dst in pairs:
+        if dst.is_file():
+            continue  # already staged, the same bytes
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(src, dst)
+        copied += 1
+    print(f"stage-site {args.key}: {copied} file(s) copied into lectures/, {len(pairs) - copied} already there")
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except OSError as exc:
+        sys.stderr.write(f"error: {exc}\n")
+        sys.exit(2)

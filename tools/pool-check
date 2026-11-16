@@ -28,21 +28,41 @@ is reported under a tag:
   resolves under any project root.
 * ``escapes``       — no reference leaves ``lectures/``.
 * ``doc-target``    — every ``{doc}`` link resolves. A plain target
-  (``{doc}`mccall```) names a pool lecture or a product page, which each
-  product supplies (``tools/promote``'s ``PRODUCT_PAGES``). A prefixed
-  target (``{doc}`intro:cobweb```) leaves the product: its prefix is a
+  (``{doc}`mccall```) names a pool lecture or a site page, which each
+  site supplies (``tools/promote``'s ``SITE_PAGES``). A prefixed
+  target (``{doc}`intro:cobweb```) leaves the site: its prefix is a
   series key in ``sync/manifest.yml``, or one of the prefixes recorded in
   ``LEGACY_PREFIXES`` until the cross-reference policy settles them
-  (QuantEcon/project-monorepo#22), and what follows names a product page
+  (QuantEcon/project-monorepo#22), and what follows names a site page
   or a pool lecture that series holds (the ledger's record of its copies;
   not checked for a legacy prefix, or with no ledger). Text in code cells,
   literal blocks, inline literals and ``%`` comments is not read as a link.
+
+The sites, ``sites/<key>/`` (one folder per published site), are checked
+too, so a site's folder stays true to the pool it is built from:
+
+* ``site-layout``   — a site's folder holds ``_config.yml``, ``_toc.yml``,
+  ``site.yml``, its own pages (``<name>.md``) and ``_static/``, nothing
+  else; ``sites/`` holds those folders and ``README.md``.
+* ``site-toc``      — every entry in a site's ``_toc.yml`` resolves to a pool
+  lecture (``lectures/<name>.md``) or a page in the site's folder.
+* ``site-page``     — a site page's name is not a pool lecture's, and no file
+  under the site's ``_static/`` is a pool file, since staging copies them
+  into ``lectures/`` (``tools/stage-site``) and would overwrite it.
+* ``site-config``   — the files ``_config.yml`` names as branding (``logo``,
+  ``html_favicon``, ``dark_logo``) are in the site's ``_static/``; the
+  cross-reference rules hold (QuantEcon/project-monorepo#22): the site sets
+  ``intersphinx_disabled_reftypes: []``, maps no consumer series (``dp``)
+  in ``intersphinx_mapping``, and, unless it is a consumer, maps itself, to
+  the address in its ``site.yml``.
+* ``site-yml``      — ``site.yml`` has the fields the build reads, each with
+  a valid value (``SITE_FIELDS``), and its ``url`` is ``html.baseurl``.
 
 One report is not a rule. A label that more than one pool lecture defines is
 counted on every run and listed by ``--labels``: targets (``(name)=`` and
 ``:name:``, compared without case, as Sphinx does) and equation labels
 (``:label:`` and ``$$ ... $$ (name)``), which are separate namespaces.
-Labels must be unique within a product, which is checked where a product is
+Labels must be unique within a site, which is checked where a site is
 built; across the whole pool the list is information. An option written in
 a directive's ``---`` block is not read.
 
@@ -56,9 +76,11 @@ Usage
     tools/pool-check            # check lectures/
     tools/pool-check --labels   # also list the labels more than one lecture defines
 
-Exit status: 0 clean, 1 a rule broken, 2 an error. It reads ``lectures/``
-the series keys in ``sync/manifest.yml`` and ``sync/ledger.yml``, and
-writes nothing.
+Exit status: 0 clean, 1 a rule broken, 2 an error. It reads ``lectures/``,
+``sites/``, the series keys in ``sync/manifest.yml`` and ``sync/ledger.yml``,
+and writes nothing. Run it on a tree with no site staged: a staged site's
+pages and files in ``lectures/`` are not the pool's (``tools/stage-site
+--clean``).
 """
 
 from __future__ import annotations
@@ -73,6 +95,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 POOL_DIR = ROOT / "lectures"
+SITES_DIR = ROOT / "sites"
 PROMOTE_PATH = Path(__file__).resolve().parent / "promote"
 
 SHARED_DIR = "_shared"
@@ -88,7 +111,7 @@ DOC_TITLED_RE = re.compile(r"^.*\S.*<([^<>]+)>\s*$", re.S)
 # Prefixes lectures use for links to another site that are not series keys:
 # older names for a series' site. Recorded, not endorsed: the cross-reference
 # policy (QuantEcon/project-monorepo#22) decides what a link that leaves the
-# product is written as, and this list goes when it does.
+# site is written as, and this list goes when it does.
 LEGACY_PREFIXES = ("dynam", "pyprog", "tools")
 
 # What defines a label. Targets: a MyST target on its own line and a
@@ -102,6 +125,16 @@ EQUATION_RES = (
     re.compile(r"^[ \t]*:label:[ \t]*(\S+)[ \t]*\r?$", re.M),
     re.compile(r"\$\$[ \t]*\(([^()\s]+)\)[ \t]*\r?$", re.M),
 )
+
+# A site's folder: the files the build reads, beside its pages and _static/.
+SITE_FILES = ("_config.yml", "_toc.yml", "site.yml")
+# site.yml: each field the build workflow reads, and what it may hold.
+SITE_TYPES = ("series",)
+# The runner classes the series run on today: GitHub's ubuntu-latest, and the
+# RunsOn GPU class. A new class is added here when a site first needs it.
+SITE_RUNNERS = ("ubuntu-latest", "g4dn.2xlarge")
+SITE_OUTPUTS = ("html", "pdf", "notebooks")
+SITE_FIELDS = ("type", "runner", "time_limit", "publishes", "url")
 
 FENCE_RE = re.compile(r"^[ \t]*(`{3,}|~{3,})(.*)$")
 # Fenced blocks whose body is code or literal text, not MyST prose.
@@ -273,10 +306,10 @@ def holders_by_lecture(ledger_path: Path):
     return held
 
 
-def check_doc_targets(pool: Path, lectures, product_pages, series_keys, held):
+def check_doc_targets(pool: Path, lectures, site_pages, series_keys, held):
     """Every ``{doc}`` link that does not resolve, as ``(tag, message)``."""
     problems = []
-    known = set(lectures) | set(product_pages)
+    known = set(lectures) | set(site_pages)
     for slug in lectures:
         where = f"lectures/{slug}.md"
         seen = set()
@@ -306,12 +339,12 @@ def check_doc_targets(pool: Path, lectures, product_pages, series_keys, held):
                 hint = f" (a target is written without `.md`: {name[:-3]})" if name.endswith(".md") and name[:-3] in known else ""
                 problems.append((
                     "doc-target",
-                    f"{link}: there is no lectures/{name}.md, and `{name}` is not a product page{hint}",
+                    f"{link}: there is no lectures/{name}.md, and `{name}` is not a site page{hint}",
                 ))
             elif (
                 prefix in series_keys
                 and held is not None
-                and name not in product_pages
+                and name not in site_pages
                 and prefix not in held.get(name, ())
             ):
                 problems.append((
@@ -320,6 +353,197 @@ def check_doc_targets(pool: Path, lectures, product_pages, series_keys, held):
                     f"(held by: {', '.join(sorted(s for s in held.get(name, ()) if s)) or 'no series'})",
                 ))
     return problems
+
+
+def toc_entries(toc):
+    """Every page a Jupyter Book ``_toc.yml`` lists (its root, then each
+    ``file:``), and the entries it cannot resolve to a page (``glob:``)."""
+    files, other = [], []
+
+    def walk(node):
+        if isinstance(node, dict):
+            if isinstance(node.get("file"), str):
+                files.append(node["file"])
+            if "glob" in node:
+                other.append(f"glob: {node['glob']}")
+            for key in ("parts", "chapters", "sections"):
+                walk(node.get(key))
+        elif isinstance(node, list):
+            for item in node:
+                walk(item)
+
+    if isinstance(toc, dict) and isinstance(toc.get("root"), str):
+        files.append(toc["root"])
+    walk(toc)
+    return [f[:-3] if f.endswith(".md") else f for f in files], other
+
+
+def read_yaml(path: Path, where: str, problems):
+    """``path`` read as YAML, or None with a ``site-layout`` problem."""
+    import yaml
+
+    try:
+        return yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (yaml.YAMLError, UnicodeDecodeError) as exc:
+        problems.append(("site-layout", f"{where} could not be read as YAML: {exc}"))
+        return None
+
+
+def check_site_yml(where: str, data, problems):
+    """Every ``site-yml`` rule ``site.yml`` breaks."""
+    if not isinstance(data, dict):
+        problems.append(("site-yml", f"{where} is not a mapping of the fields {', '.join(SITE_FIELDS)}"))
+        return
+    for field in SITE_FIELDS:
+        if field not in data:
+            problems.append(("site-yml", f"{where} has no `{field}`"))
+    for field in data:
+        if field not in SITE_FIELDS:
+            problems.append(("site-yml", f"{where}: `{field}` is not a field the build reads ({', '.join(SITE_FIELDS)})"))
+    value = data.get("type")
+    if "type" in data and value not in SITE_TYPES:
+        problems.append(("site-yml", f"{where}: type {value!r} is not one of {', '.join(SITE_TYPES)}"))
+    value = data.get("runner")
+    if "runner" in data and value not in SITE_RUNNERS:
+        problems.append(("site-yml", f"{where}: runner {value!r} is not one of {', '.join(SITE_RUNNERS)}"))
+    value = data.get("time_limit")
+    if "time_limit" in data and not (isinstance(value, int) and not isinstance(value, bool) and value > 0):
+        problems.append(("site-yml", f"{where}: time_limit {value!r} is not a whole number of seconds above 0"))
+    value = data.get("publishes")
+    if "publishes" in data and not (
+        isinstance(value, list)
+        and "html" in value
+        and all(v in SITE_OUTPUTS for v in value)
+        and len(set(value)) == len(value)
+    ):
+        problems.append((
+            "site-yml",
+            f"{where}: publishes {value!r} is not a list of {', '.join(SITE_OUTPUTS)}, each at most once, with html",
+        ))
+    value = data.get("url")
+    if "url" in data and not (isinstance(value, str) and value.startswith("https://") and value.endswith("/")):
+        problems.append(("site-yml", f"{where}: url {value!r} is not an https:// address ending in /"))
+
+
+def check_site_config(key: str, config, site_yml, site_dir: Path, consumers, problems):
+    """Every ``site-config`` rule ``_config.yml`` breaks, and ``site-yml``'s
+    url against ``html.baseurl``."""
+    where = f"sites/{key}/_config.yml"
+    if not isinstance(config, dict):
+        problems.append(("site-config", f"{where} is not a mapping"))
+        return
+    sphinx = (config.get("sphinx") or {}).get("config") or {}
+    theme = sphinx.get("html_theme_options") or {}
+    branding = [("logo", config.get("logo")), ("html_favicon", sphinx.get("html_favicon"))]
+    if theme.get("dark_logo"):
+        # The theme reads dark_logo inside html_static_path.
+        branding.append(("dark_logo", f"_static/{theme['dark_logo']}"))
+    for name, rel in branding:
+        if isinstance(rel, str) and rel and not (site_dir / rel).is_file():
+            problems.append(("site-config", f"{where} names {rel} as `{name}`, and sites/{key}/{rel} does not exist"))
+    if sphinx.get("intersphinx_disabled_reftypes") != []:
+        problems.append((
+            "site-config",
+            f"{where} does not set `intersphinx_disabled_reftypes: []`: a link with no target in the site must "
+            "resolve on the lecture's home site",
+        ))
+    mapping = sphinx.get("intersphinx_mapping") or {}
+    for name in sorted(set(mapping) & set(consumers)):
+        problems.append((
+            "site-config",
+            f"{where} maps `{name}` in intersphinx_mapping: {name} only republishes other series' lectures, so a "
+            "link must never resolve there",
+        ))
+    if key not in consumers:
+        own = mapping.get(key)
+        target = own[0] if isinstance(own, (list, tuple)) and own else own
+        if own is None:
+            problems.append((
+                "site-config",
+                f"{where} does not map `{key}` in intersphinx_mapping: a site maps itself, since a pool lecture "
+                f"may link to its home series' site by prefix ({{doc}}`{key}:<name>`)",
+            ))
+        elif isinstance(site_yml, dict) and "url" in site_yml and target != site_yml["url"]:
+            problems.append(("site-config", f"{where} maps `{key}` to {target!r}, not to its site.yml url {site_yml.get('url')!r}"))
+    baseurl = (config.get("html") or {}).get("baseurl")
+    if isinstance(site_yml, dict) and "url" in site_yml and site_yml["url"] != baseurl:
+        problems.append(("site-yml", f"sites/{key}/site.yml: url {site_yml['url']!r} is not html.baseurl in _config.yml ({baseurl!r})"))
+
+
+def check_sites(sites: Path, pool: Path, lectures, series_keys, consumers):
+    """The sites' folders, and every site rule they break as ``(tag, message)``."""
+    problems, keys = [], []
+    if not sites.is_dir():
+        return keys, problems
+    pool_names = set(lectures)
+    for entry in sorted(sites.iterdir()):
+        if entry.name.startswith("."):
+            continue
+        if entry.is_file() and entry.name == "README.md":
+            continue
+        if not entry.is_dir():
+            problems.append(("site-layout", f"sites/{entry.name} is not a site's folder: sites/ holds sites/<key>/ and README.md"))
+            continue
+        key = entry.name
+        keys.append(key)
+        pages = []
+        for p in sorted(entry.iterdir()):
+            if p.name.startswith("."):
+                continue
+            if p.is_file() and (p.name in SITE_FILES or p.suffix == ".md"):
+                if p.suffix == ".md":
+                    pages.append(p.stem)
+            elif not (p.is_dir() and p.name == "_static"):
+                shown = f"sites/{key}/{p.name}" + ("/" if p.is_dir() else "")
+                problems.append((
+                    "site-layout",
+                    f"{shown} is none of a site's files: {', '.join(SITE_FILES)}, its pages (<name>.md) and _static/",
+                ))
+        for name in SITE_FILES:
+            if not (entry / name).is_file():
+                problems.append(("site-layout", f"sites/{key}/ has no {name}"))
+        for page in pages:
+            if page in pool_names:
+                problems.append((
+                    "site-page",
+                    f"sites/{key}/{page}.md has a pool lecture's name: staging it would overwrite lectures/{page}.md",
+                ))
+        static = entry / "_static"
+        if static.is_dir():
+            for f in sorted(q for q in static.rglob("*") if q.is_file() and not q.name.startswith(".")):
+                rel = f.relative_to(entry).as_posix()
+                if (pool / rel).exists():
+                    problems.append((
+                        "site-page",
+                        f"sites/{key}/{rel} is also lectures/{rel}: staging would overwrite the pool's file",
+                    ))
+        toc = read_yaml(entry / "_toc.yml", f"sites/{key}/_toc.yml", problems) if (entry / "_toc.yml").is_file() else None
+        if toc is not None:
+            files, other = toc_entries(toc)
+            if not files:
+                problems.append(("site-toc", f"sites/{key}/_toc.yml lists no page"))
+            for name in other:
+                problems.append(("site-toc", f"sites/{key}/_toc.yml has `{name}`, which this check cannot resolve: list each file"))
+            for name in dict.fromkeys(files):
+                if name not in pool_names and name not in pages:
+                    problems.append((
+                        "site-toc",
+                        f"sites/{key}/_toc.yml lists {name}, which is neither lectures/{name}.md nor sites/{key}/{name}.md",
+                    ))
+        site_yml = read_yaml(entry / "site.yml", f"sites/{key}/site.yml", problems) if (entry / "site.yml").is_file() else None
+        if (entry / "site.yml").is_file():
+            check_site_yml(f"sites/{key}/site.yml", site_yml, problems)
+            if isinstance(site_yml, dict) and site_yml.get("type") == "series" and key not in series_keys:
+                problems.append((
+                    "site-yml",
+                    f"sites/{key}/site.yml: a site of type series is named for its series, and `{key}` is not a "
+                    f"series key in sync/manifest.yml ({', '.join(series_keys)})",
+                ))
+        if (entry / "_config.yml").is_file():
+            config = read_yaml(entry / "_config.yml", f"sites/{key}/_config.yml", problems)
+            if config is not None:
+                check_site_config(key, config, site_yml, entry, consumers, problems)
+    return keys, problems
 
 
 def shared_labels(pool: Path, lectures):
@@ -355,11 +579,13 @@ def main(argv=None):
         lectures, problems = check_layout(POOL_DIR, promote.BIB_BASENAME)
         problems += check_references(POOL_DIR, lectures, promote)
         try:
-            series_keys, _ = promote.load_manifest()
+            series_keys, consumers = promote.load_manifest()
         except SystemExit as exc:  # promote's loader exits on a manifest it cannot read
             raise PoolCheckError(str(exc).removeprefix("error: "))
         held = holders_by_lecture(promote.LEDGER_PATH)
-        problems += check_doc_targets(POOL_DIR, lectures, promote.PRODUCT_PAGES, series_keys, held)
+        problems += check_doc_targets(POOL_DIR, lectures, promote.SITE_PAGES, series_keys, held)
+        sites, site_problems = check_sites(SITES_DIR, POOL_DIR, lectures, series_keys, consumers)
+        problems += site_problems
         labels = shared_labels(POOL_DIR, lectures)
         static = POOL_DIR / "_static"
         n_files = sum(1 for p in static.rglob("*") if p.is_file()) if static.is_dir() else 0
@@ -370,17 +596,17 @@ def main(argv=None):
         traceback.print_exc()
         sys.stderr.write(f"pool-check: internal error: {type(exc).__name__}: {exc}\n")
         return 2
-    print(f"pool-check — {len(lectures)} lectures, {n_files} files under _static/")
+    print(f"pool-check — {len(lectures)} lectures, {n_files} files under _static/, {len(sites)} site(s)")
     if labels:
         print(
             f"info: {len(labels)} label(s) are defined by more than one lecture"
-            + (":" if args.labels else " (`tools/pool-check --labels` lists them); unique per product is checked where a product is built.")
+            + (":" if args.labels else " (`tools/pool-check --labels` lists them); unique per site is checked where a site is built.")
         )
         if args.labels:
             for label, slugs in labels.items():
                 print(f"  {label}: {', '.join(slugs)}")
     if not problems:
-        print("clean: the pool keeps its conventions.")
+        print("clean: the pool and the sites keep their conventions.")
         return 0
     for tag, message in problems:
         print(f"  [{tag}] {message}")
