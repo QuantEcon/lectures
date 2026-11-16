@@ -31,13 +31,13 @@ The bibliography every `zreferences.md` and `_config.yml` names, `_static/quant-
 | --- | --- | --- |
 | `type` | The kind of site | `series` for all six today |
 | `runner` | The runner class the build runs on | `ubuntu-latest`, or the RunsOn GPU class `g4dn.2xlarge` |
-| `time_limit` | Seconds | A whole number above 0 |
+| `cell_timeout` | Seconds, the limit on one cell's execution | A whole number above 0 |
 | `publishes` | What the site publishes | A list of `html`, `pdf`, `notebooks`, with `html` |
 | `url` | The published address | `html.baseurl` in the site's `_config.yml` |
 
 Today's values, read from each series at its pin on 2026-11-17 (each `site.yml` names its source in comments):
 
-| Site | `runner` | `time_limit` | `publishes` | `url` |
+| Site | `runner` | `cell_timeout` | `publishes` | `url` |
 | --- | --- | --- | --- | --- |
 | `intro` | ubuntu-latest | 600 | html, pdf, notebooks | https://intro.quantecon.org/ |
 | `programming` | g4dn.2xlarge | 600 | html, pdf, notebooks | https://python-programming.quantecon.org/ |
@@ -47,7 +47,7 @@ Today's values, read from each series at its pin on 2026-11-17 (each `site.yml` 
 | `jax` | g4dn.2xlarge | 2400 | html, pdf, notebooks | https://jax.quantecon.org/ |
 
 - **`runner`** is what each series' `publish.yml` and `ci.yml` run on.
-- **`time_limit`** is `execute: timeout` in the series' `_config.yml`, Jupyter Book's limit on one cell's execution. No series workflow sets a job time limit (`timeout-minutes`).
+- **`cell_timeout`** is `execute: timeout` in the series' `_config.yml`, Jupyter Book's limit on one cell's execution. No series workflow sets a job time limit (`timeout-minutes`).
 - **`publishes`** follows each series' `publish.yml`: five run three builds (`pdflatex` for the PDF, the `jupyter` builder for the notebooks, and HTML); dp's builds HTML alone.
 - **`url`** is `html.baseurl`. dp's planned address, https://dynamic-programming.quantecon.org, changes it when dp moves.
 

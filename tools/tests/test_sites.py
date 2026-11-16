@@ -30,7 +30,7 @@ def config(key="intro", url=URL, mapping=None, disabled=True, **top):
 
 
 def site_yml(**fields):
-    data = {"type": "series", "runner": "ubuntu-latest", "time_limit": 600, "publishes": ["html", "pdf"], "url": URL}
+    data = {"type": "series", "runner": "ubuntu-latest", "cell_timeout": 600, "publishes": ["html", "pdf"], "url": URL}
     data.update(fields)
     return yaml.safe_dump({k: v for k, v in data.items() if v is not None}, sort_keys=False)
 
@@ -131,18 +131,18 @@ def test_a_site_folder_holds_its_files_pages_and_static_only(make_repo):
 def test_site_yml_has_the_fields_the_build_reads_with_valid_values(make_repo):
     repo = pool_repo(make_repo)
     make_site(repo, meta=site_yml(
-        type="course", runner="macos-latest", time_limit="600", publishes=["pdf", "epub"], url=None, runners=2,
+        type="course", runner="macos-latest", cell_timeout="600", publishes=["pdf", "epub"], url=None, runners=2,
     ))
 
     res = repo.pool_check()
 
     assert problems(res) == [
         "[site-yml] sites/intro/site.yml has no `url`",
-        "[site-yml] sites/intro/site.yml: `runners` is not a field the build reads (type, runner, time_limit, "
+        "[site-yml] sites/intro/site.yml: `runners` is not a field the build reads (type, runner, cell_timeout, "
         "publishes, url)",
         "[site-yml] sites/intro/site.yml: type 'course' is not one of series",
         "[site-yml] sites/intro/site.yml: runner 'macos-latest' is not one of ubuntu-latest, g4dn.2xlarge",
-        "[site-yml] sites/intro/site.yml: time_limit '600' is not a whole number of seconds above 0",
+        "[site-yml] sites/intro/site.yml: cell_timeout '600' is not a whole number of seconds above 0",
         "[site-yml] sites/intro/site.yml: publishes ['pdf', 'epub'] is not a list of html, pdf, notebooks, each "
         "at most once, with html",
     ]

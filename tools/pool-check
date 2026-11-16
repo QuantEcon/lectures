@@ -134,7 +134,7 @@ SITE_TYPES = ("series",)
 # RunsOn GPU class. A new class is added here when a site first needs it.
 SITE_RUNNERS = ("ubuntu-latest", "g4dn.2xlarge")
 SITE_OUTPUTS = ("html", "pdf", "notebooks")
-SITE_FIELDS = ("type", "runner", "time_limit", "publishes", "url")
+SITE_FIELDS = ("type", "runner", "cell_timeout", "publishes", "url")
 
 FENCE_RE = re.compile(r"^[ \t]*(`{3,}|~{3,})(.*)$")
 # Fenced blocks whose body is code or literal text, not MyST prose.
@@ -406,9 +406,9 @@ def check_site_yml(where: str, data, problems):
     value = data.get("runner")
     if "runner" in data and value not in SITE_RUNNERS:
         problems.append(("site-yml", f"{where}: runner {value!r} is not one of {', '.join(SITE_RUNNERS)}"))
-    value = data.get("time_limit")
-    if "time_limit" in data and not (isinstance(value, int) and not isinstance(value, bool) and value > 0):
-        problems.append(("site-yml", f"{where}: time_limit {value!r} is not a whole number of seconds above 0"))
+    value = data.get("cell_timeout")
+    if "cell_timeout" in data and not (isinstance(value, int) and not isinstance(value, bool) and value > 0):
+        problems.append(("site-yml", f"{where}: cell_timeout {value!r} is not a whole number of seconds above 0"))
     value = data.get("publishes")
     if "publishes" in data and not (
         isinstance(value, list)
