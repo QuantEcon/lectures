@@ -26,20 +26,24 @@ name: site-build
 #      shallow fetch of the series' lectures/ and environment.yml, a few
 #      seconds), for the one file the cache key needs, environment.yml;
 #   3. restores the site's execution cache (below);
-#   4. stages the site's own pages and files into lectures/ (tools/stage-site);
-#   5. builds HTML with QuantEcon/actions' build-lectures: `jb build lectures`
-#      with the site's _toc.yml and _config.yml, as absolute paths (Jupyter
-#      Book 1 reads a relative --toc from inside lectures/), strict:
-#      `-n -W --keep-going`, so a warning, a cell that raises, an unresolved
-#      reference or a label two selected lectures both define fails the
-#      build, and every failure is listed, not only the first;
+#   4. stages the site into lectures/ (tools/stage-site): its own pages and
+#      files, and its _config.yml and _toc.yml, where `jb build lectures`
+#      finds them with no --config or --toc, and where build-lectures' check
+#      of the executed notebooks reads the configuration;
+#   5. builds HTML with QuantEcon/actions' build-lectures, `jb build lectures`,
+#      strict: `-n -W --keep-going`, so a warning, a cell that raises, an
+#      unresolved reference or a label two selected lectures both define
+#      fails the build, and every failure is listed, not only the first.
+#      The configuration's paths resolve as from the site's own folder: the
+#      branding and the bibliography against lectures/, the execution cache
+#      against the directory jb runs in, the repository's root;
 #   6. writes execution_status.json (tools/execution-report): one row per page
 #      executed or taken from the cache, with status, seconds, kernel and
 #      which of the two; it runs after a failed build too;
 #   7. keeps the HTML (html-<key>, green builds only, 7 days) and the report
 #      (execution-status-<key>) as artefacts; a failed build also uploads
 #      build-lectures' failure reports (execution-reports-<key>);
-#   8. saves the execution cache (below), and unstages the site's pages.
+#   8. saves the execution cache (below), and unstages the site.
 #
 # THE EXECUTION CACHE is actions/cache, one per site, at the path every
 # site's _config.yml names, _build/jupyter_cache/<key> (pool-check rule 7).
@@ -67,11 +71,7 @@ name: site-build
 # WHAT IT DOES NOT DO (yet): publish; build the PDF or the notebooks (dp
 # publishes HTML alone); post a preview (QuantEcon/actions#336); build on
 # mystmd (QuantEcon/actions#337); build only the sites whose toc lists a
-# changed file. One check is weaker than in dp's own build: build-lectures'
-# check for error outputs reads _config.yml from lectures/, which holds none,
-# so it takes myst-nb's defaults and checks a page taken from the cache as
-# myst-nb wrote it, without its outputs. The green build on main that cached
-# those outputs checked them.
+# changed file.
 
 on:
   push:
@@ -170,9 +170,7 @@ jobs:
           KEY: ${{ matrix.site.key }}
         run: python tools/sync "$KEY"
 
-      # Absolute paths from inside the container: github.workspace in an
-      # expression is the runner's path, not the container's.
-      - name: Name the site's files and its cache key
+      - name: Name the site's cache and its key
         id: site
         env:
           KEY: ${{ matrix.site.key }}
@@ -184,8 +182,6 @@ jobs:
             exit 1
           fi
           {
-            echo "toc=$GITHUB_WORKSPACE/sites/$KEY/_toc.yml"
-            echo "config=$GITHUB_WORKSPACE/sites/$KEY/_config.yml"
             echo "cache-path=_build/jupyter_cache/$KEY"
             echo "cache-prefix=jb1-$KEY-$ENV_HASH-"
             echo "cache-key=jb1-$KEY-$ENV_HASH-$RUN"
@@ -215,7 +211,8 @@ jobs:
           echo "$line"
           printf '### Site %s\n\n%s\n\n' "\`$KEY\`" "$line" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Stage the site's pages and files
+      # Its pages, its files, its _config.yml and its _toc.yml, into lectures/.
+      - name: Stage the site
         id: stage
         env:
           KEY: ${{ matrix.site.key }}
@@ -225,13 +222,16 @@ jobs:
         id: start
         run: echo "since=$(date +%s)" >> "$GITHUB_OUTPUT"
 
+      # With the site staged, lectures/ holds its _config.yml and _toc.yml, so
+      # jb needs no --config or --toc. extra-args replaces build-lectures'
+      # default, so it keeps -W; nitpick adds -n.
       - name: Build the site's HTML (strict)
         id: build
         uses: quantecon/actions/build-lectures@v0
         with:
           builder: html
           source-dir: lectures
-          extra-args: --toc ${{ steps.site.outputs.toc }} --config ${{ steps.site.outputs.config }} -W --keep-going
+          extra-args: -W --keep-going
           upload-failure-reports: true
           failure-artifact-name: execution-reports-${{ matrix.site.key }}
 
@@ -268,7 +268,7 @@ jobs:
           path: ${{ steps.site.outputs.cache-path }}
           key: ${{ steps.site.outputs.cache-key }}
 
-      - name: Unstage the site's pages and files
+      - name: Unstage the site
         if: ${{ always() && steps.stage.outcome != 'skipped' }}
         env:
           KEY: ${{ matrix.site.key }}

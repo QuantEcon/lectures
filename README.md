@@ -82,7 +82,7 @@ The repository is organised around three layers.
 │   ├── bib-merge     # merges the series' bibliographies into the pool's one file; checks it
 │   ├── pool-check    # checks the pool keeps its layout conventions
 │   ├── assets-report # audits the files beside the lectures; writes and checks the _shared/ index
-│   ├── stage-site    # copies one site's own pages and files into lectures/ for a build, and out again
+│   ├── stage-site    # copies one site's pages, files, _config.yml and _toc.yml into lectures/ for a build, and out again
 │   ├── site-matrix   # reads each built site's site.yml into the build workflow's matrix
 │   ├── execution-report # after a build: what it executed or took from the cache, page by page
 │   └── tests/        # pytest suite for the tools above (scratch repos)
@@ -196,11 +196,11 @@ It also writes [`lectures/_static/_shared/README.md`](lectures/_static/_shared/R
 
 ## The sites
 
-Each published site is a folder in [`sites/`](sites/README.md): its series' `_config.yml` and `_toc.yml`, verbatim but for the additions recorded there, its own pages (`intro`, `status` and the like, which are never pool lectures), its branding, and `site.yml`, the fields the build workflow reads (type, runner class, `cell_timeout`, the per-cell execution limit, what it publishes, its address). A site is built from the pool after [`tools/stage-site`](tools/stage-site) copies its own pages and files into `lectures/`, since Sphinx reads only inside its source folder:
+Each published site is a folder in [`sites/`](sites/README.md): its series' `_config.yml` and `_toc.yml`, verbatim but for the additions recorded there, its own pages (`intro`, `status` and the like, which are never pool lectures), its branding, and `site.yml`, the fields the build workflow reads (type, runner class, `cell_timeout`, the per-cell execution limit, what it publishes, its address). A site is built from the pool after [`tools/stage-site`](tools/stage-site) copies its own pages and files, its `_config.yml` and its `_toc.yml` into `lectures/`, since Sphinx reads only inside its source folder:
 
 | Command | What it does |
 | --- | --- |
-| `tools/stage-site dp` | Copy dp's pages and `_static/` files into `lectures/`, recording what it copied in `_build/stage-site.json`. It refuses, copying nothing, if any destination already exists, or if a site is staged already. |
+| `tools/stage-site dp` | Copy dp's pages, `_static/` files, `_config.yml` and `_toc.yml` into `lectures/`, recording what it copied in `_build/stage-site.json`. It refuses, copying nothing, if any destination already exists, or if a site is staged already. |
 | `tools/stage-site --clean dp` | Remove them again: only the files the record lists, each while its bytes are still the ones copied, then the record. |
 
 [`site-build.yml`](.github/workflows/site-build.yml) builds the sites it names, today `dp` alone, on every push to `main` and pull request that touches the pool, the sites or the tools a build runs, on demand and twice a week. Each site is a leg of one matrix whose runner, container and time limit [`tools/site-matrix`](tools/site-matrix) reads from `site.yml`. A leg stages the site, builds its HTML strictly (`-n -W --keep-going`) with `QuantEcon/actions`' `build-lectures`, restoring and, on `main`, saving the site's own execution cache, and keeps the HTML and the execution report as artefacts. It publishes nothing.

@@ -262,13 +262,19 @@ def test_stage_site_copies_a_site_in_refuses_a_second_and_cleans_up(make_repo):
     res = repo.stage_site("intro")
 
     assert res.returncode == 0, res.stdout + res.stderr
-    assert "stage-site intro: 5 file(s) copied into lectures/ (recorded in _build/stage-site.json)" in res.stdout
+    assert "stage-site intro: 7 file(s) copied into lectures/ (recorded in _build/stage-site.json)" in res.stdout
     assert repo.pool("intro.md").read_text() == (repo.root / "sites/intro/intro.md").read_text()
     assert repo.pool("_static/lecture_specific/troubleshooting/launch.png").read_text() == "png"
-    assert not repo.pool("_config.yml").exists() and not repo.pool("site.yml").exists()
+    # The site's config and toc, where jb build lectures finds them by default;
+    # site.yml is the workflow's, never copied.
+    for name in ("_config.yml", "_toc.yml"):
+        assert repo.pool(name).read_text() == (repo.root / "sites/intro" / name).read_text()
+    assert not repo.pool("site.yml").exists()
     record = json.loads((repo.root / "_build" / "stage-site.json").read_text())
     assert record["site"] == "intro"
     assert [f["path"] for f in record["files"]] == [
+        "lectures/_config.yml",
+        "lectures/_toc.yml",
         "lectures/intro.md",
         "lectures/_static/lecture_specific/troubleshooting/launch.png",
         "lectures/_static/lectures-favicon.ico",
@@ -287,11 +293,31 @@ def test_stage_site_copies_a_site_in_refuses_a_second_and_cleans_up(make_repo):
     res = repo.stage_site("--clean", "intro")
     assert res.returncode == 0
     assert "kept lectures/_static/qe-logo.png: its bytes are not the ones staging copied" in res.stdout
-    assert "4 file(s) removed" in res.stdout
+    assert "6 file(s) removed" in res.stdout
     assert not (repo.root / "_build" / "stage-site.json").exists()
     repo.pool("_static/qe-logo.png").unlink()
     assert staged(repo) == before  # the lecture_specific/ folders it made went too
     assert repo.stage_site("dp").returncode == 0
+
+
+@pytest.mark.parametrize("name", ["_config.yml", "_toc.yml"])
+def test_stage_site_refuses_a_config_or_toc_already_in_the_pool_which_pool_check_fails(make_repo, name):
+    repo = pool_repo(make_repo)
+    make_site(repo)
+    write(repo.pool(name), "left from an earlier build\n")
+    before = staged(repo)
+
+    res = repo.pool_check()
+    assert res.returncode == 1
+    assert f"[top-level] lectures/{name} is neither a lecture (<slug>.md) nor _static/" in res.stdout
+
+    res = repo.stage_site("intro")
+    assert res.returncode == 1
+    assert f"[exists] lectures/{name}" in res.stdout
+    assert "refused, nothing copied: staging never overwrites" in res.stdout
+    assert not (repo.root / "_build" / "stage-site.json").exists()
+    assert staged(repo) == before
+    assert repo.pool(name).read_text() == "left from an earlier build\n"
 
 
 def test_stage_site_never_touches_a_file_it_did_not_copy(make_repo):

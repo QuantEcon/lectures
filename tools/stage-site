@@ -11,8 +11,15 @@ live in ``sites/<key>/`` and are copied into ``lectures/`` just before
 ``jb build`` (QuantEcon/project-monorepo#58, the owner's ruled approach):
 every ``sites/<key>/<name>.md`` to ``lectures/<name>.md``, and every file
 under ``sites/<key>/_static/`` (the site's branding, and files its pages use)
-to the same path under ``lectures/_static/``. ``_config.yml``, ``_toc.yml``
-and ``site.yml`` are not copied: the build reads them where they are.
+to the same path under ``lectures/_static/``. The site's ``_config.yml`` and
+``_toc.yml`` are copied too, to ``lectures/_config.yml`` and
+``lectures/_toc.yml``, where ``jb build lectures`` finds them with no
+``--config`` or ``--toc``, and where QuantEcon/actions' ``build-lectures``
+reads ``_config.yml`` for its check of the executed notebooks.
+``site.yml`` is not copied: it is the build workflow's, not Jupyter Book's.
+Neither file is ever a pool file: ``tools/pool-check`` fails a
+``lectures/_config.yml`` or ``lectures/_toc.yml`` (``top-level``), so
+staging must be cleaned before a commit.
 
 It never overwrites, and it never removes a file it did not copy. A
 destination that already exists, whatever its bytes, stops the run before
@@ -25,7 +32,7 @@ exists, staging refuses.
 
 Usage
 -----
-    tools/stage-site dp           # stage dp's pages and files into lectures/
+    tools/stage-site dp           # stage dp's pages, files, _config.yml and _toc.yml into lectures/
     tools/stage-site --clean dp   # remove them again
 
 Exit status: 0 done, 1 refused (no such site, a destination exists, or a
@@ -47,9 +54,10 @@ ROOT = Path(__file__).resolve().parent.parent
 POOL_DIR = ROOT / "lectures"
 SITES_DIR = ROOT / "sites"
 RECORD_PATH = ROOT / "_build" / "stage-site.json"
-# Read by the build where they are; never copied. The first two mark a
-# folder as a site.
+# The files every site holds. The first two mark a folder as a site.
 SITE_FILES = ("_toc.yml", "site.yml", "_config.yml")
+# Copied into lectures/ with the pages, for jb build to find there.
+BOOK_FILES = ("_config.yml", "_toc.yml")
 KEY_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]*")
 
 
@@ -69,7 +77,7 @@ def site_keys():
 
 def staged_files(site: Path):
     """``[(source, destination)]`` for every file staging ``site`` copies."""
-    pairs = []
+    pairs = [(site / name, POOL_DIR / name) for name in BOOK_FILES if (site / name).is_file()]
     for p in sorted(site.iterdir()):
         if p.is_file() and p.suffix == ".md":
             pairs.append((p, POOL_DIR / p.name))
@@ -119,7 +127,8 @@ def stage(key: str, site: Path) -> int:
             print(f"  [exists] {shown(dst)}")
         print(
             f"stage-site {key}: refused, nothing copied: staging never overwrites. A pool file here is a "
-            "broken pool-check rule (site-page); anything else is left from an earlier build, to remove first."
+            "broken pool-check rule (site-page, or top-level for _config.yml and _toc.yml); anything else is left from "
+            "an earlier build, to remove first."
         )
         return 1
     dirs = []
