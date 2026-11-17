@@ -9,12 +9,16 @@ name: tests
 # (PEP 723), so there is no project file or lockfile to keep in step.
 #
 # Pull requests and manual runs only: a push to a branch triggers nothing.
+# test_site_matrix.py also reads site-build.yml and the sites' site.yml, so a
+# change to either runs the suite too.
 
 on:
   pull_request:
     paths:
       - 'tools/**'
       - '.github/workflows/tests.yml'
+      - '.github/workflows/site-build.yml'
+      - 'sites/*/site.yml'
   workflow_dispatch:
 
 permissions:

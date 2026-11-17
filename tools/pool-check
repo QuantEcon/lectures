@@ -59,7 +59,9 @@ too, so a site's folder stays true to the pool it is built from:
   in ``intersphinx_mapping``, and, unless it is a consumer, maps itself, to
   the address in its ``site.yml``.
 * ``site-yml``      — ``site.yml`` has the fields the build reads, each with
-  a valid value (``SITE_FIELDS``), and its ``url`` is ``html.baseurl``.
+  a valid value (``SITE_FIELDS``), and no other field but the optional ones
+  (``SITE_OPTIONAL_FIELDS``: ``extra_packages``, pip requirements the build
+  installs), and its ``url`` is ``html.baseurl``.
 
 One report is not a rule. A label that more than one pool lecture defines is
 counted on every run and listed by ``--labels``: targets (``(name)=`` and
@@ -138,6 +140,13 @@ SITE_TYPES = ("series",)
 SITE_RUNNERS = ("ubuntu-latest", "g4dn.2xlarge")
 SITE_OUTPUTS = ("html", "pdf", "notebooks")
 SITE_FIELDS = ("type", "runner", "cell_timeout", "publishes", "url")
+# Fields a site may leave out. extra_packages: pip requirements the build
+# installs into the image's environment before it builds the site.
+SITE_OPTIONAL_FIELDS = ("extra_packages",)
+# One pip requirement: a name, optional [extras] and version specifiers, with
+# no space, no environment marker or URL, and no leading `-`, so that no value
+# can be read as one of pip's options. tools/site-matrix holds the same pattern.
+REQUIREMENT_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._\-\[\],<>=!~*+]*")
 
 FENCE_RE = re.compile(r"^[ \t]*(`{3,}|~{3,})(.*)$")
 # Fenced blocks whose body is code or literal text, not MyST prose.
@@ -401,8 +410,12 @@ def check_site_yml(where: str, data, problems):
         if field not in data:
             problems.append(("site-yml", f"{where} has no `{field}`"))
     for field in data:
-        if field not in SITE_FIELDS:
-            problems.append(("site-yml", f"{where}: `{field}` is not a field the build reads ({', '.join(SITE_FIELDS)})"))
+        if field not in SITE_FIELDS + SITE_OPTIONAL_FIELDS:
+            problems.append((
+                "site-yml",
+                f"{where}: `{field}` is not a field the build reads ({', '.join(SITE_FIELDS)}; optional: "
+                f"{', '.join(SITE_OPTIONAL_FIELDS)})",
+            ))
     value = data.get("type")
     if "type" in data and value not in SITE_TYPES:
         problems.append(("site-yml", f"{where}: type {value!r} is not one of {', '.join(SITE_TYPES)}"))
@@ -426,6 +439,18 @@ def check_site_yml(where: str, data, problems):
     value = data.get("url")
     if "url" in data and not (isinstance(value, str) and value.startswith("https://") and value.endswith("/")):
         problems.append(("site-yml", f"{where}: url {value!r} is not an https:// address ending in /"))
+    value = data.get("extra_packages")
+    if "extra_packages" in data and not (
+        isinstance(value, list)
+        and value
+        and all(isinstance(v, str) and REQUIREMENT_RE.fullmatch(v) for v in value)
+        and len(set(value)) == len(value)
+    ):
+        problems.append((
+            "site-yml",
+            f"{where}: extra_packages {value!r} is not a list of pip requirements (a name, optional [extras] and "
+            "version specifiers, no spaces, none starting with -), each at most once",
+        ))
 
 
 def check_site_config(key: str, config, site_yml, site_dir: Path, consumers, problems):
