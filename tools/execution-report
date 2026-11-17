@@ -1,0 +1,273 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.9"
+# dependencies = []
+# ///
+"""tools/execution-report — what a site's build executed, page by page.
+
+After ``jb build``, writes ``execution_status.json``: one row per page the
+build executed or took from the execution cache, with its status, how long
+its execution took, its kernel, and whether this build executed it or took
+its outputs from the cache (QuantEcon/project-monorepo#25). The shadow build
+and the go/no-go read it.
+
+Where it reads it
+-----------------
+From Sphinx's environment, ``<build-dir>/.doctrees/environment.pickle``.
+For every page it reads as a notebook, myst-nb keeps the result of executing
+it there (``env.nb_metadata[page]["exec_data"]``: ``succeeded``, ``error``,
+``runtime``, ``mtime``), the record its own ``{nb-exec-table}`` draws on
+(myst-nb 1.4.0, ``myst_nb/sphinx_.py`` and ``myst_nb/core/execute/cache.py``).
+It is written for a failed build too: under ``--keep-going`` Sphinx pickles
+the environment once it has read every page. The jupyter-cache database at
+the site's cache path is not used: it holds only the notebooks that executed
+cleanly, from every build the cache has seen, and a failed page leaves no
+entry in it.
+
+* **status** ``ok`` (``succeeded``), ``failed`` (with ``error``, the
+  exception's class, and ``report``, the traceback myst-nb wrote to
+  ``<build-dir>/html/reports/<page>.err.log``), or ``excluded``: a page
+  myst-nb read as a notebook (it wrote ``<build-dir>/jupyter_execute/
+  <page>.ipynb``) but did not execute, as an ``execute.exclude_patterns``
+  entry or an execution mode other than ``cache`` decides. A page that is
+  not a notebook has no row.
+* **duration** ``runtime``, in seconds: the time the page's execution took.
+  For a page taken from the cache it is the time recorded when the cache
+  executed it.
+* **kernel** the kernelspec name in the notebook myst-nb wrote.
+* **execution** ``executed`` or ``cached``. myst-nb sets ``mtime`` to the
+  moment it executed a page, or, for a page it takes from the cache, to the
+  time that cache entry was made, by an earlier build or earlier in this one
+  (a page whose notebook is identical to one already executed, such as two
+  pages with no code cells, dp's ``intro`` and ``zreferences``, takes the
+  first one's fresh entry). Sphinx reads one page at a time and records when
+  it finished each (``env.all_docs``), so a page is ``executed`` when
+  ``mtime`` falls within its own read: after the previous page's read ended,
+  or, for the first page, after ``--since``, the build's start in seconds
+  since the epoch. Anything earlier is ``cached``. Without ``--since`` it is
+  null. (jupyter-cache stores the entry's time as naive UTC, and myst-nb
+  reads it as local time, so the comparison is exact only where local time
+  is UTC or ahead of it: in CI, not on a laptop west of Greenwich. It also
+  assumes Sphinx read the pages one at a time, as ``jb build`` does unless
+  given ``-j``.)
+
+With ``--since``, a page this build did not read at all (Sphinx's read time
+for it, ``env.all_docs``, is before ``--since``: an incremental local build)
+has no row either; the summary counts it. In CI every page is read: the
+environment is never restored.
+
+It unpickles Sphinx's environment, so it must run under the Python that ran
+``jb build`` (``python tools/execution-report``; ``uv run --script`` gives
+it an environment without Sphinx, and it says so). It imports nothing beyond
+the standard library itself.
+
+Usage
+-----
+    tools/execution-report --since 1763340000 --site dp
+    tools/execution-report --build-dir _build --out _build/execution_status.json
+    tools/execution-report --summary "$GITHUB_STEP_SUMMARY"
+
+Under GitHub Actions it also writes the step outputs ``pages``,
+``executed``, ``cached`` and ``failed``.
+
+Exit status: 0 the report was written (whatever it reports: the build is
+what fails a run), 2 the build left nothing to report, or an error.
+"""
+
+from __future__ import annotations
+
+import argparse
+import bisect
+import json
+import os
+import pickle
+import platform
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+FORMAT = 1
+# The packages whose versions decide what a page's execution produced, recorded
+# with the report so two reports can be compared.
+VERSIONS = ("jupyter-book", "sphinx", "myst-nb", "jupyter-cache", "nbclient", "ipykernel", "quantecon-book-theme")
+
+
+class ReportError(Exception):
+    """The build left nothing this tool can read."""
+
+
+def load_environment(build_dir: Path):
+    path = build_dir / ".doctrees" / "environment.pickle"
+    if not path.is_file():
+        raise ReportError(f"{path} does not exist: run jb build first (the build may have stopped before it read every page)")
+    try:
+        with path.open("rb") as handle:
+            return pickle.load(handle)
+    except ImportError as exc:
+        raise ReportError(
+            f"{path} could not be read: {exc}. Sphinx's environment unpickles only where Sphinx and the "
+            "book's extensions are installed, so run this tool with the Python that ran jb build "
+            "(`python tools/execution-report`), not through `uv run --script`."
+        ) from exc
+    except Exception as exc:  # a truncated or foreign pickle
+        raise ReportError(f"{path} could not be read: {exc.__class__.__name__}: {exc}") from exc
+
+
+def kernel_of(notebook: Path):
+    try:
+        data = json.loads(notebook.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    spec = ((data.get("metadata") or {}).get("kernelspec") or {}) if isinstance(data, dict) else {}
+    name = spec.get("name") if isinstance(spec, dict) else None
+    return name if isinstance(name, str) else None
+
+
+def rounded(value):
+    return round(float(value), 2) if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+
+
+def collect(env, build_dir: Path, since=None):
+    """``(rows, not_read)``: a row per page, and the pages left out as unread."""
+    nb_metadata = getattr(env, "nb_metadata", None) or {}
+    all_docs = getattr(env, "all_docs", None) or {}
+    execute_dir = build_dir / "jupyter_execute"
+    reports_dir = build_dir / "html" / "reports"
+    rows, not_read = [], []
+    # Seconds since the epoch at which Sphinx finished reading each page this
+    # build read (all_docs holds microseconds). A page's read began when the
+    # one before it ended, or, for the first, when the build began.
+    read_end = {page: t / 1_000_000 for page, t in all_docs.items() if since is None or t / 1_000_000 >= since}
+    ends = sorted(read_end.values())
+
+    def read_start(page):
+        i = bisect.bisect_left(ends, read_end[page])
+        return ends[i - 1] if i > 0 else since
+
+    for page in sorted(all_docs):
+        if page not in read_end:
+            not_read.append(page)
+            continue
+        exec_data = (nb_metadata.get(page) or {}).get("exec_data")
+        notebook = execute_dir / f"{page}.ipynb"
+        if not exec_data and not notebook.is_file():
+            continue  # not a notebook: nothing to execute
+        row = {"page": page, "status": "excluded", "duration": None, "kernel": kernel_of(notebook),
+               "execution": None, "error": None, "report": None}
+        if exec_data:
+            row["status"] = "ok" if exec_data.get("succeeded") else "failed"
+            row["duration"] = rounded(exec_data.get("runtime"))
+            mtime = exec_data.get("mtime")
+            if since is not None and isinstance(mtime, (int, float)):
+                row["execution"] = "executed" if mtime >= read_start(page) else "cached"
+            if row["status"] == "failed":
+                row["error"] = exec_data.get("error") or "unknown"
+                report = reports_dir / f"{page}.err.log"
+                if report.is_file():
+                    row["report"] = report.as_posix()
+        rows.append(row)
+    return rows, not_read
+
+
+def versions():
+    found = {"python": platform.python_version()}
+    try:
+        from importlib.metadata import PackageNotFoundError, version
+    except ImportError:  # pragma: no cover - Python < 3.8
+        return found
+    for name in VERSIONS:
+        try:
+            found[name] = version(name)
+        except PackageNotFoundError:
+            found[name] = None
+    return found
+
+
+def summarise(rows, not_read):
+    count = lambda **want: sum(all(r[k] == v for k, v in want.items()) for r in rows)  # noqa: E731
+    return {
+        "pages": len(rows),
+        "ok": count(status="ok"),
+        "failed": count(status="failed"),
+        "excluded": count(status="excluded"),
+        "executed": count(execution="executed"),
+        "cached": count(execution="cached"),
+        "not_read": len(not_read),
+    }
+
+
+def iso(seconds):
+    return datetime.fromtimestamp(seconds, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def markdown(report):
+    s = report["summary"]
+    site = f"`{report['site']}`: " if report.get("site") else ""
+    lines = [
+        f"### Execution report: {site}{s['pages']} notebook page(s)",
+        "",
+        f"{s['ok']} ok, {s['failed']} failed, {s['excluded']} excluded; "
+        + (f"{s['executed']} executed by this build, {s['cached']} taken from the execution cache."
+           if report["build_started"] else "executed or cached not known (no --since)."),
+        "",
+        "| Page | Status | Execution | Seconds | Kernel |",
+        "| --- | --- | --- | ---: | --- |",
+    ]
+    for r in report["pages"]:
+        status = r["status"] + (f" ({r['error']})" if r["error"] else "")
+        duration = "" if r["duration"] is None else f"{r['duration']:.2f}"
+        lines.append(f"| `{r['page']}` | {status} | {r['execution'] or ''} | {duration} | {r['kernel'] or ''} |")
+    if s["not_read"]:
+        lines += ["", f"{s['not_read']} page(s) this build did not read (an incremental build) are left out."]
+    return "\n".join(lines) + "\n"
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(prog="tools/execution-report", description=__doc__.split("\n\n")[0])
+    parser.add_argument("--build-dir", default="_build", help="jb build's output folder, holding .doctrees/ (default: _build)")
+    parser.add_argument("--since", type=float, help="the build's start, in seconds since the epoch: tells executed from cached")
+    parser.add_argument("--site", help="the site's key, recorded in the report")
+    parser.add_argument("--out", help="where to write the JSON (default: <build-dir>/execution_status.json)")
+    parser.add_argument("--summary", help="append a Markdown table to this file (the step summary in CI)")
+    args = parser.parse_args(argv)
+
+    build_dir = Path(args.build_dir)
+    out = Path(args.out) if args.out else build_dir / "execution_status.json"
+    try:
+        env = load_environment(build_dir)
+        rows, not_read = collect(env, build_dir, args.since)
+    except ReportError as exc:
+        sys.stderr.write(f"error: {exc}\n")
+        return 2
+
+    report = {
+        "format": FORMAT,
+        "site": args.site,
+        "generated_at": iso(datetime.now(timezone.utc).timestamp()),
+        "build_started": iso(args.since) if args.since is not None else None,
+        "versions": versions(),
+        "summary": summarise(rows, not_read),
+        "pages": rows,
+    }
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    s = report["summary"]
+    print(
+        f"execution-report: {s['pages']} page(s): {s['ok']} ok, {s['failed']} failed, {s['excluded']} excluded"
+        + (f"; {s['executed']} executed, {s['cached']} from the cache" if args.since is not None else "")
+        + (f"; {s['not_read']} not read by this build" if s["not_read"] else "")
+        + f" -> {out}"
+    )
+    if args.summary:
+        with open(args.summary, "a", encoding="utf-8") as handle:
+            handle.write(markdown(report))
+    github_output = os.environ.get("GITHUB_OUTPUT")
+    if github_output:
+        with open(github_output, "a", encoding="utf-8") as handle:
+            for key in ("pages", "executed", "cached", "failed"):
+                handle.write(f"{key}={s[key]}\n")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

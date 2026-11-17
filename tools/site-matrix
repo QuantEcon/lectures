@@ -1,0 +1,124 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.9"
+# dependencies = ["pyyaml"]
+# ///
+"""tools/site-matrix — the build matrix for the named sites, from their site.yml.
+
+Prints, on one line, the JSON list the build workflow's matrix runs over
+(``.github/workflows/site-build.yml``): one entry per site named, in the
+order named, each with the job settings its ``sites/<key>/site.yml`` decides.
+
+* ``runs_on`` and ``image``: the runner label and container for the site's
+  ``runner`` class. Only ``ubuntu-latest`` has a leg so far, in
+  ``ghcr.io/quantecon/quantecon-build:latest``, the container dp's own
+  workflows build in. A site on another class (``g4dn.2xlarge``, the RunsOn
+  GPU class) is refused: its leg is not written yet (no container, the
+  series' environment through conda, JAX for CUDA).
+* ``timeout_minutes``: the job's time limit. ``site.yml`` holds no job limit
+  (no series sets one; ``cell_timeout`` is the limit on one cell), so it is
+  ``cell_timeout`` in whole minutes, the longest a single cell may run, plus
+  ``BUILD_ALLOWANCE`` minutes for the rest of a build from an empty cache. dp's
+  own weekly build from an empty cache took 22 to 41 minutes in
+  October-November 2026.
+* ``cell_timeout`` and ``publishes`` as ``site.yml`` gives them.
+
+Only a site of ``type: series`` is built so far: its execution cache is keyed
+on its series' ``environment.yml``. ``tools/pool-check`` checks every
+``site.yml`` field; this tool only reads them, and refuses one it cannot use.
+
+Usage
+-----
+    tools/site-matrix dp          # [{"key": "dp", "runs_on": "ubuntu-latest", ...}]
+    tools/site-matrix dp intro
+
+Exit status: 0 printed, 1 a site refused (no such site, or no leg for its
+runner class or type), 2 an error.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import math
+import re
+import sys
+from pathlib import Path
+
+import yaml
+
+ROOT = Path(__file__).resolve().parent.parent
+SITES_DIR = ROOT / "sites"
+KEY_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]*")
+# Runner class -> (runs-on label, container image), for the classes with a leg.
+RUNNERS = {
+    "ubuntu-latest": ("ubuntu-latest", "ghcr.io/quantecon/quantecon-build:latest"),
+}
+# Minutes a whole build from an empty cache may take, beyond one cell's limit.
+BUILD_ALLOWANCE = 120
+
+
+def site_keys():
+    if not SITES_DIR.is_dir():
+        return []
+    return sorted(p.name for p in SITES_DIR.iterdir() if (p / "site.yml").is_file())
+
+
+def entry(key: str):
+    """The matrix entry for ``key``, or a reason it is refused."""
+    path = SITES_DIR / key / "site.yml"
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        return None, f"sites/{key}/site.yml is not a mapping"
+    if data.get("type") != "series":
+        return None, f"sites/{key}: type {data.get('type')!r} has no leg yet (only `series`)"
+    runner = data.get("runner")
+    if runner not in RUNNERS:
+        return None, (f"sites/{key}: runner {runner!r} has no leg yet (only {', '.join(RUNNERS)}); "
+                      "the GPU leg needs its own job shape")
+    cell_timeout = data.get("cell_timeout")
+    if not (isinstance(cell_timeout, int) and not isinstance(cell_timeout, bool) and cell_timeout > 0):
+        return None, f"sites/{key}: cell_timeout {cell_timeout!r} is not a whole number of seconds above 0"
+    runs_on, image = RUNNERS[runner]
+    return {
+        "key": key,
+        "runs_on": runs_on,
+        "image": image,
+        "timeout_minutes": math.ceil(cell_timeout / 60) + BUILD_ALLOWANCE,
+        "cell_timeout": cell_timeout,
+        "publishes": list(data.get("publishes") or []),
+    }, None
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(prog="tools/site-matrix", description=__doc__.split("\n\n")[0])
+    parser.add_argument("keys", nargs="+", metavar="SITE", help="the sites to build, folders under sites/")
+    args = parser.parse_args(argv)
+    known = site_keys()
+    matrix, refused = [], []
+    for key in dict.fromkeys(args.keys):
+        if not (KEY_RE.fullmatch(key) and key in known):
+            refused.append(f"there is no site sites/{key}/ (sites: {', '.join(known) or 'none'})")
+            continue
+        item, reason = entry(key)
+        if reason:
+            refused.append(reason)
+        else:
+            matrix.append(item)
+    for reason in refused:
+        sys.stderr.write(f"site-matrix: refused: {reason}\n")
+    if refused:
+        return 1
+    left = [k for k in known if k not in args.keys]
+    if left:
+        sys.stderr.write(f"site-matrix: not built (not named): {', '.join(left)}\n")
+    print(json.dumps(matrix, separators=(",", ":")))
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except (OSError, yaml.YAMLError) as exc:
+        sys.stderr.write(f"error: {exc}\n")
+        sys.exit(2)

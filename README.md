@@ -46,7 +46,7 @@ The repository is organised around three layers.
 | --- | --- | --- |
 | `mirror/<key>/` | A machine-reconstructed, verbatim copy of each live series' allowlisted paths, pinned to an exact commit. Never hand-edited, never committed. | Reconstructed on demand; **gitignored**. |
 | `lectures/` | The curated **pool** — every canonical lecture, held exactly once. | 328 lectures and their assets, each recorded in [`sync/ledger.yml`](sync/ledger.yml). |
-| `sites/` | One folder per published site, each a thin **configuration** that selects and orders lectures from the pool. | One per series, six in all, with the rules in [`sites/README.md`](sites/README.md); the workflow that builds them comes next. |
+| `sites/` | One folder per published site, each a thin **configuration** that selects and orders lectures from the pool. | One per series, six in all, with the rules in [`sites/README.md`](sites/README.md); [`site-build.yml`](.github/workflows/site-build.yml) builds `dp` from them, and the other five follow. |
 
 ### Why we commit only SHAs, not the mirror
 
@@ -83,11 +83,14 @@ The repository is organised around three layers.
 │   ├── pool-check    # checks the pool keeps its layout conventions
 │   ├── assets-report # audits the files beside the lectures; writes and checks the _shared/ index
 │   ├── stage-site    # copies one site's own pages and files into lectures/ for a build, and out again
+│   ├── site-matrix   # reads each built site's site.yml into the build workflow's matrix
+│   ├── execution-report # after a build: what it executed or took from the cache, page by page
 │   └── tests/        # pytest suite for the tools above (scratch repos)
 └── .github/workflows/
     ├── sync.yml         # daily job that refreshes the pinned SHAs (pin-only)
     ├── drift-check.yml  # runs after sync: drift issues, refresh PR (pool and bibliography), red on a pool edit or a refused refresh; the assets report
     ├── pool-check.yml   # runs tools/pool-check and the _shared/ index check on pull requests that touch the pool or the sites
+    ├── site-build.yml   # builds the sites it names (dp today) from the pool, strict, HTML; keeps the HTML and the execution report; publishes nothing
     └── tests.yml        # runs tools/tests on pull requests
 ```
 
@@ -200,7 +203,14 @@ Each published site is a folder in [`sites/`](sites/README.md): its series' `_co
 | `tools/stage-site dp` | Copy dp's pages and `_static/` files into `lectures/`, recording what it copied in `_build/stage-site.json`. It refuses, copying nothing, if any destination already exists, or if a site is staged already. |
 | `tools/stage-site --clean dp` | Remove them again: only the files the record lists, each while its bytes are still the ones copied, then the record. |
 
-[`sites/README.md`](sites/README.md) has the `jb build` command, every deviation from the series' files and why, and the cross-reference rules.
+[`site-build.yml`](.github/workflows/site-build.yml) builds the sites it names, today `dp` alone, on every push to `main` and pull request that touches the pool, the sites or the tools a build runs, on demand and twice a week. Each site is a leg of one matrix whose runner, container and time limit [`tools/site-matrix`](tools/site-matrix) reads from `site.yml`. A leg stages the site, builds its HTML strictly (`-n -W --keep-going`) with `QuantEcon/actions`' `build-lectures`, restoring and, on `main`, saving the site's own execution cache, and keeps the HTML and the execution report as artefacts. It publishes nothing.
+
+| Command | What it does |
+| --- | --- |
+| `tools/site-matrix dp` | Print the matrix entry for each site named, as JSON. It refuses a site whose runner class or type has no leg yet. |
+| `python tools/execution-report --since "$since" --site dp` | After `jb build`, write `_build/execution_status.json`: one row per page the build executed or took from the cache, with its status, seconds, kernel and which of the two. Run it with the Python that ran the build: it reads Sphinx's environment. |
+
+[`sites/README.md`](sites/README.md) has the `jb build` command, the build in CI and its cache, the execution report's fields, every deviation from the series' files and why, and the cross-reference rules.
 
 ## Running the bibliography merge
 

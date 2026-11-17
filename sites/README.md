@@ -80,9 +80,46 @@ jb build lectures --toc "$PWD/sites/dp/_toc.yml" --config "$PWD/sites/dp/_config
 uv run --script tools/stage-site --clean dp
 ```
 
-Give `--toc` as an absolute path: Jupyter Book 1 reads a relative one from inside `lectures/`. Clean before committing, or before running `tools/pool-check` and `tools/assets-report --check-index`, which read a staged page or file as the pool's.
+Give `--toc` as an absolute path: Jupyter Book 1 reads a relative one from inside `lectures/`. Clean before committing, or before running `tools/pool-check` and `tools/assets-report --check-index`, which read a staged page or file as the pool's. A lecture executes in `lectures/`, so a file it writes is left there too: dp's `short_path` writes `lectures/graph.txt`, which `--clean` does not remove (it did not stage it), and `git status` shows.
 
 **`-n -W` is stricter than two series build today.** intro's and advanced's own publish builds run their HTML without `-n` or `-W`, and their PDF with `-n` only; programming, intermediate and jax build with `-n -W`, and dp through `QuantEcon/actions`' `build-lectures`. So a strict build of the intro or advanced site may fail on warnings those series tolerate today. How strict each site's build is, is QuantEcon/project-monorepo#25's to settle per site; `site.yml` does not carry it.
+
+To see what the build executed, run [`tools/execution-report`](../tools/execution-report) with the Python that ran `jb build`, giving it the build's start so it can tell an executed page from one taken from the cache (below):
+
+```bash
+since=$(date +%s)
+jb build lectures …   # as above
+python tools/execution-report --build-dir _build/sites/dp/_build --since "$since" --site dp
+```
+
+## Building a site in CI
+
+[`site-build.yml`](../.github/workflows/site-build.yml) builds the sites named in its `SITES` list, today `dp` alone: on every push to `main` and every pull request that touches the pool, the sites, the tools a build runs or what `tools/sync` reads; on demand; and on Mondays and Thursdays. Nothing is published. The other five sites are built when each is brought through (QuantEcon/project-monorepo#77).
+
+Each site is one leg of a matrix (`fail-fast: false`, so one site's failure stops no other). [`tools/site-matrix`](../tools/site-matrix) reads the leg's settings from `site.yml`:
+
+| `site.yml` | What the leg takes from it |
+| --- | --- |
+| `runner` | `runs-on`, and the container: `ubuntu-latest` builds in `ghcr.io/quantecon/quantecon-build:latest`, as dp's own workflows do. A site on the GPU class is refused until its leg, which needs a different shape (no container, the series' environment through conda, JAX for CUDA), is written |
+| `cell_timeout` | The job's time limit, `timeout-minutes`: `cell_timeout` in whole minutes, the longest one cell may run, plus 120 minutes for the rest of a build from an empty cache. `site.yml` holds no job limit of its own, since no series sets one; dp's own weekly build from an empty cache took 22 to 41 minutes in October and November 2026. The per-cell limit itself stays where Jupyter Book reads it, `execute: timeout` in `_config.yml` |
+| `type` | Only `series` has a leg so far: its execution cache is keyed on the series' `environment.yml` |
+| `publishes` | Not yet: every leg builds HTML alone, which is all dp publishes |
+
+A leg checks the repository out with its full history, reconstructs `mirror/<key>/` at the series' pin (`tools/sync <key>`, a few seconds, for the one file the cache key hashes, `environment.yml`), restores the site's execution cache, stages the site, and builds it with `QuantEcon/actions`' `build-lectures`: `builder: html`, `source-dir: lectures`, and `extra-args` with the absolute `--toc` and `--config` and `-W --keep-going` (`build-lectures` adds `-n`). So a warning, a cell that raises, a reference that does not resolve, or a label that two of the site's lectures both define fails the build, and `--keep-going` lists every failure, not only the first. It then writes the execution report, keeps the HTML (`html-<key>`, after a green build, for 7 days) and the report (`execution-status-<key>`) as artefacts, saves the cache and unstages the site. A failed build also uploads `build-lectures`' failure reports (`execution-reports-<key>`).
+
+**The execution cache** is `actions/cache`, one per site, at the path the site's `_config.yml` names, `_build/jupyter_cache/<key>` (rule 7). A cache is never overwritten, so each one is saved under a new key, `jb1-<key>-<env hash>-<run>`, where the hash is of `mirror/<key>/environment.yml`, and a restore takes the newest one under `jb1-<key>-<env hash>-`. There is no fallback to another environment's cache: a changed `environment.yml` starts from an empty cache, rather than reuse outputs that other packages produced. A pull request only restores. A run on `main` saves after a green build that executed at least one page; one that took every page from the cache has nothing new to save. The twice-weekly run keeps each cache in use: GitHub drops a cache that is not read for 7 days. Like dp's own cache, it is keyed on `environment.yml` and not on the container image, so a new `:latest` image does not empty it.
+
+**The execution report**, `execution_status.json`, is one row per page the build executed or took from the cache. [`tools/execution-report`](../tools/execution-report) reads it from Sphinx's environment (`_build/.doctrees/environment.pickle`), where myst-nb records each notebook page's execution, the record its own `{nb-exec-table}` (dp's `status` page) draws on. It does not read the jupyter-cache database, which holds only the pages that executed cleanly, from every build the cache has seen.
+
+| Field | What it holds |
+| --- | --- |
+| `page` | The page, as Sphinx names it (`mccall_model`) |
+| `status` | `ok`, `failed` (with `error`, the exception's class, and `report`, the traceback myst-nb wrote to `_build/html/reports/`), or `excluded`: a notebook page the build did not execute |
+| `duration` | Seconds its execution took; for a page from the cache, the time recorded when the cache executed it |
+| `kernel` | The kernel it names |
+| `execution` | `executed` by this build, or `cached`: its outputs were taken from the execution cache |
+
+The report also records the site, the build's start, the versions of the packages that decide what a page's execution produces, and the counts. The counts and the full table go to the run's summary.
 
 ## The rules
 
