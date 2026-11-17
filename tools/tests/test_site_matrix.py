@@ -73,7 +73,8 @@ def test_a_site_with_no_leg_yet_is_refused_and_nothing_is_printed(tmp_path):
 def test_the_packages_hash_follows_the_list_and_a_value_pip_could_read_as_an_option_is_refused(tmp_path):
     root = scratch(tmp_path, {"a": site_yml(extra_packages=["jax"]), "b": site_yml(extra_packages=["jax", "optax"]),
                               "c": site_yml(extra_packages=["--index-url=https://example.org/simple"]),
-                              "d": site_yml(extra_packages="jax")})
+                              "d": site_yml(extra_packages="jax"),
+                              "e": site_yml(extra_packages=[]), "f": site_yml(extra_packages=["jax", "jax"])})
 
     res = run(root, "a", "b")
     assert res.returncode == 0, res.stderr
@@ -87,6 +88,12 @@ def test_the_packages_hash_follows_the_list_and_a_value_pip_could_read_as_an_opt
     assert "sites/c: extra_packages ['--index-url=https://example.org/simple'] is not a list of pip requirements" \
         in res.stderr
     assert "sites/d: extra_packages 'jax' is not a list of pip requirements" in res.stderr
+
+    # As pool-check rules: present means a non-empty list, each requirement once.
+    res = run(root, "e", "f")
+    assert res.returncode == 1
+    assert "sites/e: extra_packages [] is not a list of pip requirements" in res.stderr
+    assert "sites/f: extra_packages ['jax', 'jax'] is not a list of pip requirements" in res.stderr
 
 
 def test_the_workflow_allowlist_resolves_against_the_real_sites():

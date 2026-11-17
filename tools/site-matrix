@@ -88,10 +88,17 @@ def entry(key: str):
     cell_timeout = data.get("cell_timeout")
     if not (isinstance(cell_timeout, int) and not isinstance(cell_timeout, bool) and cell_timeout > 0):
         return None, f"sites/{key}: cell_timeout {cell_timeout!r} is not a whole number of seconds above 0"
+    # The same rule as tools/pool-check's site-yml: absent means none; present
+    # means a non-empty list of plain requirements, each at most once.
     packages = data.get("extra_packages", [])
-    if not (isinstance(packages, list)
-            and all(isinstance(p, str) and REQUIREMENT_RE.fullmatch(p) for p in packages)):
-        return None, f"sites/{key}: extra_packages {packages!r} is not a list of pip requirements"
+    if "extra_packages" in data and not (
+        isinstance(packages, list)
+        and packages
+        and all(isinstance(p, str) and REQUIREMENT_RE.fullmatch(p) for p in packages)
+        and len(set(packages)) == len(packages)
+    ):
+        return None, (f"sites/{key}: extra_packages {packages!r} is not a list of pip requirements, "
+                      "non-empty and each at most once")
     runs_on, image = RUNNERS[runner]
     return {
         "key": key,
