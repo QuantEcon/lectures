@@ -4,6 +4,8 @@ Each folder here is one published site, built on Jupyter Book 1 from the pool (`
 
 Nothing here is generated from a shared base. Each site's `_config.yml` and `_toc.yml` are the series' own files, copied verbatim from the series at the pin in [`sync/state.yml`](../sync/state.yml), with only the additions the build from the pool needs (QuantEcon/project-monorepo#21). An addition is always a whole line, and every added line holds the marker `# site addition`: a comment line that says why, then each line of YAML it adds with `  # site addition` after it. Removing every line that holds the marker gives back the series' file exactly, which is how the drift-check compares them.
 
+A setting the site must change, not add, is an addition too: the series' line stays as it is, and a marked line after it sets the same key again. YAML's later key wins as everything here reads these files (PyYAML, in Jupyter Book 1, `tools/pool-check`, the drift-check and `build-lectures`' check of the executed notebooks), and jax's own file already relies on it (below). Placed before the series' line, the series' value would win, so pool-check checks the value the build reads, not the line. `repository_url` is the one override today.
+
 ## What a site's folder holds
 
 | Path | What it is |
@@ -63,12 +65,28 @@ Every one of them, per site. A diff of a site's `_config.yml` or `_toc.yml` agai
 | `intersphinx_disabled_reftypes: []` | A link with no target in the site resolves on the lecture's home site (QuantEcon/project-monorepo#22) | intro, programming, advanced, dp, jax (intermediate's own file already sets it) |
 | `intersphinx_mapping` gains the site's own key and address | A site maps itself: a pool lecture whose home is another series writes its links into its home with the prefix (``{doc}`intermediate:linear_models` ``), and the build fails on a prefix the site does not define (the second-product spike, QuantEcon/project-monorepo#58) | programming, intermediate, advanced, jax (intro's own file already maps `intro`); not dp, below |
 | `only_build_toc_files: true` | Build only the pages `_toc.yml` lists: the pool holds every series' lectures, and without it Jupyter Book builds every page in its source folder | programming, advanced (the others' own files set it) |
+| `html_theme_options`: `repository_url: https://github.com/QuantEcon/lectures`, after the series' own (an override, above) | Each page's "Last changed" line and changelog are the pool's history, `git log` of `lectures/<page>.md` in this repository, so the links beside them must name it. With the series' address every commit link is a 404 and the full-history link shows the series' file, not the history listed (below) | all six |
 | `_toc.yml`: `- file: mccall_risk` after `- file: mccall_fitted_vfi` | Built from the pool, dp's Job Search lectures take intermediate's current text, numbered I to IX, and `mccall_risk` is the one lecture-dp does not list. Adding it in lecture-dp would show "Job Search V" twice on the live site, whose copies are still numbered V to VIII (QuantEcon/project-monorepo#21, 2026-10-08). The shadow comparison lists the extra page and the four renumbered titles as expected differences | dp |
 
 Two things that are not additions:
 
 - **No site maps `dp`,** and none of the six series' files does today, so nothing was removed. dp maps no site for itself either: its key is `dp`, and it holds no lecture of its own for a prefixed link to name.
 - **jax's `_config.yml` sets `only_build_toc_files` twice** (`false`, then `true`). The later one wins, as in the series' own build; it is kept verbatim.
+
+## A page's "Last changed" line
+
+quantecon-book-theme (0.22.2 in the build image) puts a "Last changed" date and a changelog of the page's last 10 commits on every lecture page, from `git log --follow` of the page's source in the checkout the site is built from, which is why the build checks out the full history. Built from the pool, that is this repository's history of `lectures/<page>.md`, so the theme's links take the `repository_url` override above:
+
+| Link | What the theme builds it from | dp's `perm_income`, built locally on 2026-11-17 |
+| --- | --- | --- |
+| Each commit | `repository_url`, then `/commit/<hash>` | https://github.com/QuantEcon/lectures/commit/078f3b2 |
+| Full history | `repository_url`, then `/commits/main/`, `path_to_docs` and the page's file (`main` is the theme's, not `repository_branch`) | https://github.com/QuantEcon/lectures/commits/main/lectures/perm_income.md |
+| GitHub button | `repository_url` alone | https://github.com/QuantEcon/lectures |
+| Colab | `nb_repository_url` and `nb_branch`, never `repository_url`, so unchanged | https://colab.research.google.com/github/QuantEcon/lecture-dp.notebooks/blob/main/perm_income.ipynb |
+
+- **Readers see the pool's commits:** their subjects, authors and dates. These are the subjects of this repository's squash-merged pull requests, promotions and refreshes among them ("promote: take dp's lectures from their home series; …"), not the authors' history in the series. A site page (`intro`, `status`, …) has no line, since its staged copy is not tracked.
+- **The theme's page-source link** drops `lectures/` when the repository and its source folder are both called `lectures` (QuantEcon/quantecon-book-theme#452): it finds the folder by searching the source folder's absolute path for the repository's name. Its `layout.html` keeps that link inside an HTML comment, so no reader sees it; it matters only if the theme turns it on.
+- **No switch hides the line.** The theme shows it on every tracked page once `repository_url` is set. `changelog_max_entries: 0` would hide it, but the theme's `theme.conf` does not declare that option, so Sphinx warns that it is unsupported, which fails the strict build.
 
 ## Staging and building a site locally
 
@@ -141,7 +159,7 @@ The report also records the site, the build's start, the versions of the package
 4. **A link with no target in the site resolves to the lecture's home site,** through `intersphinx_disabled_reftypes: []`, by rules 1 to 3.
 5. **Every `_toc.yml` entry is a pool lecture or a page of the site,** a site page never has a pool lecture's name, and no file under a site's `_static/` is also a pool file: staging would overwrite it.
 6. **`site.yml` has every field above, each with a valid value,** and the branding a `_config.yml` names is in the site's `_static/`.
-7. **The additions a build needs stay:** every site sets `only_build_toc_files: true` and its own cache, `execute.cache: _build/jupyter_cache/<key>`, and `_config.yml` is well formed where these rules read it.
+7. **The additions a build needs stay:** every site sets `only_build_toc_files: true`, its own cache, `execute.cache: _build/jupyter_cache/<key>`, and the theme's `repository_url: https://github.com/QuantEcon/lectures` with `path_to_docs: lectures` (the value the build reads, whatever the series' line says), and `_config.yml` is well formed where these rules read it.
 
 ## Keeping the copies true to the series
 
