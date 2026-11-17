@@ -18,11 +18,17 @@ def write(path, data):
 
 
 def config(key="intro", url=URL, mapping=None, disabled=True, **top):
-    """A site's _config.yml, as the series write it: branding, the address
-    and the cross-reference settings."""
+    """A valid site's _config.yml as the build reads it: the series' settings
+    (branding, the address, the cross-reference settings) with the site
+    additions already applied, so the pool's repository and execution cache,
+    not the series' own."""
     sphinx = {
         "html_favicon": "_static/lectures-favicon.ico",
-        "html_theme_options": {"dark_logo": "quantecon-logo-transparent.png"},
+        "html_theme_options": {
+            "dark_logo": "quantecon-logo-transparent.png",
+            "repository_url": "https://github.com/QuantEcon/lectures",
+            "path_to_docs": "lectures",
+        },
         "intersphinx_mapping": {key: [url, None]} if mapping is None else mapping,
     }
     if disabled:
@@ -241,6 +247,9 @@ def test_the_additions_a_build_needs_are_there(make_repo):
     data = yaml.safe_load(config("intro"))
     data["only_build_toc_files"] = False
     data["execute"]["cache"] = "_build/jupyter_cache"
+    theme = data["sphinx"]["config"]["html_theme_options"]
+    theme["repository_url"] = "https://github.com/QuantEcon/lecture-python-intro"
+    del theme["path_to_docs"]
     make_site(repo, cfg=yaml.safe_dump(data))
 
     res = repo.pool_check()
@@ -250,7 +259,33 @@ def test_the_additions_a_build_needs_are_there(make_repo):
         "builds every lecture in the pool, not the site's contents",
         "[site-config] sites/intro/_config.yml: `execute.cache` is '_build/jupyter_cache', not "
         "_build/jupyter_cache/intro: each site keeps its own execution cache",
+        "[site-config] sites/intro/_config.yml: `repository_url` is "
+        "'https://github.com/QuantEcon/lecture-python-intro', not https://github.com/QuantEcon/lectures: the theme "
+        "lists each page's changes from this repository's history, so its commit, history and GitHub links must "
+        "name it (set it on a marked line after the series' own: the later key wins)",
+        "[site-config] sites/intro/_config.yml: `path_to_docs` is None, not lectures: a page's full history link is "
+        "the page's path in the repository, under the pool's folder",
     ]
+
+
+@pytest.mark.parametrize("override_last, ok", [(True, True), (False, False)])
+def test_the_repository_is_overridden_by_a_marked_line_after_the_series_own(make_repo, override_last, ok):
+    # The series' repository_url stays verbatim, and a marked line repeats the
+    # key: YAML's later key wins, as Jupyter Book 1 reads the file. Placed
+    # before the series' line, the series' value wins, which is a finding.
+    repo = pool_repo(make_repo)
+    series = "      repository_url: https://github.com/QuantEcon/lecture-python-intro\n"
+    ours = "      repository_url: https://github.com/QuantEcon/lectures  # site addition\n"
+    text = config("intro").replace("      repository_url: https://github.com/QuantEcon/lectures\n",
+                                   series + ours if override_last else ours + series)
+    assert text.count("repository_url:") == 2
+    make_site(repo, cfg=text)
+
+    res = repo.pool_check()
+
+    assert (res.returncode == 0) is ok, res.stdout + res.stderr
+    assert any("`repository_url` is 'https://github.com/QuantEcon/lecture-python-intro'" in p
+               for p in problems(res)) is not ok
 
 
 @pytest.mark.parametrize("change, shown", [
@@ -388,6 +423,9 @@ execute:
   execute_notebooks: "cache"
 sphinx:
   config:
+    html_theme_options:
+      repository_url: https://github.com/QuantEcon/lecture-python-intro
+      path_to_docs: lectures
     intersphinx_mapping:
       intermediate:
         - "https://python.quantecon.org/"
@@ -402,6 +440,11 @@ execute:
   execute_notebooks: "cache"
 sphinx:
   config:
+    html_theme_options:
+      repository_url: https://github.com/QuantEcon/lecture-python-intro
+      # site addition: an override, the key again after the series' line
+      repository_url: https://github.com/QuantEcon/lectures  # site addition
+      path_to_docs: lectures
     intersphinx_disabled_reftypes: []  # site addition
     intersphinx_mapping:
       # site addition: this site maps itself

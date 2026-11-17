@@ -51,7 +51,10 @@ too, so a site's folder stays true to the pool it is built from:
   into ``lectures/`` (``tools/stage-site``) and would overwrite it.
 * ``site-config``   — ``_config.yml`` is well formed where it is read; it
   sets ``only_build_toc_files: true`` and the site's own execution cache,
-  ``execute.cache: _build/jupyter_cache/<key>``; the files it names as
+  ``execute.cache: _build/jupyter_cache/<key>``; its theme names this
+  repository and the pool's folder (``repository_url:
+  https://github.com/QuantEcon/lectures``, ``path_to_docs: lectures``),
+  whose history each page's changelog lists; the files it names as
   branding (``logo``, ``html_favicon``, ``dark_logo``) are in the site's
   ``_static/``; the
   cross-reference rules hold (QuantEcon/project-monorepo#22): the site sets
@@ -147,6 +150,12 @@ SITE_OPTIONAL_FIELDS = ("extra_packages",)
 # no space, no environment marker or URL, and no leading `-`, so that no value
 # can be read as one of pip's options. tools/site-matrix holds the same pattern.
 REQUIREMENT_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._\-\[\],<>=!~*+]*")
+# The repository a site is built from, and the pool's folder in it: the
+# theme's "Last changed" line and changelog are `git log` of the page here, so
+# its links (each commit, the full history, the GitHub button) must name this
+# repository, and the full history the page's path in it.
+POOL_REPOSITORY_URL = "https://github.com/QuantEcon/lectures"
+POOL_PATH_TO_DOCS = POOL_DIR.name
 
 FENCE_RE = re.compile(r"^[ \t]*(`{3,}|~{3,})(.*)$")
 # Fenced blocks whose body is code or literal text, not MyST prose.
@@ -489,6 +498,19 @@ def check_site_config(key: str, config, site_yml, site_dir: Path, consumers, pro
             "site-config",
             f"{where}: `execute.cache` is {execute.get('cache')!r}, not {cache}: each site keeps its own execution "
             "cache",
+        ))
+    if theme.get("repository_url") != POOL_REPOSITORY_URL:
+        problems.append((
+            "site-config",
+            f"{where}: `repository_url` is {theme.get('repository_url')!r}, not {POOL_REPOSITORY_URL}: the theme "
+            "lists each page's changes from this repository's history, so its commit, history and GitHub links must "
+            "name it (set it on a marked line after the series' own: the later key wins)",
+        ))
+    if theme.get("path_to_docs") != POOL_PATH_TO_DOCS:
+        problems.append((
+            "site-config",
+            f"{where}: `path_to_docs` is {theme.get('path_to_docs')!r}, not {POOL_PATH_TO_DOCS}: a page's full "
+            "history link is the page's path in the repository, under the pool's folder",
         ))
     branding = [("logo", config.get("logo")), ("html_favicon", sphinx.get("html_favicon"))]
     if isinstance(theme.get("dark_logo"), str) and theme["dark_logo"]:

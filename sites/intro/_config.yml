@@ -99,6 +99,8 @@ sphinx:
       header_organisation_url: https://quantecon.org
       header_organisation: QuantEcon
       repository_url: https://github.com/QuantEcon/lecture-python-intro
+      # site addition: each page's history is this repository's, so the theme's commit, history and GitHub links name it; the later key wins (sites/README.md)
+      repository_url: https://github.com/QuantEcon/lectures  # site addition
       nb_repository_url: https://github.com/QuantEcon/lecture-python-intro.notebooks
       path_to_docs: lectures
       twitter: quantecon
