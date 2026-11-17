@@ -49,7 +49,12 @@ entry in it.
   reads it as local time, so the comparison is exact only where local time
   is UTC or ahead of it: in CI, not on a laptop west of Greenwich. It also
   assumes Sphinx read the pages one at a time, as ``jb build`` does unless
-  given ``-j``.)
+  given ``-j``.) Sphinx 7.4, which Jupyter Book 1 installs today, records
+  those times in microseconds since the epoch, and older releases in
+  seconds; the tool takes either, from their size, and with ``--since``
+  stops with an error (exit 2) on times that are neither, rather than
+  report every page as cached, which would keep the workflow from saving
+  the cache.
 
 With ``--since``, a page this build did not read at all (Sphinx's read time
 for it, ``env.all_docs``, is before ``--since``: an incremental local build)
@@ -127,6 +132,26 @@ def rounded(value):
     return round(float(value), 2) if isinstance(value, (int, float)) and not isinstance(value, bool) else None
 
 
+def read_times(all_docs):
+    """``env.all_docs`` as seconds since the epoch.
+
+    Sphinx records when it finished reading each page: in microseconds since
+    the epoch (``time.time_ns() // 1_000``, Sphinx 7.4) or, in older releases,
+    in seconds. One unit for every page, told apart by size: seconds lie
+    between 1e9 and 1e11 (2001 to 5138), microseconds between 1e15 and 1e17.
+    """
+    values = list(all_docs.values())
+    numbers = all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in values)
+    for low, high, scale in ((1e9, 1e11, 1), (1e15, 1e17, 1_000_000)):
+        if numbers and all(low <= v < high for v in values):
+            return {page: t / scale for page, t in all_docs.items()}
+    example = next((v for v in values if not (numbers and (1e9 <= v < 1e11 or 1e15 <= v < 1e17))), values[0])
+    raise ReportError(
+        f"Sphinx's environment records read times this tool cannot read as seconds or microseconds since the "
+        f"epoch (one of them is {example!r}), so it cannot tell an executed page from a cached one"
+    )
+
+
 def collect(env, build_dir: Path, since=None):
     """``(rows, not_read)``: a row per page, and the pages left out as unread."""
     nb_metadata = getattr(env, "nb_metadata", None) or {}
@@ -135,10 +160,14 @@ def collect(env, build_dir: Path, since=None):
     reports_dir = build_dir / "html" / "reports"
     rows, not_read = [], []
     # Seconds since the epoch at which Sphinx finished reading each page this
-    # build read (all_docs holds microseconds). A page's read began when the
-    # one before it ended, or, for the first, when the build began.
-    read_end = {page: t / 1_000_000 for page, t in all_docs.items() if since is None or t / 1_000_000 >= since}
-    ends = sorted(read_end.values())
+    # build read. A page's read began when the one before it ended, or, for
+    # the first, when the build began. The times matter only with --since.
+    times = read_times(all_docs) if since is not None and all_docs else {}
+    if since is None:
+        read_end, ends = dict.fromkeys(all_docs), []
+    else:
+        read_end = {page: t for page, t in times.items() if t >= since}
+        ends = sorted(read_end.values())
 
     def read_start(page):
         i = bisect.bisect_left(ends, read_end[page])

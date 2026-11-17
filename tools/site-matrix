@@ -21,6 +21,12 @@ order named, each with the job settings its ``sites/<key>/site.yml`` decides.
   ``BUILD_ALLOWANCE`` minutes for the rest of a build from an empty cache. dp's
   own weekly build from an empty cache took 22 to 41 minutes in
   October-November 2026.
+* ``extra_packages``: the pip requirements ``site.yml`` lists for the leg to
+  install before the build (``[]`` without the field), and
+  ``packages_hash``, the first 16 hex digits of the SHA-256 of them, one per
+  line (``none`` for no list), which the execution cache's key carries, so a
+  change to the list starts a new cache. A value that is not a plain
+  requirement (``tools/pool-check``'s pattern) is refused.
 * ``cell_timeout`` and ``publishes`` as ``site.yml`` gives them.
 
 Only a site of ``type: series`` is built so far: its execution cache is keyed
@@ -39,6 +45,7 @@ runner class or type), 2 an error.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import re
@@ -56,6 +63,8 @@ RUNNERS = {
 }
 # Minutes a whole build from an empty cache may take, beyond one cell's limit.
 BUILD_ALLOWANCE = 120
+# One pip requirement, as tools/pool-check's site-yml rule allows it.
+REQUIREMENT_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._\-\[\],<>=!~*+]*")
 
 
 def site_keys():
@@ -79,6 +88,10 @@ def entry(key: str):
     cell_timeout = data.get("cell_timeout")
     if not (isinstance(cell_timeout, int) and not isinstance(cell_timeout, bool) and cell_timeout > 0):
         return None, f"sites/{key}: cell_timeout {cell_timeout!r} is not a whole number of seconds above 0"
+    packages = data.get("extra_packages", [])
+    if not (isinstance(packages, list)
+            and all(isinstance(p, str) and REQUIREMENT_RE.fullmatch(p) for p in packages)):
+        return None, f"sites/{key}: extra_packages {packages!r} is not a list of pip requirements"
     runs_on, image = RUNNERS[runner]
     return {
         "key": key,
@@ -87,6 +100,8 @@ def entry(key: str):
         "timeout_minutes": math.ceil(cell_timeout / 60) + BUILD_ALLOWANCE,
         "cell_timeout": cell_timeout,
         "publishes": list(data.get("publishes") or []),
+        "extra_packages": packages,
+        "packages_hash": hashlib.sha256("\n".join(packages).encode()).hexdigest()[:16] if packages else "none",
     }, None
 
 

@@ -17,6 +17,8 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from conftest import TOOLS_DIR
 
 TOOL = TOOLS_DIR / "execution-report"
@@ -125,6 +127,45 @@ def test_a_page_matching_an_entry_made_earlier_in_the_same_build_is_cached(tmp_p
     report = json.loads((tmp_path / "_build" / "execution_status.json").read_text(encoding="utf-8"))
     assert {row["page"]: row["execution"] for row in report["pages"]} == {
         "amss": "executed", "intro": "executed", "status": "executed", "zreferences": "cached"}
+
+
+@pytest.mark.parametrize("scale", [1, 1_000_000], ids=["seconds", "microseconds"])
+def test_read_times_in_seconds_or_microseconds_give_the_same_report(tmp_path, scale):
+    # Sphinx 7.4 records each page's read in microseconds since the epoch,
+    # older releases in seconds.
+    pages = {"amss": exec_data(mtime=SINCE + 60), "intro": exec_data(mtime=SINCE + 530),
+             "old": exec_data(mtime=SINCE - 3_600), "zreferences": exec_data(mtime=SINCE + 530)}
+    read = {"amss": (SINCE + 61) * scale, "intro": (SINCE + 531) * scale, "old": (SINCE - 3_000) * scale,
+            "zreferences": (SINCE + 701) * scale}
+    make_build(tmp_path, pages, all_docs=read, notebooks=list(pages))
+
+    res = run(tmp_path, "--since", str(SINCE))
+
+    assert res.returncode == 0, res.stderr
+    report = json.loads((tmp_path / "_build" / "execution_status.json").read_text(encoding="utf-8"))
+    assert {row["page"]: row["execution"] for row in report["pages"]} == {
+        "amss": "executed", "intro": "executed", "zreferences": "cached"}
+    assert report["summary"]["not_read"] == 1
+
+
+@pytest.mark.parametrize("read", [
+    {"a": 12_345},                                     # neither unit
+    {"a": 1.7e13},                                     # milliseconds, say
+    {"a": "2026-11-17T00:00:00"},                      # not a number
+    {"a": SINCE + 61, "b": (SINCE + 62) * 1_000_000},  # two units at once
+], ids=["small", "milliseconds", "text", "mixed"])
+def test_read_times_it_cannot_interpret_stop_the_report(tmp_path, read):
+    # Read as the wrong unit, every page would count as cached, and main would
+    # never save the cache: an error, not a quiet report.
+    make_build(tmp_path, {page: exec_data() for page in read}, all_docs=read, notebooks=list(read))
+
+    res = run(tmp_path, "--since", str(SINCE))
+
+    assert res.returncode == 2
+    assert "cannot tell an executed page from a cached one" in res.stderr
+    assert not (tmp_path / "_build" / "execution_status.json").exists()
+    # Without --since the times are not used, and the report is written.
+    assert run(tmp_path).returncode == 0
 
 
 def test_a_page_this_build_did_not_read_is_left_out_and_counted(tmp_path):

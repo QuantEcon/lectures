@@ -12,66 +12,104 @@ name: site-build
 # folders in sites/ are not built until their turn, so a pull request is never
 # held up by a site that has not been brought through yet. The first job reads
 # each named site's sites/<key>/site.yml (tools/site-matrix) and hands the
-# matrix to the second: the runner class gives runs-on and the container, and
-# the job's time limit is site.yml's cell_timeout plus an allowance for a
-# build from an empty cache (site.yml holds no job limit; tools/site-matrix
-# says why). Only an ubuntu-latest series site has a leg so far, in the
-# container dp's own workflows build in; a GPU site is refused until its leg
-# is written. `fail-fast: false`, so one site's failure never stops another's
-# build.
+# matrix to the second: the runner class gives runs-on and the container, the
+# job's time limit is site.yml's cell_timeout plus an allowance for a build
+# from an empty cache (site.yml holds no job limit; tools/site-matrix says
+# why), and extra_packages lists what the leg installs. Only an ubuntu-latest
+# series site has a leg so far; a GPU site is refused until its leg is
+# written. `fail-fast: false`, so one site's failure never stops another's
+# build. Every push or pull request that touches lectures/ or sites/ builds
+# every named site, whatever it changed: no site is skipped yet because its
+# toc does not reach the change.
+#
+# THE CONTAINER is ghcr.io/quantecon/quantecon-build:latest, the image dp's
+# own workflows build in. It is not public: the build job pulls it with its
+# GITHUB_TOKEN, so it has `packages: read`, and the package's Actions access
+# list (Manage Actions access, in the QuantEcon organisation's package
+# settings) must include QuantEcon/lectures, which nothing here can check.
+# Without that, the job fails in "Initialize containers" with unauthorized.
 #
 # EACH LEG, in the container:
 #   1. checks out with full history (the theme dates each page from git log);
 #   2. reconstructs mirror/<key>/ at its pin (tools/sync <key>: a sparse,
 #      shallow fetch of the series' lectures/ and environment.yml, a few
 #      seconds), for the one file the cache key needs, environment.yml;
-#   3. restores the site's execution cache (below);
-#   4. stages the site into lectures/ (tools/stage-site): its own pages and
+#   3. installs site.yml's extra_packages, if it has any, with pip into the
+#      image's environment, which jb runs in. dp's is jax, the CPU wheel: the
+#      image has none, and mccall_risk imports it without installing it;
+#   4. restores the site's execution cache (below);
+#   5. stages the site into lectures/ (tools/stage-site): its own pages and
 #      files, and its _config.yml and _toc.yml, where `jb build lectures`
 #      finds them with no --config or --toc, and where build-lectures' check
 #      of the executed notebooks reads the configuration;
-#   5. builds HTML with QuantEcon/actions' build-lectures, `jb build lectures`,
+#   6. builds HTML with QuantEcon/actions' build-lectures, `jb build lectures`,
 #      strict: `-n -W --keep-going`, so a warning, a cell that raises, an
 #      unresolved reference or a label two selected lectures both define
 #      fails the build, and every failure is listed, not only the first.
 #      The configuration's paths resolve as from the site's own folder: the
 #      branding and the bibliography against lectures/, the execution cache
 #      against the directory jb runs in, the repository's root;
-#   6. writes execution_status.json (tools/execution-report): one row per page
+#   7. writes execution_status.json (tools/execution-report): one row per page
 #      executed or taken from the cache, with status, seconds, kernel and
 #      which of the two; it runs after a failed build too;
-#   7. keeps the HTML (html-<key>, green builds only, 7 days) and the report
-#      (execution-status-<key>) as artefacts; a failed build also uploads
-#      build-lectures' failure reports (execution-reports-<key>);
-#   8. saves the execution cache (below), and unstages the site.
+#   8. keeps the HTML (html-<key>, green builds only, 7 days) and the report
+#      (execution-status-<key>) as artefacts. A failed build also uploads
+#      build-lectures' failure reports (execution-reports-<key>): each failed
+#      page's traceback, from _build/html/reports. It does not hold the
+#      site's execution cache, which build-lectures looks for at
+#      _build/.jupyter_cache, not at the site's path;
+#   9. saves the execution cache (below), and unstages the site.
 #
 # THE EXECUTION CACHE is actions/cache, one per site, at the path every
 # site's _config.yml names, _build/jupyter_cache/<key> (pool-check rule 7).
-# Its key is jb1-<key>-<hash of mirror/<key>/environment.yml>-<run>: a cache
-# is never overwritten, so each save is a new key, and a restore takes the
-# newest saved under jb1-<key>-<env hash>-. There is no fallback across
-# environments: a changed environment.yml starts from an empty cache rather
-# than reuse outputs that other packages produced. Pull requests only restore.
-# A save happens on main alone (a push, a manual run or the schedule), after
-# a green build that executed at least one page; a build that took every page
-# from the cache has nothing new to save. The container is
-# quantecon-build:latest, as in dp's own workflows, whose cache is keyed the
-# same way, on environment.yml, so a new image does not empty the cache.
+# Its key is jb1-<key>-<env hash>-<packages hash>-<run>: the hash of
+# mirror/<key>/environment.yml, the hash of site.yml's extra_packages
+# (tools/site-matrix), and the run. A cache is never overwritten, so each save
+# is a new key, and a restore takes the newest saved under the same two
+# hashes; there is no fallback to another key's cache.
+#   What the key catches: a change to the series' environment.yml, or to the
+#   site's extra_packages, starts an empty cache, so every page is executed
+#   again. The build never installs environment.yml (the packages come from
+#   the image): the file only names the environment the series declares, as
+#   in dp's own cache keys.
+#   What it does not catch: the packages that execute a page come from the
+#   floating :latest image and, for an extra package such as jax, from the
+#   newest release pip finds. A change in either keeps the key, so a page is
+#   executed again only when its own code changes (jupyter-cache matches a
+#   page by its code cells) or the key does. dp's own cache has the same gap.
+# Pull requests only restore. A save happens on main alone (a push, a manual
+# run or the schedule), after a green build that executed at least one page;
+# a build that took every page from the cache has nothing new to save.
+#
+# COLD BUILDS: until a run on main has saved a cache under the current key,
+# every build of a site executes every page (dp: about 50 pages, 20 to 40
+# minutes on ubuntu-latest). So every pull request before this workflow's
+# first green run on main builds cold, every time it runs, and so does every
+# build after the key changes, until main saves again.
+#
+# SHOWING THE CACHE RESTORE (QuantEcon/project-monorepo#25 asks for it):
+# a pull request never saves, so its own runs cannot show one. It is shown
+# after the merge: the merge's push to main builds cold and saves, and then
+# a manual run on main (or the schedule) restores that cache, which the run
+# summary names and the execution report counts (every page cached, none
+# executed).
 #
 # TRIGGERS: a push to main or a pull request that touches the pool, the sites,
 # the tools a leg runs or what tools/sync reads, and this file; a manual run;
 # and twice a week on main, Monday and Thursday at 05:17 UTC, which keeps each
 # site's cache in use (GitHub drops a cache not read for 7 days, after which
-# every pull request would execute every page) and catches a new container
-# image between pushes. sync.yml pushes its pin commits with GITHUB_TOKEN,
-# which starts no run here. drift-check.yml's refresh pull request touches
-# lectures/, so it is built like any other (its run waits for a maintainer's
-# approval, as that workflow notes), and so is its merge.
+# every pull request would build cold). With every page in the cache, such a
+# run executes nothing: it checks the current image's Sphinx stack and the
+# pages' rendering, not their execution. sync.yml pushes its pin commits with
+# GITHUB_TOKEN, which starts no run here. drift-check.yml's refresh pull
+# request touches lectures/, so it is built like any other (its run waits for
+# a maintainer's approval, as that workflow notes), and so is its merge.
 #
 # WHAT IT DOES NOT DO (yet): publish; build the PDF or the notebooks (dp
 # publishes HTML alone); post a preview (QuantEcon/actions#336); build on
 # mystmd (QuantEcon/actions#337); build only the sites whose toc lists a
-# changed file.
+# changed file; give every site one environment (each installs its own
+# extra_packages for now).
 
 on:
   push:
@@ -105,9 +143,13 @@ on:
 permissions:
   contents: read
 
-# One run per branch or pull request at a time. A newer push to a pull request
-# cancels its running build; on main a run is never cancelled, since it saves
-# the cache the pull requests restore.
+# One group per branch or pull request. On a pull request a newer push cancels
+# the build in progress (cancel-in-progress). On main a build in progress is
+# never cancelled, since it saves the cache the pull requests restore. In
+# either case GitHub keeps at most one run waiting per group, and a newer run
+# cancels the one waiting, whatever cancel-in-progress says: of three quick
+# pushes to main, the first builds, the second is cancelled while it waits,
+# and the third builds when the first has finished.
 concurrency:
   group: site-build-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -155,6 +197,10 @@ jobs:
     timeout-minutes: ${{ matrix.site.timeout_minutes }}
     container:
       image: ${{ matrix.site.image }}
+    # packages: read pulls the container image, which is not public (above).
+    permissions:
+      contents: read
+      packages: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -170,11 +216,27 @@ jobs:
           KEY: ${{ matrix.site.key }}
         run: python tools/sync "$KEY"
 
+      # site.yml's extra_packages, into the environment jb runs in: a login
+      # shell, as build-lectures uses, so `python` is that environment's (and
+      # -eo pipefail, which a custom shell does not get). pool-check and
+      # tools/site-matrix allow only plain requirements (no space, none
+      # starting with -), so no value is read as a pip option. pip's log names
+      # the version it installed.
+      - name: Install the site's extra packages
+        if: ${{ join(matrix.site.extra_packages, ' ') != '' }}
+        shell: bash -leo pipefail {0}
+        env:
+          EXTRA_PACKAGES: ${{ join(matrix.site.extra_packages, ' ') }}
+        run: |
+          read -ra packages <<< "$EXTRA_PACKAGES"
+          python -m pip install --no-input --root-user-action=ignore "${packages[@]}"
+
       - name: Name the site's cache and its key
         id: site
         env:
           KEY: ${{ matrix.site.key }}
           ENV_HASH: ${{ hashFiles(format('mirror/{0}/environment.yml', matrix.site.key)) }}
+          PACKAGES_HASH: ${{ matrix.site.packages_hash }}
           RUN: ${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           if [ -z "$ENV_HASH" ]; then
@@ -183,8 +245,8 @@ jobs:
           fi
           {
             echo "cache-path=_build/jupyter_cache/$KEY"
-            echo "cache-prefix=jb1-$KEY-$ENV_HASH-"
-            echo "cache-key=jb1-$KEY-$ENV_HASH-$RUN"
+            echo "cache-prefix=jb1-$KEY-$ENV_HASH-$PACKAGES_HASH-"
+            echo "cache-key=jb1-$KEY-$ENV_HASH-$PACKAGES_HASH-$RUN"
           } >> "$GITHUB_OUTPUT"
 
       # The primary key carries this run's ID, so it never matches: the

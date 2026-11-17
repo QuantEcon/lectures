@@ -149,13 +149,39 @@ def test_site_yml_has_the_fields_the_build_reads_with_valid_values(make_repo):
     assert problems(res) == [
         "[site-yml] sites/intro/site.yml has no `url`",
         "[site-yml] sites/intro/site.yml: `runners` is not a field the build reads (type, runner, cell_timeout, "
-        "publishes, url)",
+        "publishes, url; optional: extra_packages)",
         "[site-yml] sites/intro/site.yml: type 'course' is not one of series",
         "[site-yml] sites/intro/site.yml: runner 'macos-latest' is not one of ubuntu-latest, g4dn.2xlarge",
         "[site-yml] sites/intro/site.yml: cell_timeout '600' is not a whole number of seconds above 0",
         "[site-yml] sites/intro/site.yml: publishes ['pdf', 'epub'] is not a list of html, pdf, notebooks, each "
         "at most once, with html",
     ]
+
+
+@pytest.mark.parametrize("value,ok", [
+    (["jax"], True),
+    (["jax[cuda13]", "optax>=0.2,<0.3"], True),
+    ([], False),
+    ("jax", False),
+    (["jax", "jax"], False),
+    (["-r requirements.txt"], False),
+    (["--index-url=https://example.org/simple"], False),
+    (["jax @ https://example.org/jax.whl"], False),
+    ([3], False),
+])
+def test_site_yml_may_list_extra_packages_as_plain_pip_requirements(make_repo, value, ok):
+    repo = pool_repo(make_repo)
+    make_site(repo, meta=site_yml(extra_packages=value))
+
+    res = repo.pool_check()
+
+    if ok:
+        assert res.returncode == 0, res.stdout + res.stderr
+    else:
+        assert problems(res) == [
+            f"[site-yml] sites/intro/site.yml: extra_packages {value!r} is not a list of pip requirements (a name, "
+            "optional [extras] and version specifiers, no spaces, none starting with -), each at most once",
+        ]
 
 
 def test_site_yml_url_is_the_published_address_and_a_series_site_is_named_for_its_series(make_repo):
@@ -414,6 +440,18 @@ def test_a_site_that_matches_its_series_but_for_marked_additions_is_clean(make_r
     repo, site, mirror = drift_repo(make_repo)
     toc = (site / "_toc.yml").read_text()
     write(site / "_toc.yml", toc + "  - file: extra  # site addition: a lecture the series lacks\n")
+
+    res = repo.drift_check()
+
+    assert res.returncode == 0, res.stdout + res.stderr
+    assert stale(res) == []
+
+
+def test_site_yml_is_the_sites_own_and_never_site_stale(make_repo):
+    # The series has no site.yml, and the site's holds what only the build
+    # reads, extra_packages among it.
+    repo, site, mirror = drift_repo(make_repo)
+    write(site / "site.yml", site_yml(extra_packages=["jax"]))
 
     res = repo.drift_check()
 

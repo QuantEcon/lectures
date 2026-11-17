@@ -3,6 +3,7 @@ and the workflow's own settings that the matrix relies on."""
 
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
 import subprocess
@@ -17,9 +18,9 @@ REPO = TOOLS_DIR.parent
 WORKFLOW = REPO / ".github" / "workflows" / "site-build.yml"
 
 
-def site_yml(runner="ubuntu-latest", cell_timeout=2400, type_="series", publishes=("html",)):
+def site_yml(runner="ubuntu-latest", cell_timeout=2400, type_="series", publishes=("html",), **more):
     return yaml.safe_dump({"type": type_, "runner": runner, "cell_timeout": cell_timeout,
-                           "publishes": list(publishes), "url": "https://example.org/"})
+                           "publishes": list(publishes), "url": "https://example.org/", **more})
 
 
 def scratch(root: Path, sites):
@@ -37,7 +38,8 @@ def run(root: Path, *keys):
 
 
 def test_a_cpu_series_site_gets_its_runner_container_and_time_limit(tmp_path):
-    root = scratch(tmp_path, {"dp": site_yml(), "intro": site_yml(cell_timeout=601, publishes=["html", "pdf"]),
+    root = scratch(tmp_path, {"dp": site_yml(extra_packages=["jax"]),
+                              "intro": site_yml(cell_timeout=601, publishes=["html", "pdf"]),
                               "jax": site_yml(runner="g4dn.2xlarge")})
 
     res = run(root, "intro", "dp", "intro")
@@ -46,9 +48,11 @@ def test_a_cpu_series_site_gets_its_runner_container_and_time_limit(tmp_path):
     assert "\n" not in res.stdout.strip()  # one line, for $GITHUB_OUTPUT
     assert json.loads(res.stdout) == [
         {"key": "intro", "runs_on": "ubuntu-latest", "image": "ghcr.io/quantecon/quantecon-build:latest",
-         "timeout_minutes": 11 + 120, "cell_timeout": 601, "publishes": ["html", "pdf"]},
+         "timeout_minutes": 11 + 120, "cell_timeout": 601, "publishes": ["html", "pdf"],
+         "extra_packages": [], "packages_hash": "none"},
         {"key": "dp", "runs_on": "ubuntu-latest", "image": "ghcr.io/quantecon/quantecon-build:latest",
-         "timeout_minutes": 40 + 120, "cell_timeout": 2400, "publishes": ["html"]},
+         "timeout_minutes": 40 + 120, "cell_timeout": 2400, "publishes": ["html"],
+         "extra_packages": ["jax"], "packages_hash": hashlib.sha256(b"jax").hexdigest()[:16]},
     ]
     assert "not built (not named): jax" in res.stderr
 
@@ -64,6 +68,25 @@ def test_a_site_with_no_leg_yet_is_refused_and_nothing_is_printed(tmp_path):
     assert "sites/jax: runner 'g4dn.2xlarge' has no leg yet" in res.stderr
     assert "sites/course: type 'course' has no leg yet" in res.stderr
     assert "there is no site sites/nope/" in res.stderr
+
+
+def test_the_packages_hash_follows_the_list_and_a_value_pip_could_read_as_an_option_is_refused(tmp_path):
+    root = scratch(tmp_path, {"a": site_yml(extra_packages=["jax"]), "b": site_yml(extra_packages=["jax", "optax"]),
+                              "c": site_yml(extra_packages=["--index-url=https://example.org/simple"]),
+                              "d": site_yml(extra_packages="jax")})
+
+    res = run(root, "a", "b")
+    assert res.returncode == 0, res.stderr
+    first, second = json.loads(res.stdout)
+    assert first["packages_hash"] != second["packages_hash"]
+    assert second["packages_hash"] == hashlib.sha256(b"jax\noptax").hexdigest()[:16]
+
+    res = run(root, "c", "d")
+    assert res.returncode == 1
+    assert res.stdout == ""
+    assert "sites/c: extra_packages ['--index-url=https://example.org/simple'] is not a list of pip requirements" \
+        in res.stderr
+    assert "sites/d: extra_packages 'jax' is not a list of pip requirements" in res.stderr
 
 
 def test_the_workflow_allowlist_resolves_against_the_real_sites():

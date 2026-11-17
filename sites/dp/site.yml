@@ -9,3 +9,7 @@ cell_timeout: 2400
 publishes: [html]
 # html.baseurl in _config.yml
 url: https://quantecon.github.io/lecture-dp/
+# installed before the build, as the image has no jax: mccall_risk, the site's
+# addition from intermediate, imports it without installing it (the owner's
+# decision, 2026-11-17); pip installs the CPU wheel on ubuntu-latest
+extra_packages: [jax]
