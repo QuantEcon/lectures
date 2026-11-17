@@ -18,9 +18,10 @@ def write(path, data):
 
 
 def config(key="intro", url=URL, mapping=None, disabled=True, **top):
-    """A site's _config.yml, as the series write it: branding, the address
-    and the cross-reference settings, and the repository the site is built
-    from."""
+    """A valid site's _config.yml as the build reads it: the series' settings
+    (branding, the address, the cross-reference settings) with the site
+    additions already applied, so the pool's repository and execution cache,
+    not the series' own."""
     sphinx = {
         "html_favicon": "_static/lectures-favicon.ico",
         "html_theme_options": {
