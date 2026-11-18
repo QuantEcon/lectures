@@ -83,7 +83,9 @@ left to the newest release a build happens to find:
   (``pip3``, ``pip3.13``, by name or path), ``python -m pip`` (``py``,
   ``python3.13``, a path, ``{sys.executable}``), ``uv pip``, ``conda``,
   ``mamba`` or ``micromamba``, after ``sudo`` too. Short options are read
-  alone or run together (``-qU``, ``-rfile``). An install this check cannot
+  as each installer reads its own, alone or run together (``-qU``,
+  ``-rfile``), the first that takes a value taking the rest of its word
+  (``-cconda-forge``). An install this check cannot
   read (a requirements file, an editable, an address, an open quote) is
   reported, not skipped. Python that installs (``subprocess``,
   ``os.system``) is not read.
@@ -211,17 +213,23 @@ PIP_RE = re.compile(r"^(?:\S*/)?pip[0-9.]*$")
 CONDA_RE = re.compile(r"^(?:\S*/)?(?:conda|mamba|micromamba)$")
 # Shell words that end one command and start the next.
 SHELL_SEPARATORS = ("&&", "||", ";", ";;", "|", "|&", "&", "(", ")")
-# Options that take the next word as their value, which is not a package.
+# Long options that take the next word as their value (or ``--option=value``),
+# which is not a package.
 INSTALL_VALUE_OPTIONS = (
-    "-c", "--channel", "-n", "--name", "-p", "--prefix", "-i", "--index-url", "--extra-index-url",
-    "-f", "--find-links", "-t", "--target", "--root", "--src", "--upgrade-strategy", "--platform",
+    "--channel", "--name", "--prefix", "--index-url", "--extra-index-url",
+    "--find-links", "--target", "--root", "--src", "--upgrade-strategy", "--platform",
     "--python-version", "--implementation", "--abi", "--no-binary", "--only-binary", "--progress-bar",
     "--log", "--proxy", "--retries", "--timeout", "--cache-dir", "--trusted-host", "--exists-action",
     "--cert", "--client-cert", "--constraint", "--root-user-action", "--use-feature", "--use-deprecated",
-    "-C", "--config-settings", "--python", "--solver", "--repodata-fn", "--revision",
+    "--config-settings", "--python", "--solver", "--repodata-fn", "--revision",
 )
-# Options that install what the line does not name: the check cannot read them.
-INSTALL_UNREADABLE_OPTIONS = ("-r", "--requirement", "-e", "--editable", "--file")
+# Long options that install what the line does not name: the check cannot read them.
+INSTALL_UNREADABLE_OPTIONS = ("--requirement", "--editable", "--file")
+# Each installer's short options that take a value, and those that install
+# what the line does not name. They differ: pip's ``-C`` takes a value
+# (``--config-settings``), conda's is a flag (``--use-index-cache``).
+SHORT_VALUE_OPTIONS = {"pip": "cfitC", "conda": "cnp"}
+SHORT_UNREADABLE_OPTIONS = {"pip": "re", "conda": ""}
 # A conda package: an optional channel, a name, and what follows it.
 CONDA_SPEC_RE = re.compile(r"^(?:[^:\s]+::)?([A-Za-z0-9][A-Za-z0-9._\-]*)(.*)$")
 # A conda pin to one version: ``==1.3.1``. A single ``=`` is a prefix to
@@ -790,6 +798,37 @@ def package_name(name: str) -> str:
     return re.sub(r"[-_.]+", "-", name).lower()
 
 
+def install_words(tool: str, arguments):
+    """An install's arguments read as its installer reads them: the words
+    that name packages, whether it upgrades what it installs (pip's
+    ``--upgrade`` or ``-U``; a conda install always may), and the first
+    option that installs what the line does not name, or None (reading stops
+    there). Short options are read left to right, alone or run together
+    (``-qU``), and the first that takes a value takes the rest of its word,
+    or the next word: ``-cconda-forge`` is ``-c conda-forge``."""
+    names, upgrade, takes_value = [], tool == "conda", False
+    for word in arguments:
+        if takes_value:
+            takes_value = False
+        elif word.startswith("--"):
+            option = word.split("=", 1)[0]
+            if option in INSTALL_UNREADABLE_OPTIONS:
+                return names, upgrade, option
+            upgrade |= option == "--upgrade"
+            takes_value = "=" not in word and option in INSTALL_VALUE_OPTIONS
+        elif word.startswith("-"):
+            for n, c in enumerate(word[1:], 1):
+                if c in SHORT_UNREADABLE_OPTIONS[tool]:
+                    return names, upgrade, f"-{c}"
+                upgrade |= tool == "pip" and c == "U"
+                if c in SHORT_VALUE_OPTIONS[tool]:
+                    takes_value = n == len(word) - 1
+                    break
+        else:
+            names.append(word)
+    return names, upgrade, None
+
+
 def lecture_installs(slug: str, text: str):
     """What ``lectures/<slug>.md`` installs in its code cells, as ``(line
     number, name, requirement, replaces)`` (``requirement`` the pip
@@ -826,31 +865,8 @@ def lecture_installs(slug: str, text: str):
                 if not found:
                     continue
                 tool, arguments = found
-                upgrade = tool == "conda" or any(
-                    w == "--upgrade" or (w[:1] == "-" and w[1:2] != "-" and "U" in w[1:]) for w in arguments
-                )
-                takes_value = False
-                for word in arguments:
-                    if takes_value:
-                        takes_value = False
-                        continue
-                    if word.startswith("--"):
-                        option = word.split("=", 1)[0]
-                        if option in INSTALL_UNREADABLE_OPTIONS:
-                            problems.append(("install-listed", f"{unreadable} (`{option}`): name each package on the line"))
-                            break
-                        takes_value = "=" not in word and option in INSTALL_VALUE_OPTIONS
-                        continue
-                    if word.startswith("-"):
-                        # Short options, alone or run together (`-qU`), and one
-                        # that takes a value: the rest of the word, or the next.
-                        option = next((f"-{c}" for c in word[1:] if f"-{c}" in INSTALL_UNREADABLE_OPTIONS), None)
-                        if option:
-                            problems.append(("install-listed", f"{unreadable} (`{option}`): name each package on the line"))
-                            break
-                        valued = next((n for n, c in enumerate(word[1:], 1) if f"-{c}" in INSTALL_VALUE_OPTIONS), None)
-                        takes_value = valued == len(word) - 1
-                        continue
+                names, upgrade, option = install_words(tool, arguments)
+                for word in names:
                     if tool == "conda":
                         spec = CONDA_SPEC_RE.match(word)
                         if not spec:
@@ -869,6 +885,8 @@ def lecture_installs(slug: str, text: str):
                         ))
                         continue
                     installs.append((start + k, package_name(requirement.name), requirement, executed and upgrade))
+                if option:
+                    problems.append(("install-listed", f"{unreadable} (`{option}`): name each package on the line"))
     return installs, problems
 
 
