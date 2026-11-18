@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.9"
-# dependencies = ["pyyaml"]
+# dependencies = ["pyyaml", "packaging"]
 # ///
 """tools/pool-check — check that the pool keeps its layout conventions.
 
@@ -66,6 +66,31 @@ too, so a site's folder stays true to the pool it is built from:
   (``SITE_OPTIONAL_FIELDS``: ``extra_packages``, pip requirements the build
   installs), and its ``url`` is ``html.baseurl``.
 
+The environment the sites are to build in, ``_base/environment-update.yml``,
+is checked against the lectures, so a package a lecture installs is never
+left to the newest release a build happens to find:
+
+* ``install-listed`` — every package a pool lecture's code cells install is
+  listed in ``_base/environment-update.yml``, by name (as PEP 503 compares
+  them, and across its pip and conda lists), and a pip requirement's own
+  version limit (``"prettytable<3.18"``) allows the listed version. Read
+  are the notebook cells MyST-NB makes (top-level ``{code-cell}`` blocks;
+  ``skip-execution`` ones too, since a lecture that skips its install cell
+  still imports the package), their shell lines (``!``, ``%pip``,
+  ``%conda``, ``%mamba``, and ``%%bash`` or ``%%sh`` cells), and in them
+  every command, split as a shell splits them, that runs ``pip``, ``pip3``,
+  ``python -m pip``, ``uv pip``, ``conda``, ``mamba`` or ``micromamba``
+  ``install``. A conda install is matched by name alone. An install this
+  check cannot read (a requirements file, an editable, an address, an open
+  quote) is reported, not skipped. Python that installs (``subprocess``,
+  ``os.system``) is not read.
+* ``environment``   — ``_base/environment-update.yml`` is a Conda
+  environment file whose every package is pinned to one version, each
+  once: ``name==version`` in its pip list and in its conda list (``pip``
+  itself aside), where a single ``=`` is a prefix (``=1.3`` is ``1.3.*``).
+  Conda applies the pip list with ``pip install -U``, so an entry without a
+  version would take the newest release on every build.
+
 One report is not a rule. A label that more than one pool lecture defines is
 counted on every run and listed by ``--labels``: targets (``(name)=`` and
 ``:name:``, compared without case, as Sphinx does) and equation labels
@@ -85,8 +110,8 @@ Usage
     tools/pool-check --labels   # also list the labels more than one lecture defines
 
 Exit status: 0 clean, 1 a rule broken, 2 an error. It reads ``lectures/``,
-``sites/``, the series keys in ``sync/manifest.yml`` and ``sync/ledger.yml``,
-and writes nothing. Run it on a tree with no site staged: a staged site's
+``sites/``, ``_base/environment-update.yml``, the series keys in
+``sync/manifest.yml`` and ``sync/ledger.yml``, and writes nothing. Run it on a tree with no site staged: a staged site's
 pages and files in ``lectures/`` are not the pool's (``tools/stage-site
 --clean``).
 """
@@ -156,6 +181,41 @@ REQUIREMENT_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._\-\[\],<>=!~*+]*")
 # repository, and the full history the page's path in it.
 POOL_REPOSITORY_URL = "https://github.com/QuantEcon/lectures"
 POOL_PATH_TO_DOCS = POOL_DIR.name
+
+# The environment the sites are to build in (``install-listed``,
+# ``environment``).
+ENVIRONMENT_PATH = ROOT / "_base" / "environment-update.yml"
+# A fence as MyST-NB's reader finds one: at most three spaces in, and colon
+# fences (``:::{note}``) as well, whose bodies are no more top level than a
+# backtick directive's.
+CELL_FENCE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,}|:{3,})(.*)$")
+# A line a code cell hands to a shell: ``!cmd`` (``!!cmd``), or the magics
+# ``%pip``, ``%conda`` and ``%mamba``. Every line of a ``%%bash`` or ``%%sh``
+# cell is one too.
+SHELL_LINE_RE = re.compile(r"^[ \t]*(?:!+|%(?=(?:pip|conda|mamba)\b))(.*)$")
+SHELL_CELL_RE = re.compile(r"^[ \t]*%%(?:bash|sh|script[ \t]+(?:ba)?sh)\b")
+# A cell's tags, from ``:tags: [...]`` or a ``---`` block's ``tags: [...]``.
+TAGS_RE = re.compile(r"^:?tags:[ \t]*\[([^\]]*)\]")
+# What runs a Python module (``python -m pip``) in a shell line.
+PYTHON_RE = re.compile(r"^(?:python[0-9.]*|\{sys\.executable\})$")
+# Shell words that end one command and start the next.
+SHELL_SEPARATORS = ("&&", "||", ";", ";;", "|", "|&", "&", "(", ")")
+# Options that take the next word as their value, which is not a package.
+INSTALL_VALUE_OPTIONS = (
+    "-c", "--channel", "-n", "--name", "-p", "--prefix", "-i", "--index-url", "--extra-index-url",
+    "-f", "--find-links", "-t", "--target", "--root", "--src", "--upgrade-strategy", "--platform",
+    "--python-version", "--implementation", "--abi", "--no-binary", "--only-binary", "--progress-bar",
+    "--log", "--proxy", "--retries", "--timeout", "--cache-dir", "--trusted-host", "--exists-action",
+    "--cert", "--client-cert", "--constraint", "--root-user-action", "--use-feature", "--use-deprecated",
+    "-C", "--config-settings", "--python", "--solver", "--repodata-fn", "--revision",
+)
+# Options that install what the line does not name: the check cannot read them.
+INSTALL_UNREADABLE_OPTIONS = ("-r", "--requirement", "-e", "--editable", "--file")
+# A conda package: an optional channel, a name, and what follows it.
+CONDA_SPEC_RE = re.compile(r"^(?:[^:\s]+::)?([A-Za-z0-9][A-Za-z0-9._\-]*)(.*)$")
+# A conda pin to one version: ``==1.3.1``. A single ``=`` is a prefix to
+# conda (``=1.3`` matches ``1.3.*``), so it pins nothing.
+CONDA_PIN_RE = re.compile(r"^==[0-9][A-Za-z0-9._+!]*$")
 
 FENCE_RE = re.compile(r"^[ \t]*(`{3,}|~{3,})(.*)$")
 # Fenced blocks whose body is code or literal text, not MyST prose.
@@ -623,6 +683,271 @@ def check_sites(sites: Path, pool: Path, lectures, series_keys, consumers):
     return keys, problems
 
 
+def code_cells(text: str):
+    """``(line number, lines, tags)`` for each of a lecture's code cells: the
+    top-level ``{code-cell}`` blocks MyST-NB makes notebook cells of. A code
+    cell inside another directive, fenced with backticks, tildes or colons,
+    is not a notebook cell, and is not read. ``lines`` is the cell's code,
+    after its options (``:key: value`` lines or a ``---`` block), and the
+    line number is its first line's; ``tags`` are the cell's tags."""
+
+    def closes(line, fence):
+        m = CELL_FENCE_RE.match(line)
+        return bool(m) and m.group(1)[0] == fence[0] and len(m.group(1)) >= len(fence) and not m.group(2).strip()
+
+    lines = text.split("\n")
+    i = 0
+    while i < len(lines):
+        m = CELL_FENCE_RE.match(lines[i])
+        if not m or (m.group(1)[0] == "`" and "`" in m.group(2)):
+            i += 1
+            continue
+        end = next((j for j in range(i + 1, len(lines)) if closes(lines[j], m.group(1))), len(lines))
+        if m.group(1)[0] != ":" and m.group(2).strip().startswith("{code-cell}"):
+            body, options = lines[i + 1 : end], 0
+            if body and body[0].strip() == "---":
+                options = next((k + 1 for k in range(1, len(body)) if body[k].strip() == "---"), 0)
+            else:
+                while options < len(body) and body[options].startswith(":"):
+                    options += 1
+            tags = []
+            for option in body[:options]:
+                t = TAGS_RE.match(option.strip())
+                if t:
+                    tags += [tag.strip().strip("'\"") for tag in t.group(1).split(",") if tag.strip()]
+            yield i + 2 + options, body[options:], tags
+        i = end + 1
+
+
+def shell_commands(line: str):
+    """The commands a shell line runs, each a list of its words, with the
+    redirections (``> log``, ``2>&1``) taken out. Raises ValueError for a
+    line the shell could not read either (an open quote, a trailing ``\\``)."""
+    import shlex
+
+    lexer = shlex.shlex(line, posix=True, punctuation_chars=True)
+    lexer.whitespace_split = True
+    commands, command, target = [], [], False
+    for word in lexer:
+        if target:  # a redirection's file or descriptor
+            target = False
+            continue
+        if word in SHELL_SEPARATORS:
+            commands.append(command)
+            command = []
+        elif word and set(word) <= set("<>&|") and set(word) & set("<>"):
+            if command and command[-1].isdigit():  # `2>`: the descriptor, not a word
+                command.pop()
+            target = True
+        elif word:
+            command.append(word)
+    commands.append(command)
+    return [c for c in commands if c]
+
+
+def install_arguments(words):
+    """``(tool, its install subcommand's arguments)`` when a shell command
+    installs packages, else None: ``pip install``, ``pip3``, ``python -m
+    pip``, ``{sys.executable} -m pip``, ``uv pip``, and ``conda``,
+    ``mamba`` or ``micromamba install``. ``tool`` is ``pip`` or ``conda``."""
+    i = 2 if len(words) > 1 and PYTHON_RE.match(words[0]) and words[1] == "-m" else 0
+    if words[i : i + 2] == ["uv", "pip"]:
+        tool, i = "pip", i + 2
+    elif words[i : i + 1] in (["pip"], ["pip3"]):
+        tool, i = "pip", i + 1
+    elif words[i : i + 1] in (["conda"], ["mamba"], ["micromamba"]):
+        tool, i = "conda", i + 1
+    else:
+        return None
+    while i < len(words) and words[i].startswith("-"):  # options before the subcommand: `pip -q install`
+        i += 1
+    if words[i : i + 1] != ["install"]:
+        return None
+    return tool, words[i + 1 :]
+
+
+def package_name(name: str) -> str:
+    """A package's name as PEP 503 compares it."""
+    return re.sub(r"[-_.]+", "-", name).lower()
+
+
+def lecture_installs(slug: str, text: str):
+    """What ``lectures/<slug>.md`` installs in its code cells, as ``(line
+    number, name, requirement)`` (``requirement`` the pip requirement, None
+    for conda), and each install this check cannot read, as an
+    ``install-listed`` problem. A ``skip-execution`` cell is read too: a
+    lecture that skips its install cell still imports what it installs."""
+    from packaging.requirements import InvalidRequirement, Requirement
+
+    installs, problems = [], []
+    for start, body, _tags in code_cells(text):
+        shell_cell = bool(body) and bool(SHELL_CELL_RE.match(body[0]))
+        for k, line in enumerate(body):
+            if shell_cell:
+                command_line = line if k else ""
+            else:
+                m = SHELL_LINE_RE.match(line)
+                command_line = m.group(1) if m else ""
+            if not command_line.strip():
+                continue
+            where = f"lectures/{slug}.md:{start + k}"
+            unreadable = f"{where}: `{line.strip()}` installs what this check cannot read"
+            try:
+                commands = shell_commands(command_line)
+            except ValueError as exc:
+                if re.search(r"\b(?:pip3?|conda|mamba|micromamba)\b.*\binstall\b", command_line):
+                    problems.append(("install-listed", f"{unreadable} ({exc}): write it as one plain line"))
+                continue
+            for words in commands:
+                found = install_arguments(words)
+                if not found:
+                    continue
+                tool, arguments = found
+                takes_value = False
+                for word in arguments:
+                    if takes_value:
+                        takes_value = False
+                        continue
+                    if word.startswith("-"):
+                        option = word.split("=", 1)[0]
+                        if option in INSTALL_UNREADABLE_OPTIONS:
+                            problems.append(("install-listed", f"{unreadable} (`{option}`): name each package on the line"))
+                            break
+                        takes_value = "=" not in word and option in INSTALL_VALUE_OPTIONS
+                        continue
+                    if tool == "conda":
+                        spec = CONDA_SPEC_RE.match(word)
+                        if not spec:
+                            problems.append(("install-listed", f"{unreadable} (`{word}`)"))
+                            continue
+                        installs.append((start + k, package_name(spec.group(1)), None))
+                        continue
+                    try:
+                        requirement = Requirement(word)
+                    except InvalidRequirement:
+                        requirement = None
+                    if requirement is None or requirement.url:
+                        problems.append((
+                            "install-listed",
+                            f"{unreadable} (`{word}`): name the package, not a file or an address",
+                        ))
+                        continue
+                    installs.append((start + k, package_name(requirement.name), requirement))
+    return installs, problems
+
+
+def read_environment(path: Path, where: str):
+    """The packages the environment file lists, as ``{name: version}`` (the
+    ``Version`` it pins, or None when it pins none or the version is not one
+    PEP 440 reads), and every ``environment`` rule it breaks as ``(tag,
+    message)``."""
+    import yaml
+    from packaging.requirements import InvalidRequirement, Requirement
+    from packaging.version import InvalidVersion, Version
+
+    problems, pinned = [], {}
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (yaml.YAMLError, UnicodeDecodeError) as exc:
+        return pinned, [("environment", f"{where} could not be read as YAML: {exc}")]
+    dependencies = data.get("dependencies") if isinstance(data, dict) else None
+    if not isinstance(dependencies, list):
+        return pinned, [("environment", f"{where} is not a Conda environment file: it has no `dependencies` list")]
+
+    def pin(name, version, entry):
+        if name in pinned:
+            problems.append(("environment", f"{where} lists {name} more than once (`{entry}`)"))
+        pinned[name] = version
+
+    for entry in dependencies:
+        if isinstance(entry, dict) and list(entry) == ["pip"] and isinstance(entry["pip"], list):
+            for item in entry["pip"]:
+                try:
+                    requirement = Requirement(item) if isinstance(item, str) else None
+                except InvalidRequirement:
+                    requirement = None
+                specs = list(requirement.specifier) if requirement else []
+                exact = (
+                    requirement is not None
+                    and not requirement.url
+                    and not requirement.marker
+                    and len(specs) == 1
+                    and specs[0].operator == "=="
+                    and "*" not in specs[0].version
+                )
+                if not exact:
+                    problems.append((
+                        "environment",
+                        f"{where}: pip entry `{item}` is not a package pinned to one version (`name==version`)",
+                    ))
+                if requirement is not None:  # listed, pinned or not: its installs are not reported again
+                    pin(package_name(requirement.name), Version(specs[0].version) if exact else None, item)
+        elif isinstance(entry, str):
+            if entry.strip() == "pip":
+                continue
+            spec = CONDA_SPEC_RE.match(entry.strip())
+            exact = bool(spec and CONDA_PIN_RE.match(spec.group(2).replace(" ", "")))
+            if not exact:
+                problems.append((
+                    "environment",
+                    f"{where}: conda entry `{entry}` is not a package pinned to one version (`name==version`; a single `=` is a prefix to conda)",
+                ))
+            if not spec:
+                continue
+            try:
+                parsed = Version(spec.group(2).replace(" ", "")[2:]) if exact else None
+            except InvalidVersion:
+                parsed = None
+            pin(package_name(spec.group(1)), parsed, entry)
+        else:
+            problems.append(("environment", f"{where}: `{entry}` is neither a conda package nor the pip list"))
+    return pinned, problems
+
+
+def check_environment(path: Path, pool: Path, lectures):
+    """Every ``install-listed`` and ``environment`` rule broken, as ``(tag,
+    message)``, and a line of information on what the environment pins, or
+    None when it does not exist."""
+    where = path.relative_to(ROOT).as_posix()
+    problems, installs, installers = [], [], set()
+    for slug in lectures:
+        found, unreadable = lecture_installs(slug, read_lecture(pool, slug))
+        installs += [(slug, *install) for install in found]
+        installers |= {slug} if found or unreadable else set()
+        problems += unreadable
+    if not path.is_file():
+        if installers:
+            problems.append((
+                "install-listed",
+                f"{len(installers)} pool lecture(s) install packages, but there is no {where} to pin them in",
+            ))
+        return problems, None
+    pinned, environment_problems = read_environment(path, where)
+    problems += environment_problems
+    for slug, number, name, requirement in installs:
+        at = f"lectures/{slug}.md:{number}"
+        if name not in pinned:
+            problems.append((
+                "install-listed",
+                f"{at} installs {name}, which {where} does not list: pin it there, so every site builds "
+                "with one version of it",
+            ))
+            continue
+        version = pinned[name]
+        if requirement is not None and requirement.specifier and version is not None:
+            if not requirement.specifier.contains(version, prereleases=True):
+                problems.append((
+                    "install-listed",
+                    f"{at} asks for {requirement}, but {where} pins {name} {version}",
+                ))
+    names = {name for _, _, name, _ in installs if name in pinned}
+    info = (
+        f"info: {where} lists {len(pinned)} package(s); the pool's lectures install {len(names)} of them, "
+        f"in {len(installers)} lecture(s)"
+    )
+    return problems, info
+
+
 def shared_labels(pool: Path, lectures):
     """``{label: [lectures]}`` for every label more than one lecture defines.
     Targets are compared without case and shown lower-cased; an equation
@@ -663,6 +988,8 @@ def main(argv=None):
         problems += check_doc_targets(POOL_DIR, lectures, promote.SITE_PAGES, series_keys, held)
         sites, site_problems = check_sites(SITES_DIR, POOL_DIR, lectures, series_keys, consumers)
         problems += site_problems
+        environment_problems, environment = check_environment(ENVIRONMENT_PATH, POOL_DIR, lectures)
+        problems += environment_problems
         labels = shared_labels(POOL_DIR, lectures)
         static = POOL_DIR / "_static"
         n_files = sum(1 for p in static.rglob("*") if p.is_file()) if static.is_dir() else 0
@@ -674,6 +1001,8 @@ def main(argv=None):
         sys.stderr.write(f"pool-check: internal error: {type(exc).__name__}: {exc}\n")
         return 2
     print(f"pool-check — {len(lectures)} lectures, {n_files} files under _static/, {len(sites)} site(s)")
+    if environment:
+        print(environment)
     if labels:
         print(
             f"info: {len(labels)} label(s) are defined by more than one lecture"

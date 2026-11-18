@@ -59,7 +59,8 @@ The repository is organised around three layers.
 
 ```
 .
-├── _base/            # (later) shared toolchain defaults — placeholder
+├── _base/            # what every site shares: environment-update.yml, the one pinned environment
+│                     #   the sites are to build in (see _base/README.md)
 ├── lectures/         # the pool: every canonical lecture once
 │   └── _static/      #   their assets: _static/<slug>/ per lecture, _static/_shared/ for shared files
 │                     #   (with README.md, its generated index of users), and quant-econ.bib, the
@@ -80,7 +81,7 @@ The repository is organised around three layers.
 │   ├── promote       # promotes lectures + their asset closure into the pool; writes the ledger
 │   ├── drift-check   # proves the pool still equals its sources; issues, refresh PR
 │   ├── bib-merge     # merges the series' bibliographies into the pool's one file; checks it
-│   ├── pool-check    # checks the pool keeps its layout conventions
+│   ├── pool-check    # checks the pool keeps its layout conventions, and the environment lists what it installs
 │   ├── assets-report # audits the files beside the lectures; writes and checks the _shared/ index
 │   ├── stage-site    # copies one site's pages, files, _config.yml and _toc.yml into lectures/ for a build, and out again
 │   ├── site-matrix   # reads each built site's site.yml into the build workflow's matrix
@@ -173,6 +174,8 @@ Lecture names are unique across the published sites, not only in the pool: a lin
 It also counts the labels that more than one pool lecture defines, targets (`(name)=`, `:name:`) and equation labels (`:label:`, `$$ … $$ (name)`) apart, and `tools/pool-check --labels` lists them. That is information, never a failure: labels must be unique within a site, which is checked where a site is built.
 
 It checks the sites too, so each folder in `sites/` stays true to the pool: every entry in a site's `_toc.yml` is a pool lecture or a page of the site; a site page never has a pool lecture's name, and no file under a site's `_static/` is a pool file, since staging would overwrite it; the branding a site's `_config.yml` names is in the site; the site sets `only_build_toc_files: true`, its own execution cache (`_build/jupyter_cache/<key>`) and `intersphinx_disabled_reftypes: []`, maps no consumer series and, unless it is one, maps itself; and `site.yml` has the fields the build reads, each with a valid value. The rules and the fields are in [`sites/README.md`](sites/README.md). [`pool-check.yml`](.github/workflows/pool-check.yml) runs it on every pull request that touches the pool or the sites. Run it with no site staged: a staged site's pages in `lectures/` read as pool lectures.
+
+And it keeps the one environment the sites are to build in, [`_base/environment-update.yml`](_base/environment-update.yml), whole: every package a pool lecture's code cells install (`!pip install`, `%pip install`, `!conda install`, and the other forms its docstring lists) is listed there, pinned to one version that the lecture's own version limit allows, and every entry is pinned to one version, once. So a refresh that brings in a lecture installing a new package fails this check until a person pins it there, in a pull request of its own to `main`. Why the list is pinned, where each pin comes from, and how to add one, is in [`_base/README.md`](_base/README.md).
 
 ## The assets report
 
