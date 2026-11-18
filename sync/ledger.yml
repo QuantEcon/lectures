@@ -946,6 +946,16 @@ lectures/exchangeable.md:
     intermediate: 007bbd592a4c1f43931ebb0eeb0e64ba36fa8a47
   assets: []
   rewrites: []
+lectures/exponential_families.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: exponential_families.md
+    digest: 881b351fb4de2ca790d253eed624558686ab7f983a12913d11bc5bbe1b4973e4
+  promoted_at:
+    intermediate: 0d5c6873873de21f824fae15d157980e68267fba
+  assets: []
+  rewrites: []
 lectures/financial_structure_incentives.md:
   canonical: advanced
   sources:
@@ -1457,6 +1467,16 @@ lectures/information_market_equilibrium.md:
     digest: a8f6be42e4b11577e5c6359cd3164057357b89fac8a891dcb5619b51a0e8337e
   promoted_at:
     intermediate: 007bbd592a4c1f43931ebb0eeb0e64ba36fa8a47
+  assets: []
+  rewrites: []
+lectures/information_projections.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: information_projections.md
+    digest: 89067bed8f8693bc49c1e47084dca1a7e98cefc1b551f17d4c31c301a52cadd8
+  promoted_at:
+    intermediate: 0d5c6873873de21f824fae15d157980e68267fba
   assets: []
   rewrites: []
 lectures/information_transfer.md:
