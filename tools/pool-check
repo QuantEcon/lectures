@@ -73,14 +73,14 @@ left to the newest release a build happens to find:
 * ``install-listed`` — every package a pool lecture's code cells install is
   listed in ``_base/environment-update.yml``, by name (as PEP 503 compares
   them, and across its pip and conda lists), and a pip requirement's own
-  version limit (``"prettytable<3.18"``) allows the listed version. Read
-  are the notebook cells MyST-NB makes (top-level ``{code-cell}`` blocks;
-  ``skip-execution`` ones too, since a lecture that skips its install cell
-  still imports the package), their shell lines (``!``, ``%pip``,
-  ``%conda``, ``%mamba``, and ``%%bash`` or ``%%sh`` cells), and in them
-  every command, split as a shell splits them, that runs ``pip``, ``pip3``,
-  ``python -m pip``, ``uv pip``, ``conda``, ``mamba`` or ``micromamba``
-  ``install``. A conda install is matched by name alone. An install this
+  version limit (``"prettytable<3.18"``) allows the listed version. The
+  check reads the notebook cells MyST-NB makes (top-level ``{code-cell}``
+  blocks; ``skip-execution`` ones too, since a lecture that skips its
+  install cell still imports the package), then their shell lines (``!``,
+  ``%pip``, ``%conda``, ``%mamba``, and ``%%bash`` or ``%%sh`` cells), and
+  in each line every command, split as a shell splits them, that runs
+  ``pip``, ``pip3``, ``python -m pip``, ``uv pip``, ``conda``, ``mamba`` or
+  ``micromamba`` ``install``. A conda install is matched by name alone. An install this
   check cannot read (a requirements file, an editable, an address, an open
   quote) is reported, not skipped. Python that installs (``subprocess``,
   ``os.system``) is not read.
