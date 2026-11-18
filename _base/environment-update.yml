@@ -37,9 +37,10 @@
 # are gone, plotly-orca leaves this list too.
 #
 # tools/pool-check's `install-listed` rule keeps the list whole: every package
-# a pool lecture's code cells install is listed here, at a version the
-# lecture's own limit allows. A refresh that brings in a new install fails the
-# pool-check until a person pins it here, in a pull request of its own:
+# a pool lecture's code cells install is listed here, at a version a pip
+# install line's own limit allows (a conda install matches by name). A refresh
+# that brings in a new install turns the pool-check red until a person pins it
+# here, in a pull request of its own:
 # drift-check rebuilds the refresh branch from main every night
 # (_base/README.md).
 #

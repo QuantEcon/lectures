@@ -104,6 +104,11 @@ def test_a_package_the_environment_does_not_list_is_reported_at_its_line(make_re
     "!py -m pip install interpolation",
     "!/usr/bin/python3 -m pip install interpolation",
     "out = !pip install interpolation",
+    "!conda install -cconda-forge interpolation",
+    "!conda install -nbase -y interpolation",
+    "!conda install -C interpolation",
+    "!pip install -ihttps://example.org/simple interpolation",
+    "!pip install -qc constraints.txt interpolation",
 ])
 def test_every_way_a_shell_line_installs_is_read(make_repo, line):
     repo = make_repo(["intro"])
@@ -213,6 +218,7 @@ def test_an_install_line_the_check_cannot_read_is_reported(make_repo):
         "!pip install 'quantecon",
         "!pip install -qr requirements.txt",
         "!pip install -rrequirements.txt",
+        "!pip install -qe .",
     )
     path = write_lecture(repo, "odd", cell(*lines))
 
@@ -230,6 +236,7 @@ def test_an_install_line_the_check_cannot_read_is_reported(make_repo):
         f"{at[lines[4]]} (No closing quotation): write it as one plain line",
         f"{at[lines[5]]} (`-r`): name each package on the line",
         f"{at[lines[6]]} (`-r`): name each package on the line",
+        f"{at[lines[7]]} (`-e`): name each package on the line",
     ]
 
 
@@ -307,7 +314,7 @@ def test_installs_that_would_replace_a_pin_in_a_build_are_counted_not_failed(mak
     path = write_lecture(
         repo,
         "kesten",
-        cell("!pip install --upgrade quantecon", "!pip install prettytable"),
+        cell("!pip install --upgrade quantecon", "!pip install prettytable", "!pip install -ihttps://example.org/Ugly prettytable"),
         cell("!pip install --upgrade jax", tags="skip-execution"),
         cell("!conda install -y -c plotly plotly", "!pip install -qU jax"),
     )
