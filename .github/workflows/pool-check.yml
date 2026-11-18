@@ -11,9 +11,9 @@ name: pool-check
 # cross-reference rules hold, and site.yml has the fields the build reads.
 # And it checks the one environment the sites are to build in,
 # _base/environment-update.yml: every package a pool lecture's code cell
-# installs is listed there, pinned to one version that the lecture's own limit
-# allows, so a refreshed lecture that installs a new package fails here until
-# a person pins it on main (_base/README.md). It reads lectures/, sites/, that
+# installs is listed there, pinned to one version that a pip install line's
+# own limit allows, so a refreshed lecture that installs a new package turns
+# this check red until a person pins it on main (_base/README.md). It reads lectures/, sites/, that
 # file, the series keys in sync/manifest.yml and the ledger, so it needs no
 # mirror and no network.
 #
