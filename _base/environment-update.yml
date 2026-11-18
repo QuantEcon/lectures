@@ -5,7 +5,7 @@
 # (`environment-update:`), which runs `conda env update` on the environment
 # the build runs in. Nothing builds with it yet: the site-build workflow moves
 # to it in a later pull request, dp after its first shadow comparison
-# (QuantEcon/project-monorepo#26, #80).
+# (QuantEcon/project-monorepo#26, QuantEcon/project-monorepo#80).
 #
 # ONE UP-TO-DATE BASELINE (the owner's decisions of 2026-11-18 and -19): every
 # version is exact, for stability while the sites' builds are first
@@ -25,9 +25,9 @@
 # brought to this baseline upstream, one pull request each.
 #
 # A person changes a pin, after testing (a workflow that watches for new
-# releases is to be tracked on QuantEcon/project-monorepo#7). An entry without a version would
-# not stay put: conda installs the pip list with `pip install -U`, so it would
-# take the newest release on every build.
+# releases is QuantEcon/project-monorepo#134). An entry without a version
+# would not stay put: conda installs the pip list with `pip install -U`, so
+# it would take the newest release on every build.
 #
 # THE LECTURES KEEP THEIR INSTALL LINES, for readers running a notebook on
 # Colab or at home. In a build a plain `!pip install` finds the package
@@ -40,7 +40,8 @@
 # a pool lecture's code cells install is listed here, at a version the
 # lecture's own limit allows. A refresh that brings in a new install fails the
 # pool-check until a person pins it here, in a pull request of its own:
-# drift-check rebuilds the refresh branch from main every night (_base/README.md).
+# drift-check rebuilds the refresh branch from main every night
+# (_base/README.md).
 #
 # jax is the CPU wheel here. A GPU build adds `jax[cuda13]==0.11.0` on top,
 # the same version, which brings the CUDA plugin and the CUDA libraries it
@@ -52,7 +53,7 @@ channels:
   - defaults
 dependencies:
   - pip
-  # three lectures install it from the plotly channel; their lines are being removed
+  # three lectures install it from the plotly channel; those lines are going
   - plotly::plotly-orca==1.3.1
   - pip:
     # The build stack: the series' environment.yml, at the newest releases

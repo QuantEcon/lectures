@@ -69,7 +69,7 @@ def test_a_pool_whose_installs_are_all_pinned_is_clean(make_repo):
 
     assert res.returncode == 0, res.stdout
     assert (
-        f"info: {WHERE} lists 7 package(s); the pool's lectures install 6 of them, in 5 lecture(s)" in res.stdout
+        f"info: {WHERE} lists 8 package(s); the pool's lectures install 6 of them, in 5 lecture(s)" in res.stdout
     )
     assert "clean:" in res.stdout
 
@@ -84,7 +84,7 @@ def test_a_package_the_environment_does_not_list_is_reported_at_its_line(make_re
     assert res.returncode == 1
     assert problems(res) == [unlisted(path, "!pip install quantecon interpolation")]
     # The count is of the listed packages the lectures install.
-    assert f"info: {WHERE} lists 7 package(s); the pool's lectures install 1 of them, in 1 lecture(s)" in res.stdout
+    assert f"info: {WHERE} lists 8 package(s); the pool's lectures install 1 of them, in 1 lecture(s)" in res.stdout
 
 
 @pytest.mark.parametrize("line", [
@@ -97,6 +97,13 @@ def test_a_package_the_environment_does_not_list_is_reported_at_its_line(make_re
     "!!pip install interpolation",
     "%pip install --root-user-action ignore --index-url https://example.org/simple interpolation",
     "!mamba install -c conda-forge -y interpolation",
+    "!conda install -yc conda-forge interpolation",
+    "!pip3.13 install interpolation",
+    "!sudo -H pip install interpolation",
+    "!sudo -u runner /opt/conda/bin/pip install interpolation",
+    "!py -m pip install interpolation",
+    "!/usr/bin/python3 -m pip install interpolation",
+    "out = !pip install interpolation",
 ])
 def test_every_way_a_shell_line_installs_is_read(make_repo, line):
     repo = make_repo(["intro"])
@@ -204,6 +211,8 @@ def test_an_install_line_the_check_cannot_read_is_reported(make_repo):
         "!pip install quantecon@https://example.org/quantecon-0.13.1.tar.gz",
         "!pip install --requirement=more.txt quantecon",
         "!pip install 'quantecon",
+        "!pip install -qr requirements.txt",
+        "!pip install -rrequirements.txt",
     )
     path = write_lecture(repo, "odd", cell(*lines))
 
@@ -219,6 +228,8 @@ def test_an_install_line_the_check_cannot_read_is_reported(make_repo):
         "or an address",
         f"{at[lines[3]]} (`--requirement`): name each package on the line",
         f"{at[lines[4]]} (No closing quotation): write it as one plain line",
+        f"{at[lines[5]]} (`-r`): name each package on the line",
+        f"{at[lines[6]]} (`-r`): name each package on the line",
     ]
 
 
@@ -277,4 +288,43 @@ def test_lectures_that_install_need_the_environment_and_a_pool_that_installs_not
     assert res.returncode == 1
     assert problems(res) == [
         f"[install-listed] 1 pool lecture(s) install packages, but there is no {WHERE} to pin them in",
+    ]
+
+
+def test_installing_pip_itself_is_not_an_unlisted_package(make_repo):
+    repo = make_repo(["intro"])
+    write_environment(repo)
+    write_lecture(repo, "a", cell("!pip install --upgrade pip", "!python -m pip install -U pip quantecon"))
+
+    res = repo.pool_check()
+
+    assert res.returncode == 0, res.stdout
+
+
+def test_installs_that_would_replace_a_pin_in_a_build_are_counted_not_failed(make_repo):
+    repo = make_repo(["intro"])
+    write_environment(repo)
+    path = write_lecture(
+        repo,
+        "kesten",
+        cell("!pip install --upgrade quantecon", "!pip install prettytable"),
+        cell("!pip install --upgrade jax", tags="skip-execution"),
+        cell("!conda install -y -c plotly plotly", "!pip install -qU jax"),
+    )
+
+    res = repo.pool_check()
+
+    assert res.returncode == 0, res.stdout
+    assert (
+        "info: 3 install(s) in executed cells would replace a listed package's version during a build (pip's "
+        "--upgrade or -U, or a conda install) (`tools/pool-check --installs` lists them)." in res.stdout
+    )
+
+    res = repo.pool_check("--installs")
+
+    listed = [line.strip() for line in res.stdout.splitlines() if line.startswith("  lectures/")]
+    assert listed == [
+        f"lectures/kesten.md:{line_of(path, '!pip install --upgrade quantecon')}: quantecon (pinned 0.13.1)",
+        f"lectures/kesten.md:{line_of(path, '!conda install -y -c plotly plotly')}: plotly (pinned 6.7.0)",
+        f"lectures/kesten.md:{line_of(path, '!pip install -qU jax')}: jax (pinned 0.11.0)",
     ]
