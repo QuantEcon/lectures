@@ -2715,9 +2715,9 @@ lectures/numpy_vs_numba_vs_jax.md:
   sources:
   - series: programming
     path: numpy_vs_numba_vs_jax.md
-    digest: 138c9d4a9570d16238f82e97edcc49f66ed782c596171e09901fd23a146a1163
+    digest: 94ea79eff79eff2f4f7421396d65aeedab8dec709312227e43291a170d0394b2
   promoted_at:
-    programming: 6ddf08840df3faa656e618f9dfd3ed968dded030
+    programming: bae31ee496e8ef687fe7e3edbbd4699a5d42164f
   assets:
   - _static/_shared/_admonition/gpu.md
   rewrites:
