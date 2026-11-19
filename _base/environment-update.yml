@@ -13,8 +13,6 @@
 #   - a package the anaconda=2026.07 metapackage holds (pandas, plotly, rich,
 #     seaborn, statsmodels, tabulate): its version there, the base every series
 #     builds on;
-#   - jax: 0.11.0, as programming has it, since 0.11.1 hangs one of its
-#     lectures (the owner's decision of 2026-11-17);
 #   - jupyter-book: the newest 1.x, until the engine switch;
 #   - a version a lecture asks for (`"prettytable<3.18"`): the newest it allows.
 # Where it moves the full image: quantecon-book-theme, sphinx-proof and
@@ -44,11 +42,13 @@
 # drift-check rebuilds the refresh branch from main every night
 # (_base/README.md).
 #
-# jax is the CPU wheel here. A GPU build adds `jax[cuda13]==0.11.0` on top,
+# jax is the CPU wheel here. A GPU build adds `jax[cuda13]==0.12.1` on top,
 # the same version, which brings the CUDA plugin and the CUDA libraries it
 # bundles (nvidia-* wheels, not pinned here). The GPU machine image holds no
 # anaconda metapackage, so a GPU build needs that base as well
 # (QuantEcon/project-monorepo#77, the GPU leg).
+# jax 0.11.1 hangs programming's numpy_vs_numba_vs_jax; 0.12.1 runs it, so the
+# list moved from 0.11.0 to 0.12.1 (the owner's decision of 2026-11-19).
 
 channels:
   - defaults
@@ -69,7 +69,7 @@ dependencies:
     - sphinx-reredirects==1.1.0
     # What the series' builds add: advanced's environment.yml (kaleido), the
     # GPU series' publish workflows (jax, numpyro)
-    - jax==0.11.0
+    - jax==0.12.1
     - kaleido==1.5.1
     - numpyro==0.22.0
     # What the pool's lectures install for themselves
