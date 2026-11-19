@@ -16,9 +16,10 @@
 #   - jupyter-book: the newest 1.x, until the engine switch;
 #   - a version a lecture asks for (`"prettytable<3.18"`): the newest it allows.
 # Where it moves the full image: quantecon-book-theme, sphinx-proof and
-# sphinx-exercise stay at the image's versions; kaleido goes to 1.5.1 from the
+# sphinx-exercise stay at the image's versions; kaleido goes to 1.5.2 from the
 # image's 0.2.1, and needs a Chrome, which the image does not hold yet
-# (QuantEcon/actions#85); sphinx, markdown-it-py and alabaster go back to what
+# (QuantEcon/actions#85; QuantEcon/actions#342 adds a pinned Chrome for
+# Testing to the images); sphinx, markdown-it-py and alabaster go back to what
 # jupyter-book 1.x needs, as in every series' build. The six series are being
 # brought to this baseline upstream, one pull request each.
 #
@@ -70,7 +71,7 @@ dependencies:
     # What the series' builds add: advanced's environment.yml (kaleido), the
     # GPU series' publish workflows (jax, numpyro)
     - jax==0.12.1
-    - kaleido==1.5.1
+    - kaleido==1.5.2
     - numpyro==0.22.0
     # What the pool's lectures install for themselves
     - arviz==1.3.0
