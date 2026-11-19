@@ -52,7 +52,7 @@ lectures/about_py.md:
     path: about_py.md
     digest: 15f0a77815b08a5d66673fc2a4f427e584fdbdd29d9c7ce7a7b052d521fb9266
   promoted_at:
-    programming: 6ddf08840df3faa656e618f9dfd3ed968dded030
+    programming: bae31ee496e8ef687fe7e3edbbd4699a5d42164f
   assets:
   - _static/about_py/bn_density1.png
   - _static/about_py/career_vf.png
@@ -117,7 +117,7 @@ lectures/aiyagari_jax.md:
     path: aiyagari_jax.md
     digest: 3ec2c8f04521cc9af6739d3950c2fa61b1bf15913566a5ee1e5019c41808cc95
   promoted_at:
-    jax: 8e7b2f6762d6db761a0cc11c743ea93a79bf726a
+    jax: d761fc5bf5e9b7f6eca051df526510f4bf6c5273
   assets:
   - _static/_shared/_admonition/gpu.md
   rewrites:
@@ -301,7 +301,7 @@ lectures/arellano_jax.md:
     path: arellano_jax.md
     digest: 14500f686177d4c8b811b2891fa0ea647d5e729227f6452280707a8eb12a9eac
   promoted_at:
-    jax: 8e7b2f6762d6db761a0cc11c743ea93a79bf726a
+    jax: d761fc5bf5e9b7f6eca051df526510f4bf6c5273
   assets:
   - _static/_shared/_admonition/gpu.md
   - _static/_shared/arellano/arellano_bond_prices.png
@@ -362,8 +362,8 @@ lectures/autodiff.md:
     path: autodiff.md
     digest: 4a1a441630c1b34a46ff514b60f2ad64e9f0cdb008b4349b25b98d0f4807e621
   promoted_at:
-    programming: 6ddf08840df3faa656e618f9dfd3ed968dded030
-    jax: 8e7b2f6762d6db761a0cc11c743ea93a79bf726a
+    programming: bae31ee496e8ef687fe7e3edbbd4699a5d42164f
+    jax: d761fc5bf5e9b7f6eca051df526510f4bf6c5273
   assets:
   - _static/_shared/_admonition/gpu.md
   rewrites:
@@ -753,7 +753,7 @@ lectures/debugging.md:
     path: debugging.md
     digest: 8a72a4477d36c56b3ad1f67193b338f75e6495b4a24b02720ff4822b8b61eb82
   promoted_at:
-    programming: 6ddf08840df3faa656e618f9dfd3ed968dded030
+    programming: bae31ee496e8ef687fe7e3edbbd4699a5d42164f
   assets: []
   rewrites: []
 lectures/discrete_dp.md:
@@ -1031,7 +1031,7 @@ lectures/functions.md:
     path: functions.md
     digest: 4b602fccc06f2eb9bcc6043e1325e152b66646b1cd3ded447fc3e678a39a3563
   promoted_at:
-    programming: 6ddf08840df3faa656e618f9dfd3ed968dded030
+    programming: bae31ee496e8ef687fe7e3edbbd4699a5d42164f
   assets: []
   rewrites: []
 lectures/gallant_tauchen.md:
@@ -1081,7 +1081,7 @@ lectures/getting_started.md:
     path: getting_started.md
     digest: 6e13c028a70102562f62778fe86f1f87d1403f1bbad0fce7730adc0bc11accc1
   promoted_at:
-    programming: 6ddf08840df3faa656e618f9dfd3ed968dded030
+    programming: bae31ee496e8ef687fe7e3edbbd4699a5d42164f
   assets:
   - _static/getting_started/debug.png
   - _static/getting_started/debugger_breakpoint.png
@@ -1244,7 +1244,7 @@ lectures/hopenhayn.md:
     path: hopenhayn.md
     digest: e7666671ac2b52312666a8e6436de9d65b106da8653472c6fd96b0cb853f1412
   promoted_at:
-    jax: 8e7b2f6762d6db761a0cc11c743ea93a79bf726a
+    jax: d761fc5bf5e9b7f6eca051df526510f4bf6c5273
   assets:
   - _static/_shared/_admonition/gpu.md
   rewrites:
@@ -1333,7 +1333,7 @@ lectures/ifp_dl.md:
     path: ifp_dl.md
     digest: 3be1b198f94a17baa99ec30e7157fa225200bec4f78c2562394e376487eba471
   promoted_at:
-    jax: 8e7b2f6762d6db761a0cc11c743ea93a79bf726a
+    jax: d761fc5bf5e9b7f6eca051df526510f4bf6c5273
   assets:
   - _static/_shared/_admonition/gpu.md
   rewrites:
@@ -1362,9 +1362,9 @@ lectures/ifp_egm_jax.md:
   sources:
   - series: jax
     path: ifp_egm_jax.md
-    digest: e7a29a92f70cd9c74d6bb5c77762e49f8cf2c6a73e3fcaed38cd5a63decf4d67
+    digest: 00ae72d807b64b71f8779d52e354e2af8a89abb5ec1db47a27d79b9ed9cb1fa2
   promoted_at:
-    jax: 8e7b2f6762d6db761a0cc11c743ea93a79bf726a
+    jax: d761fc5bf5e9b7f6eca051df526510f4bf6c5273
   assets:
   - _static/_shared/_admonition/gpu.md
   rewrites:
@@ -1526,7 +1526,7 @@ lectures/inventory_dynamics_jax.md:
     path: inventory_dynamics_jax.md
     digest: 4ab3b98ae290d4a51d9f484bb0682ec9d8e577564b5b02eef0b38abea9876086
   promoted_at:
-    jax: 8e7b2f6762d6db761a0cc11c743ea93a79bf726a
+    jax: d761fc5bf5e9b7f6eca051df526510f4bf6c5273
   assets:
   - _static/_shared/_admonition/gpu.md
   rewrites:
@@ -1552,9 +1552,9 @@ lectures/inventory_ssd.md:
   sources:
   - series: jax
     path: inventory_ssd.md
-    digest: bf20ab29fe6510bb197636aa04fbc0093ae7aa91eefbd2a6996de983732c9803
+    digest: 415287193db98f58f39971b128d19996007daaed5fa9883d8dc272aca31e374f
   promoted_at:
-    jax: 8e7b2f6762d6db761a0cc11c743ea93a79bf726a
+    jax: d761fc5bf5e9b7f6eca051df526510f4bf6c5273
   assets:
   - _static/_shared/_admonition/gpu.md
   rewrites:
@@ -1577,7 +1577,7 @@ lectures/jax_intro.md:
     path: jax_intro.md
     digest: a21bb131b93d2649586c06cd3e88aae3efa5bb1aa9e1afccddd0179ffb3d8f7e
   promoted_at:
-    programming: 6ddf08840df3faa656e618f9dfd3ed968dded030
+    programming: bae31ee496e8ef687fe7e3edbbd4699a5d42164f
   assets:
   - _static/_shared/_admonition/gpu.md
   rewrites:
@@ -1590,7 +1590,7 @@ lectures/jax_intro_jax.md:
     path: jax_intro_jax.md
     digest: 3ccdf5ead5eea5e499def04456e67f7629f892193a3e9ea87fdbe890aa63fc12
   promoted_at:
-    jax: 8e7b2f6762d6db761a0cc11c743ea93a79bf726a
+    jax: d761fc5bf5e9b7f6eca051df526510f4bf6c5273
   assets:
   - _static/_shared/_admonition/gpu.md
   rewrites:
@@ -1603,7 +1603,7 @@ lectures/jax_nn.md:
     path: jax_nn.md
     digest: 15b3e85e3ccfa22c8853a0abae1e3607e49c505ecf21d08676807ae1e1ccaa9d
   promoted_at:
-    jax: 8e7b2f6762d6db761a0cc11c743ea93a79bf726a
+    jax: d761fc5bf5e9b7f6eca051df526510f4bf6c5273
   assets:
   - _static/_shared/_admonition/gpu.md
   rewrites:
@@ -1616,7 +1616,7 @@ lectures/job_search.md:
     path: job_search.md
     digest: aceb7ebb42b9fff881dfaf542cf22314da0f8ff8dfc225914e580e8272d615c2
   promoted_at:
-    jax: 8e7b2f6762d6db761a0cc11c743ea93a79bf726a
+    jax: d761fc5bf5e9b7f6eca051df526510f4bf6c5273
   assets:
   - _static/_shared/_admonition/gpu.md
   rewrites:
@@ -1680,7 +1680,7 @@ lectures/keras.md:
     path: keras.md
     digest: 52ffb2186327f02895f99b468cd02f03836444551f63895170ea36030abc8bcf
   promoted_at:
-    jax: 8e7b2f6762d6db761a0cc11c743ea93a79bf726a
+    jax: d761fc5bf5e9b7f6eca051df526510f4bf6c5273
   assets:
   - _static/_shared/_admonition/gpu.md
   rewrites:
@@ -1704,9 +1704,9 @@ lectures/kesten_processes_jax.md:
   sources:
   - series: jax
     path: kesten_processes_jax.md
-    digest: a638e3ce7fe1179f84f45b461bbd777b29f58137e3a9ddfa0198077d88d21d6c
+    digest: d65ce64efc38430027b1fedc218f7f5a25478fd8db60f103249f5d3b0a256220
   promoted_at:
-    jax: 8e7b2f6762d6db761a0cc11c743ea93a79bf726a
+    jax: d761fc5bf5e9b7f6eca051df526510f4bf6c5273
   assets:
   - _static/_shared/_admonition/gpu.md
   rewrites:
@@ -2088,9 +2088,9 @@ lectures/lucas_model_jax.md:
   sources:
   - series: jax
     path: lucas_model_jax.md
-    digest: cdafa85ae5707835bf20914892e7259c88cc460435c4a75cf94167040a4f0dfd
+    digest: a3a6901e4c5b4202d38281c0da82b75b33b2ae0c13af5456c2c3b3e673ff8da5
   promoted_at:
-    jax: 8e7b2f6762d6db761a0cc11c743ea93a79bf726a
+    jax: d761fc5bf5e9b7f6eca051df526510f4bf6c5273
   assets:
   - _static/_shared/_admonition/gpu.md
   rewrites:
@@ -2153,7 +2153,7 @@ lectures/markov_asset_jax.md:
     path: markov_asset_jax.md
     digest: 142453e3c0f6d326a4604663bf8e24c1dc95b9e29d0196e6ef732ac5eb237f36
   promoted_at:
-    jax: 8e7b2f6762d6db761a0cc11c743ea93a79bf726a
+    jax: d761fc5bf5e9b7f6eca051df526510f4bf6c5273
   assets:
   - _static/_shared/_admonition/gpu.md
   rewrites:
@@ -2248,7 +2248,7 @@ lectures/matplotlib.md:
     path: matplotlib.md
     digest: 3090de43fe488ebbd2ab902639a5bc2bd1dddc22a653c32fa68ed93a2edcf51f
   promoted_at:
-    programming: 6ddf08840df3faa656e618f9dfd3ed968dded030
+    programming: bae31ee496e8ef687fe7e3edbbd4699a5d42164f
   assets:
   - _static/matplotlib/matplotlib_ex1.png
   rewrites:
@@ -2471,7 +2471,7 @@ lectures/mle_jax.md:
     path: mle_jax.md
     digest: 9fb6af8ed66aa3fb2ef636d76fc08b3b5883055fd76fea1d5e54ba07cad33c77
   promoted_at:
-    jax: 8e7b2f6762d6db761a0cc11c743ea93a79bf726a
+    jax: d761fc5bf5e9b7f6eca051df526510f4bf6c5273
   assets:
   - _static/_shared/_admonition/gpu.md
   rewrites:
@@ -2574,7 +2574,7 @@ lectures/names.md:
     path: names.md
     digest: f6637f00453b1fb1d60b20705f92aa8821f29f19f2ff42f711add818aebaf0b2
   promoted_at:
-    programming: 6ddf08840df3faa656e618f9dfd3ed968dded030
+    programming: bae31ee496e8ef687fe7e3edbbd4699a5d42164f
   assets:
   - _static/_shared/oop_intro/global.png
   - _static/_shared/oop_intro/global2.png
@@ -2621,7 +2621,7 @@ lectures/need_for_speed.md:
     path: need_for_speed.md
     digest: a91b233ce9487a28c1faed87a7e7caafd5cce0d45185c8be4c24da307aaf0e61
   promoted_at:
-    programming: 6ddf08840df3faa656e618f9dfd3ed968dded030
+    programming: bae31ee496e8ef687fe7e3edbbd4699a5d42164f
   assets:
   - _static/need_for_speed/dgx.png
   - _static/need_for_speed/geforce.png
@@ -2678,7 +2678,7 @@ lectures/newtons_method.md:
     path: newtons_method.md
     digest: 628fb271020a9c89a7700f7498c1b3190a63cd669f8eff0330dd15c98c30c320
   promoted_at:
-    jax: 8e7b2f6762d6db761a0cc11c743ea93a79bf726a
+    jax: d761fc5bf5e9b7f6eca051df526510f4bf6c5273
   assets:
   - _static/_shared/_admonition/gpu.md
   rewrites:
@@ -2691,7 +2691,7 @@ lectures/numba.md:
     path: numba.md
     digest: 50829cab55b5aa94effdeeb2172ab38b7eb43509d104f70a2be7c8174a3a1fe6
   promoted_at:
-    programming: 6ddf08840df3faa656e618f9dfd3ed968dded030
+    programming: bae31ee496e8ef687fe7e3edbbd4699a5d42164f
   assets:
   - _static/_shared/sci_libs/nfs_ex1.png
   rewrites:
@@ -2704,7 +2704,7 @@ lectures/numpy.md:
     path: numpy.md
     digest: 9762f515e28aa8443fccfa2c40b5add39c0996685f8e99963462a84861ef5405
   promoted_at:
-    programming: 6ddf08840df3faa656e618f9dfd3ed968dded030
+    programming: bae31ee496e8ef687fe7e3edbbd4699a5d42164f
   assets:
   - _static/_shared/parallelization/htop_parallel_npmat.png
   rewrites:
@@ -2785,7 +2785,7 @@ lectures/oop_intro.md:
     path: oop_intro.md
     digest: ce9b5f57d0a121a13cc98bc07feb40a740ec0a60c167decab258f18d7bccdfc7
   promoted_at:
-    programming: 6ddf08840df3faa656e618f9dfd3ed968dded030
+    programming: bae31ee496e8ef687fe7e3edbbd4699a5d42164f
   assets: []
   rewrites: []
 lectures/opt_invest.md:
@@ -2793,9 +2793,9 @@ lectures/opt_invest.md:
   sources:
   - series: jax
     path: opt_invest.md
-    digest: aa8f4d4ab51833a2be1b63ddad849dfb69930e2911aff56e6acacd16b3b0c9f7
+    digest: 1f137963a40eff356e4402885bd1df8b689505d726b533adcde6a17d1a37c659
   promoted_at:
-    jax: 8e7b2f6762d6db761a0cc11c743ea93a79bf726a
+    jax: d761fc5bf5e9b7f6eca051df526510f4bf6c5273
   assets:
   - _static/_shared/_admonition/gpu.md
   rewrites:
@@ -2808,7 +2808,7 @@ lectures/opt_savings_1.md:
     path: opt_savings_1.md
     digest: ba25ca6627fd61552115e9bde4696f38ec437a5978eacc096cf5d7e2f1419c22
   promoted_at:
-    jax: 8e7b2f6762d6db761a0cc11c743ea93a79bf726a
+    jax: d761fc5bf5e9b7f6eca051df526510f4bf6c5273
   assets:
   - _static/_shared/_admonition/gpu.md
   rewrites:
@@ -2821,7 +2821,7 @@ lectures/opt_savings_2.md:
     path: opt_savings_2.md
     digest: 3e93a45df2b9aa44c95b0e3add7db7cc920638d7fc16fc1dda5a744ca05212b5
   promoted_at:
-    jax: 8e7b2f6762d6db761a0cc11c743ea93a79bf726a
+    jax: d761fc5bf5e9b7f6eca051df526510f4bf6c5273
   assets:
   - _static/_shared/_admonition/gpu.md
   rewrites:
@@ -3025,7 +3025,7 @@ lectures/overborrowing.md:
     path: overborrowing.md
     digest: ddeb59523b2abb202c88064dc1a65b92bc6d85868c5c52cc0bb02203922535ea
   promoted_at:
-    jax: 8e7b2f6762d6db761a0cc11c743ea93a79bf726a
+    jax: d761fc5bf5e9b7f6eca051df526510f4bf6c5273
   assets:
   - _static/_shared/_admonition/gpu.md
   rewrites:
@@ -3038,7 +3038,7 @@ lectures/pandas.md:
     path: pandas.md
     digest: eaf128bc15dd68e3323c3a0e930483ebe94cdbd7f1e0419de1875b62c6d54adb
   promoted_at:
-    programming: 6ddf08840df3faa656e618f9dfd3ed968dded030
+    programming: bae31ee496e8ef687fe7e3edbbd4699a5d42164f
   assets:
   - _static/pandas/pandas_indices_pctchange.png
   - _static/pandas/pandas_share_prices.png
@@ -3060,7 +3060,7 @@ lectures/pandas_panel.md:
     path: pandas_panel.md
     digest: 61281bfcc1924692ed866f6c078b73bf569c7baec3f91bc2dcd8c7bbe205eb01
   promoted_at:
-    programming: 6ddf08840df3faa656e618f9dfd3ed968dded030
+    programming: bae31ee496e8ef687fe7e3edbbd4699a5d42164f
     intermediate: eb2ba52c609a72c60316ef9cc1dc87add3a872d9
   assets:
   - _static/pandas_panel/venn_diag.png
@@ -3244,7 +3244,7 @@ lectures/polars.md:
     path: polars.md
     digest: 37bae4826d816c001a77c1b197a386bcd0529e2b7582d74bc10a559776362078
   promoted_at:
-    programming: 6ddf08840df3faa656e618f9dfd3ed968dded030
+    programming: bae31ee496e8ef687fe7e3edbbd4699a5d42164f
   assets: []
   rewrites: []
 lectures/policy_counterfactuals.md:
@@ -3354,7 +3354,7 @@ lectures/python_advanced_features.md:
     path: python_advanced_features.md
     digest: 5a6a3b188622fdfd974b5a4fe5dd922d6c090c1bcf3d9b40de9a58b8e11b8704
   promoted_at:
-    programming: 6ddf08840df3faa656e618f9dfd3ed968dded030
+    programming: bae31ee496e8ef687fe7e3edbbd4699a5d42164f
   assets: []
   rewrites: []
 lectures/python_by_example.md:
@@ -3364,7 +3364,7 @@ lectures/python_by_example.md:
     path: python_by_example.md
     digest: 531483bae42a93a4c603a954a33b9d86a4c9b6dcf0deccfcae200a6e6d4c1e9a
   promoted_at:
-    programming: 6ddf08840df3faa656e618f9dfd3ed968dded030
+    programming: bae31ee496e8ef687fe7e3edbbd4699a5d42164f
   assets:
   - _static/python_by_example/test_program_1_updated.png
   rewrites:
@@ -3377,7 +3377,7 @@ lectures/python_essentials.md:
     path: python_essentials.md
     digest: 44f39dd095e40d6d147a077382ca978db371dd3bd8f2afc5d86fc9a08b16effa
   promoted_at:
-    programming: 6ddf08840df3faa656e618f9dfd3ed968dded030
+    programming: bae31ee496e8ef687fe7e3edbbd4699a5d42164f
   assets: []
   rewrites: []
 lectures/python_oop.md:
@@ -3387,7 +3387,7 @@ lectures/python_oop.md:
     path: python_oop.md
     digest: 9cc15ceaee4c7be1d1d4e8bacbaf6a436556598eb521ecacf5781d91430ff0f8
   promoted_at:
-    programming: 6ddf08840df3faa656e618f9dfd3ed968dded030
+    programming: bae31ee496e8ef687fe7e3edbbd4699a5d42164f
   assets: []
   rewrites: []
 lectures/qr_decomp.md:
@@ -3593,7 +3593,7 @@ lectures/schelling_jax.md:
     path: schelling_jax.md
     digest: c433613f18a42922c5030ddea7044d0a72fbae7ae5ae4a12a127e3b8d54c216e
   promoted_at:
-    jax: 8e7b2f6762d6db761a0cc11c743ea93a79bf726a
+    jax: d761fc5bf5e9b7f6eca051df526510f4bf6c5273
   assets: []
   rewrites: []
 lectures/schelling_jax_parallel.md:
@@ -3603,7 +3603,7 @@ lectures/schelling_jax_parallel.md:
     path: schelling_jax_parallel.md
     digest: d2d694ad8f92f50826e616fb6b5a5e6d4523ef34112afcb3edf9fcb30f81658f
   promoted_at:
-    jax: 8e7b2f6762d6db761a0cc11c743ea93a79bf726a
+    jax: d761fc5bf5e9b7f6eca051df526510f4bf6c5273
   assets: []
   rewrites: []
 lectures/schelling_numpy.md:
@@ -3613,7 +3613,7 @@ lectures/schelling_numpy.md:
     path: schelling_numpy.md
     digest: 8a62845ad46324d57aca9ca07de0eb389553f21ef72f892c5c2ad1aaf66f2a56
   promoted_at:
-    jax: 8e7b2f6762d6db761a0cc11c743ea93a79bf726a
+    jax: d761fc5bf5e9b7f6eca051df526510f4bf6c5273
   assets: []
   rewrites: []
 lectures/schelling_python.md:
@@ -3623,7 +3623,7 @@ lectures/schelling_python.md:
     path: schelling_python.md
     digest: e7b76dd4ad2612bb01603bf0ebabef04ed8317c2a94ab79a5e107bdb91c806d9
   promoted_at:
-    jax: 8e7b2f6762d6db761a0cc11c743ea93a79bf726a
+    jax: d761fc5bf5e9b7f6eca051df526510f4bf6c5273
   assets:
   - _static/schelling_python/fig/columbus.webp
   - _static/schelling_python/fig/houston.webp
@@ -3648,7 +3648,7 @@ lectures/schelling_shocks.md:
     path: schelling_shocks.md
     digest: 794a59f877e9ab56ecb8c2caab114f68945be7bd3296ebddf112119f029e8739
   promoted_at:
-    jax: 8e7b2f6762d6db761a0cc11c743ea93a79bf726a
+    jax: d761fc5bf5e9b7f6eca051df526510f4bf6c5273
   assets: []
   rewrites: []
 lectures/scipy.md:
@@ -3658,7 +3658,7 @@ lectures/scipy.md:
     path: scipy.md
     digest: 56bbe589f58d6ffbdb83267335c0f556f95063d4aad205f64ede6717804c8586
   promoted_at:
-    programming: 6ddf08840df3faa656e618f9dfd3ed968dded030
+    programming: bae31ee496e8ef687fe7e3edbbd4699a5d42164f
   assets: []
   rewrites: []
 lectures/short_path.md:
@@ -3695,7 +3695,7 @@ lectures/short_path_jax.md:
     path: short_path_jax.md
     digest: 779fbe70709df9b783e1834c270a0079af9cffc3af2344dd50d1ae7b4efcf1d8
   promoted_at:
-    jax: 8e7b2f6762d6db761a0cc11c743ea93a79bf726a
+    jax: d761fc5bf5e9b7f6eca051df526510f4bf6c5273
   assets:
   - _static/_shared/_admonition/gpu.md
   rewrites:
@@ -3867,7 +3867,7 @@ lectures/sympy.md:
     path: sympy.md
     digest: 9bd30370c3f7b2a7b20c5dc5ab8a075badb82fab6544c2ae30cd4c62587bf610
   promoted_at:
-    programming: 6ddf08840df3faa656e618f9dfd3ed968dded030
+    programming: bae31ee496e8ef687fe7e3edbbd4699a5d42164f
   assets: []
   rewrites: []
 lectures/tax_smooth.md:
@@ -4141,7 +4141,7 @@ lectures/wealth_dynamics_jax.md:
     path: wealth_dynamics_jax.md
     digest: 7debc164f86fbe943ab154ffa3b9042e6ed28d219d63a9cc6225bfeb3f08afc3
   promoted_at:
-    jax: 8e7b2f6762d6db761a0cc11c743ea93a79bf726a
+    jax: d761fc5bf5e9b7f6eca051df526510f4bf6c5273
   assets:
   - _static/_shared/_admonition/gpu.md
   rewrites:
@@ -4164,7 +4164,7 @@ lectures/workspace.md:
     path: workspace.md
     digest: fac5c325dc4d35633a3394232d705d17e16500d95c53a02ed17b511c4f3b125c
   promoted_at:
-    programming: 6ddf08840df3faa656e618f9dfd3ed968dded030
+    programming: bae31ee496e8ef687fe7e3edbbd4699a5d42164f
   assets:
   - _static/workspace/extensions.png
   - _static/workspace/file_browser.png
@@ -4222,7 +4222,7 @@ lectures/writing_good_code.md:
     path: writing_good_code.md
     digest: c8d996c3fa8c0469913e93e4c5cb03cd89f191c6ef0bf0c09e8bda8c04d2415c
   promoted_at:
-    programming: 6ddf08840df3faa656e618f9dfd3ed968dded030
+    programming: bae31ee496e8ef687fe7e3edbbd4699a5d42164f
   assets: []
   rewrites: []
 assets:
