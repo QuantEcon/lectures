@@ -5,8 +5,8 @@ intro:
   sha: 8db8a9960d17f4db2396a51a9c32ddaa768c9983
   synced_at: '2026-11-19T03:49:34Z'
 programming:
-  sha: 6ddf08840df3faa656e618f9dfd3ed968dded030
-  synced_at: '2026-11-19T03:49:34Z'
+  sha: bae31ee496e8ef687fe7e3edbbd4699a5d42164f
+  synced_at: '2026-11-19T08:13:55Z'
 intermediate:
   sha: eb2ba52c609a72c60316ef9cc1dc87add3a872d9
   synced_at: '2026-11-19T03:49:35Z'
@@ -17,5 +17,5 @@ dp:
   sha: da83d88d8de7ab04a4c722bdbd0ce6e2c8333c7c
   synced_at: '2026-09-04T06:42:25Z'
 jax:
-  sha: 8e7b2f6762d6db761a0cc11c743ea93a79bf726a
-  synced_at: '2026-11-19T03:49:35Z'
+  sha: d761fc5bf5e9b7f6eca051df526510f4bf6c5273
+  synced_at: '2026-11-19T08:13:56Z'
