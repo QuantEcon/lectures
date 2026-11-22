@@ -20,8 +20,9 @@
 # sphinx-exercise stay at the image's versions; kaleido goes to 1.5.2 from the
 # image's 0.2.1, and needs a Chrome: since QuantEcon/actions#346 (2026-11-19)
 # both images carry Chrome for Testing 158.0.8127.36 at /opt/chrome, with
-# BROWSER_PATH set (QuantEcon/actions#85, QuantEcon/actions#342); sphinx, markdown-it-py and alabaster go back to what
-# jupyter-book 1.x needs, as in every series' build. The six series were
+# BROWSER_PATH set (QuantEcon/actions#85, QuantEcon/actions#342); sphinx,
+# markdown-it-py and alabaster go back to what jupyter-book 1.x needs, as in
+# every series' build. The six series were
 # brought to this baseline upstream by 2026-11-20, one pull request each.
 #
 # A person changes a pin, after testing (a workflow that watches for new
