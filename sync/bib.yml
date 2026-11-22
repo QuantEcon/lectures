@@ -202,8 +202,8 @@ rulings:
   ModiglianiBrumberg1954:
     take: intro
     set: {publisher: Rutgers University Press}
-    because: 'style fix (#10, decision D3): an @incollection needs its publisher (rule 2); Post-Keynesian Economics (Kurihara, ed.) is Rutgers University Press, 1954'
-    seal: {intro: 1b5b4d953cab4093, intermediate: 1b5b4d953cab4093, advanced: 1b5b4d953cab4093, jax: 1b5b4d953cab4093}
+    because: 'style fix (#10, decision D3): an @incollection needs its publisher (rule 2); Post-Keynesian Economics (Kurihara, ed.) is Rutgers University Press, 1954; re-sealed 2026-11-22, when intro''s copy took the result (QuantEcon/lecture-python-intro#875)'
+    seal: {intro: 1ca767d52640eaed, intermediate: 1b5b4d953cab4093, advanced: 1b5b4d953cab4093, jax: 1b5b4d953cab4093}
   Neyman_Pearson:
     take: intermediate
     because: 'rule: one copy is broken (#10): the others put volume and issue inside an abbreviated journal name'
@@ -241,8 +241,8 @@ rulings:
   sargent1989least:
     take: intro
     set: {editor: William Barnett and John Geweke and Karl Shell}
-    because: 'style fix (#10, decision D3): the editors were separated by commas and a stray comma before "and", so BibTeX read one malformed name; the same three names, joined by "and" (rule 3)'
-    seal: {intro: b5017575cd6e8580}
+    because: 'style fix (#10, decision D3): the editors were separated by commas and a stray comma before "and", so BibTeX read one malformed name; the same three names, joined by "and" (rule 3); re-sealed 2026-11-22, when intro''s copy took the result (QuantEcon/lecture-python-intro#875)'
+    seal: {intro: 1bcb74219e915562}
   Sargent_Stachurski_2025:
     take: advanced
     because: 'rule: one copy has more fields (#10): advanced''s adds the DOI; the others'' extra field, place, is one neither reader prints'
