@@ -1,0 +1,18 @@
+# The base environment the site-build workflow's GPU leg creates on its RunsOn
+# machine (QuantEcon/project-monorepo#77), before it applies
+# environment-update.yml: Python 3.13 and the anaconda=2026.07 metapackage,
+# the base the full image, ghcr.io/quantecon/quantecon, carries for the
+# container leg and every series' environment.yml names. So a GPU site builds
+# in the same environment as a CPU site, with jax[cuda13] added. The GPU
+# machine image's own Conda environment has no anaconda metapackage, so the
+# leg creates this one with setup-miniconda, as the GPU series' own workflows
+# create theirs (the owner's choice of 2026-11-22). The GPU leg's execution
+# cache is keyed on this file as well, so a change here executes every page
+# of a GPU site again.
+name: quantecon
+channels:
+  - default
+dependencies:
+  - python=3.13
+  - anaconda=2026.07
+  - pip
