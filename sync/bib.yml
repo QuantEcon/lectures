@@ -33,6 +33,10 @@ rulings:
     set: {publisher: Elsevier}
     because: 'owner''s ruling of 2026-11-02 (QuantEcon/project-monorepo#10): the Handbook of Computational Economics (1996), which Amman, Kendrick and Rust edited; the others say 1990 and list them as authors'
     seal: {intro: 7cc7b798cc306eb3, intermediate: a229f98efbe3e257, advanced: 7cc7b798cc306eb3, jax: 7cc7b798cc306eb3}
+  AlonsoMatouschek2008:
+    take: intermediate
+    because: 'rule: one copy has more fields (#10): intermediate''s adds the DOI'
+    seal: {intermediate: fabd0c4f99b94d2c, advanced: 0645ae61fcb796bf}
   Athanasios1991:
     take: intermediate
     because: 'owner''s ruling of 2026-11-02 (QuantEcon/project-monorepo#10): Papoulis alone wrote the 1991 (third) edition; the others swap his names and add Pillai, who joined at the fourth'

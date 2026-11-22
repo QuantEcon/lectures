@@ -236,6 +236,16 @@ lectures/amss3.md:
     to: _static/amss3/amss3_g3.png
   - from: _static/lecture_specific/amss2/utilities.py
     to: _static/_shared/amss2/utilities.py
+lectures/approximation_errors.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: approximation_errors.md
+    digest: 5f2e949c67d6879ed8a8089459bc84dda3660e5a15073ffe4d8e0b18f5b3c673
+  promoted_at:
+    intermediate: 220fb976b301d27c514e4e2c0a30693541ed71b2
+  assets: []
+  rewrites: []
 lectures/ar1_bayes.md:
   canonical: intermediate
   sources:
@@ -684,6 +694,16 @@ lectures/cobweb.md:
     digest: 8eb34f606a9508641028ad395d0da6e9b83e7edd3a8d253df88fe77da4b2f85d
   promoted_at:
     intro: 8db8a9960d17f4db2396a51a9c32ddaa768c9983
+  assets: []
+  rewrites: []
+lectures/commitment_flexibility.md:
+  canonical: advanced
+  sources:
+  - series: advanced
+    path: commitment_flexibility.md
+    digest: 8623795303a42e7ff57965b002d69d1e26aea6fca2e9980603de0ccd78f204ea
+  promoted_at:
+    advanced: 63ef0beabb94871048e2efe567758ec78b39fecb
   assets: []
   rewrites: []
 lectures/commod_price.md:
@@ -3771,6 +3791,16 @@ lectures/solow.md:
     intro: 8db8a9960d17f4db2396a51a9c32ddaa768c9983
   assets: []
   rewrites: []
+lectures/specification_tests.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: specification_tests.md
+    digest: 2890ae392ff874620f12d2a6c5f682053dcbec05d263d479d50204b63cab3d8e
+  promoted_at:
+    intermediate: 220fb976b301d27c514e4e2c0a30693541ed71b2
+  assets: []
+  rewrites: []
 lectures/stationary_densities.md:
   canonical: advanced
   sources:
@@ -3925,6 +3955,16 @@ lectures/tax_smoothing_3.md:
     dp: da83d88d8de7ab04a4c722bdbd0ce6e2c8333c7c
   assets: []
   rewrites: []
+lectures/temptation_self_control.md:
+  canonical: advanced
+  sources:
+  - series: advanced
+    path: temptation_self_control.md
+    digest: 17563b85f6d544ad79972d4b19e2f82896e46c8e4f15f9373012ae6a3a0ea649
+  promoted_at:
+    advanced: 63ef0beabb94871048e2efe567758ec78b39fecb
+  assets: []
+  rewrites: []
 lectures/theil_1.md:
   canonical: intermediate
   sources:
@@ -3963,6 +4003,16 @@ lectures/tsyrennikov_2013.md:
     digest: 6217f4e356b36094cd3ee9dd217ae007f09b88cb0966e8b39dafda304af9ba44
   promoted_at:
     advanced: 563576a2d6319cb10fb4daac4f6ecb8e6cbeb264
+  assets: []
+  rewrites: []
+lectures/turbulence_inference.md:
+  canonical: intermediate
+  sources:
+  - series: intermediate
+    path: turbulence_inference.md
+    digest: c81617fd60db56ec916c10ff532180cabfad76f4dbe700be8ffdae14a3175758
+  promoted_at:
+    intermediate: 220fb976b301d27c514e4e2c0a30693541ed71b2
   assets: []
   rewrites: []
 lectures/two_auctions.md:
