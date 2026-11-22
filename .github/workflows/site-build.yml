@@ -8,8 +8,8 @@ name: site-build
 # and each series keeps building and publishing from its own repository until
 # its cutover.
 #
-# WHICH SITES: the ones named in SITES below, today `dp`, `intro` and
-# `advanced`. The other three folders in sites/ are not built until their
+# WHICH SITES: the ones named in SITES below, today `dp`, `intro`, `advanced`
+# and `programming`. The other two folders in sites/ are not built until their
 # turn, so a pull request is never held up by a site that has not been brought
 # through yet. The first job reads each named site's sites/<key>/site.yml
 # (tools/site-matrix) and hands the matrix to the second: the runner class
@@ -17,11 +17,12 @@ name: site-build
 # key hashes, the job's time limit is site.yml's cell_timeout plus an
 # allowance for a build from an empty cache (site.yml holds no job limit;
 # tools/site-matrix says why), and extra_packages lists what the leg installs.
-# Only the ubuntu-latest runner class has a leg so far, in either environment;
-# a GPU site is refused until its leg is written. `fail-fast: false`, so one
-# site's failure never stops another's build. Every push or pull request that
-# touches lectures/ or sites/ builds every named site, whatever it changed: no
-# site is skipped yet because its toc does not reach the change.
+# The ubuntu-latest class builds in a container, the GPU class (g4dn.2xlarge)
+# on a RunsOn machine with no container (THE GPU LEG, below).
+# `fail-fast: false`, so one site's failure never stops another's build. Every
+# push or pull request that touches lectures/ or sites/ builds every named
+# site, whatever it changed: no site is skipped yet because its toc does not
+# reach the change.
 #
 # THE ENVIRONMENT is site.yml's optional `environment` (sites/README.md):
 #   series (the default; dp): ghcr.io/quantecon/quantecon-build:latest, the
@@ -29,31 +30,47 @@ name: site-build
 #     site.yml's extra_packages. dp stays here until its first shadow
 #     comparison, so that comparison measures the move of the build alone
 #     (QuantEcon/project-monorepo ideas/one-environment-for-every-site.md).
-#   base (intro, advanced): ghcr.io/quantecon/quantecon:latest, the full
-#     image, whose anaconda=2026.07 is what every series' environment.yml
-#     names, with _base/environment-update.yml, the one package list every
-#     site is to build with, applied by QuantEcon/actions' setup-environment
-#     (conda env update in the image's environment). The image runs as root,
-#     so the leg sets PIP_ROOT_USER_ACTION=ignore: without it every install
+#   base (intro, advanced; programming on the GPU leg, below): in a
+#     container, ghcr.io/quantecon/quantecon:latest, the full image, whose
+#     anaconda=2026.07 is what every series' environment.yml names, with
+#     _base/environment-update.yml, the one package list every site is to
+#     build with, applied by QuantEcon/actions' setup-environment (conda env
+#     update in the image's environment). The image runs as root, so the
+#     container leg sets PIP_ROOT_USER_ACTION=ignore: without it every install
 #     cell's output carries pip's root-user warning, which the series' own
 #     builds (not root) do not print. It also builds matplotlib's font cache
 #     before the build, so no lecture's first plot prints that it is building
 #     it.
+#
+# THE GPU LEG (the g4dn.2xlarge class; programming so far) runs on a RunsOn
+# machine with one NVIDIA T4, from QuantEcon's GPU machine image (its AMI ID
+# is in tools/site-matrix), with no container, and in the base environment
+# alone. It builds the same environment as the container's: setup-miniconda
+# creates _base/environment.yml (Python 3.13 and anaconda=2026.07, what the
+# full image carries), as the GPU series' own workflows create theirs;
+# `conda env update` applies _base/environment-update.yml to it
+# (setup-environment would update the machine image's own environment, which
+# has no anaconda); and jax[cuda13], at the list's jax version, adds the CUDA
+# plugin, with a check that jax finds the GPU. The owner chose this shape on
+# 2026-11-22, after the environment scan of 2026-11-19 built the three GPU
+# sites so with nothing new (QuantEcon/project-monorepo#77).
+#
 # Neither image is public: the build job pulls with its GITHUB_TOKEN, so it
 # has `packages: read`, and each package's Actions access list (Manage
 # Actions access, in the QuantEcon organisation's package settings) must
 # include QuantEcon/lectures, which nothing here can check. Without that, the
 # job fails in "Initialize containers" with unauthorized.
 #
-# EACH LEG, in the container:
+# EACH LEG, in its container or on its machine:
 #   1. checks out with full history (the theme dates each page from git log);
 #   2. in the series environment, reconstructs mirror/<key>/ at its pin
 #      (tools/sync <key>: a sparse, shallow fetch of the series' lectures/
 #      and environment.yml, a few seconds), for the one file the cache key
 #      needs, environment.yml; in the base environment, applies
-#      _base/environment-update.yml instead, and builds the font cache;
+#      _base/environment-update.yml instead (on the GPU leg, creates the base
+#      first and adds jax for CUDA after: above), and builds the font cache;
 #   3. installs site.yml's extra_packages, if it has any, with pip into the
-#      image's environment, which jb runs in. dp's is jax, the CPU wheel: the
+#      environment jb runs in. dp's is jax, the CPU wheel: the
 #      image has none, and mccall_risk imports it without installing it.
 #      Then it records the environment as installed (pip freeze), which the
 #      execution report's artefact keeps;
@@ -88,11 +105,13 @@ name: site-build
 #   - the env hash: of mirror/<key>/environment.yml in the series
 #     environment, of _base/environment-update.yml in the base one;
 #   - the hash of site.yml's extra_packages (tools/site-matrix);
-#   - the image hash: of the image's /etc/quantecon-container, which names
-#     the image and the time it was built. The images are built only when
-#     their Dockerfiles change (QuantEcon/actions, build-containers.yml,
-#     with no schedule), so a new hash is a new image, not a rebuild of the
-#     same one;
+#   - the image hash: in a container, of the image's
+#     /etc/quantecon-container, which names the image and the time it was
+#     built. The images are built only when their Dockerfiles change
+#     (QuantEcon/actions, build-containers.yml, with no schedule), so a new
+#     hash is a new image, not a rebuild of the same one. On the GPU leg, of
+#     the RunsOn spec, which names the machine image by its AMI ID (an AMI
+#     never changes), and of _base/environment.yml, the base the leg creates;
 #   - and the run.
 # A cache is never overwritten, so each save is a new key, and a restore
 # takes the newest saved under the same tag and hashes; there is no fallback
@@ -104,7 +123,8 @@ name: site-build
 #   the environment the series declares, as in dp's own cache keys. In the
 #   base environment the list it hashes is what the build installs.
 #   What it does not catch: an extra package such as jax comes from the
-#   newest release pip finds, so a new release keeps the key. A page is
+#   newest release pip finds, so a new release keeps the key; and on the GPU
+#   leg, the CUDA libraries jax[cuda13] brings are not pinned. A page is
 #   executed again only when its own code changes (jupyter-cache matches a
 #   page by its code cells) or the key does.
 # Pull requests only restore. A save happens on main alone (a push, a manual
@@ -136,11 +156,10 @@ name: site-build
 # request touches lectures/, so it is built like any other (its run waits for
 # a maintainer's approval, as that workflow notes), and so is its merge.
 #
-# WHAT IT DOES NOT DO (yet): publish; build the PDF or the notebooks (dp
-# publishes HTML alone); post a preview (QuantEcon/actions#336); build on
-# mystmd (QuantEcon/actions#337); build only the sites whose toc lists a
-# changed file; build a GPU site (its leg is not written yet); share one
-# execution cache between the sites of one environment.
+# WHAT IT DOES NOT DO (yet): publish; build the PDF or the notebooks (HTML
+# alone for now); post a preview (QuantEcon/actions#336); build on mystmd
+# (QuantEcon/actions#337); build only the sites whose toc lists a changed
+# file; share one execution cache between the sites of one environment.
 
 on:
   push:
@@ -191,7 +210,7 @@ env:
   # The sites this workflow builds, by folder under sites/, separated by
   # spaces. A site is added when it is brought through
   # (QuantEcon/project-monorepo#77).
-  SITES: dp intro advanced
+  SITES: dp intro advanced programming
 
 defaults:
   run:
@@ -216,7 +235,8 @@ jobs:
         id: matrix
         run: |
           read -ra keys <<< "$SITES"
-          matrix=$(uv run --script tools/site-matrix "${keys[@]}")
+          # The run's ID goes into a GPU site's RunsOn label.
+          matrix=$(uv run --script tools/site-matrix --run-id "$GITHUB_RUN_ID" "${keys[@]}")
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
           echo "$matrix"
 
@@ -229,8 +249,8 @@ jobs:
         site: ${{ fromJSON(needs.sites.outputs.matrix) }}
     runs-on: ${{ matrix.site.runs_on }}
     timeout-minutes: ${{ matrix.site.timeout_minutes }}
-    container:
-      image: ${{ matrix.site.image }}
+    # A GPU site has no image: an empty container runs the job on the machine.
+    container: ${{ matrix.site.image }}
     # packages: read pulls the container image, which is not public (above).
     permissions:
       contents: read
@@ -244,7 +264,9 @@ jobs:
 
       # The image's Python has PyYAML, tools/sync's one dependency, and git, so
       # the tools run with `python`, with no uv to install. tools/stage-site
-      # and tools/execution-report need the standard library alone.
+      # and tools/execution-report need the standard library alone. From the
+      # staging on, the tools run in a login shell, as build-lectures runs jb:
+      # on the GPU machine only a login shell has the environment's `python`.
       - name: Reconstruct the series' files at its pin
         if: ${{ matrix.site.environment == 'series' }}
         env:
@@ -254,15 +276,50 @@ jobs:
       # The base environment: the one package list, applied to the full
       # image's environment (setup-environment's container mode).
       - name: Apply the environment list
-        if: ${{ matrix.site.environment == 'base' }}
+        if: ${{ matrix.site.leg == 'container' && matrix.site.environment == 'base' }}
         uses: quantecon/actions/setup-environment@v0
         with:
           environment-update: _base/environment-update.yml
 
+      # The GPU leg (above): the base the full image carries, created as the
+      # GPU series' own workflows create theirs. setup-miniconda activates it
+      # in a login shell (bash -l), which every later step that needs it uses.
+      - name: Create the base environment (GPU)
+        if: ${{ matrix.site.leg == 'gpu' }}
+        uses: conda-incubator/setup-miniconda@v4
+        with:
+          auto-update-conda: true
+          auto-activate-base: true
+          miniconda-version: 'latest'
+          python-version: "3.13"
+          environment-file: _base/environment.yml
+          activate-environment: quantecon
+
+      - name: Apply the environment list (GPU)
+        if: ${{ matrix.site.leg == 'gpu' }}
+        shell: bash -leo pipefail {0}
+        run: conda env update -n quantecon -f _base/environment-update.yml
+
+      # The list's jax is the CPU wheel; the [cuda13] extra at the same version
+      # adds the CUDA plugin and the CUDA libraries it bundles, which need only
+      # the machine's NVIDIA driver.
+      - name: Install jax for CUDA, and check it finds the GPU
+        if: ${{ matrix.site.leg == 'gpu' }}
+        shell: bash -leo pipefail {0}
+        run: |
+          nvidia-smi
+          version=$(sed -n 's/^ *- jax==\([^ ]*\).*/\1/p' _base/environment-update.yml)
+          if [ -z "$version" ]; then
+            echo "::error::_base/environment-update.yml pins no jax version"
+            exit 1
+          fi
+          python -m pip install --no-input "jax[cuda13]==$version"
+          python -c "import jax; d = jax.devices(); print('jax', jax.__version__, d); assert d[0].platform == 'gpu', d"
+
       # The full image runs as root; the series' own builds do not, and print
       # no root-user warning in their install cells.
       - name: Quiet pip's root-user warning
-        if: ${{ matrix.site.environment == 'base' }}
+        if: ${{ matrix.site.leg == 'container' && matrix.site.environment == 'base' }}
         run: echo "PIP_ROOT_USER_ACTION=ignore" >> "$GITHUB_ENV"
 
       - name: Build matplotlib's font cache
@@ -298,6 +355,8 @@ jobs:
         id: site
         env:
           KEY: ${{ matrix.site.key }}
+          LEG: ${{ matrix.site.leg }}
+          MACHINE: ${{ matrix.site.machine }}
           ENV_FILE: ${{ matrix.site.env_file }}
           ENV_HASH: ${{ hashFiles(matrix.site.env_file) }}
           TAG: ${{ matrix.site.cache_tag }}
@@ -308,13 +367,20 @@ jobs:
             echo "::error::$ENV_FILE does not exist, so the cache has no key (in the series environment, tools/sync did not reconstruct it)"
             exit 1
           fi
-          # The image's own record of itself: its name and build time.
-          if [ ! -s /etc/quantecon-container ]; then
-            echo "::error::/etc/quantecon-container is missing, so the cache key cannot name the image"
-            exit 1
+          if [ "$LEG" = gpu ]; then
+            # The GPU leg: the machine image, by its AMI ID in RunsOn's spec,
+            # and the base environment the leg created on it.
+            echo "  $MACHINE"
+            IMAGE_HASH=$({ printf '%s\n' "$MACHINE"; cat _base/environment.yml; } | sha256sum | cut -c1-16)
+          else
+            # The image's own record of itself: its name and build time.
+            if [ ! -s /etc/quantecon-container ]; then
+              echo "::error::/etc/quantecon-container is missing, so the cache key cannot name the image"
+              exit 1
+            fi
+            sed 's/^/  /' /etc/quantecon-container
+            IMAGE_HASH=$(sha256sum /etc/quantecon-container | cut -c1-16)
           fi
-          sed 's/^/  /' /etc/quantecon-container
-          IMAGE_HASH=$(sha256sum /etc/quantecon-container | cut -c1-16)
           {
             echo "cache-path=_build/jupyter_cache/$KEY"
             echo "cache-prefix=jb1-$KEY-$TAG$ENV_HASH-$PACKAGES_HASH-$IMAGE_HASH-"
@@ -350,6 +416,7 @@ jobs:
         id: stage
         env:
           KEY: ${{ matrix.site.key }}
+        shell: bash -l {0}
         run: python tools/stage-site "$KEY"
 
       - name: Note the build's start
@@ -408,4 +475,5 @@ jobs:
         if: ${{ always() && steps.stage.outcome != 'skipped' }}
         env:
           KEY: ${{ matrix.site.key }}
+        shell: bash -l {0}
         run: python tools/stage-site --clean "$KEY"
