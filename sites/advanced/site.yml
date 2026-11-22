@@ -9,3 +9,9 @@ cell_timeout: 7200
 publishes: [html, pdf, notebooks]
 # html.baseurl in _config.yml
 url: https://python-advanced.quantecon.org/
+# the full image with _base/environment-update.yml, the one environment every
+# site is to build with (QuantEcon/project-monorepo#77): advanced is the
+# second site brought into it, after intro, by the owner's order of 2026-11-22;
+# its three Kaleido lectures export images with the image's Chrome for Testing
+# (/opt/chrome, BROWSER_PATH; QuantEcon/actions#346)
+environment: base
