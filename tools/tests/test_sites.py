@@ -155,7 +155,7 @@ def test_site_yml_has_the_fields_the_build_reads_with_valid_values(make_repo):
     assert problems(res) == [
         "[site-yml] sites/intro/site.yml has no `url`",
         "[site-yml] sites/intro/site.yml: `runners` is not a field the build reads (type, runner, cell_timeout, "
-        "publishes, url; optional: extra_packages)",
+        "publishes, url; optional: extra_packages, environment)",
         "[site-yml] sites/intro/site.yml: type 'course' is not one of series",
         "[site-yml] sites/intro/site.yml: runner 'macos-latest' is not one of ubuntu-latest, g4dn.2xlarge",
         "[site-yml] sites/intro/site.yml: cell_timeout '600' is not a whole number of seconds above 0",
@@ -187,6 +187,21 @@ def test_site_yml_may_list_extra_packages_as_plain_pip_requirements(make_repo, v
         assert problems(res) == [
             f"[site-yml] sites/intro/site.yml: extra_packages {value!r} is not a list of pip requirements (a name, "
             "optional [extras] and version specifiers, no spaces, none starting with -), each at most once",
+        ]
+
+
+@pytest.mark.parametrize("value,ok", [("series", True), ("base", True), (None, True), ("universal", False), (3, False)])
+def test_site_yml_may_name_the_environment_it_builds_in(make_repo, value, ok):
+    repo = pool_repo(make_repo)
+    make_site(repo, meta=site_yml(environment=value))
+
+    res = repo.pool_check()
+
+    if ok:
+        assert res.returncode == 0, res.stdout + res.stderr
+    else:
+        assert problems(res) == [
+            f"[site-yml] sites/intro/site.yml: environment {value!r} is not one of series, base",
         ]
 
 

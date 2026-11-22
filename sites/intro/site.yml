@@ -9,3 +9,7 @@ cell_timeout: 600
 publishes: [html, pdf, notebooks]
 # html.baseurl in _config.yml
 url: https://intro.quantecon.org/
+# the full image with _base/environment-update.yml, the one environment every
+# site is to build with (QuantEcon/project-monorepo#77): intro is the first
+# site brought into it, by the owner's order of 2026-11-22
+environment: base

@@ -9,12 +9,25 @@ Prints, on one line, the JSON list the build workflow's matrix runs over
 (``.github/workflows/site-build.yml``): one entry per site named, in the
 order named, each with the job settings its ``sites/<key>/site.yml`` decides.
 
-* ``runs_on`` and ``image``: the runner label and container for the site's
-  ``runner`` class. Only ``ubuntu-latest`` has a leg so far, in
-  ``ghcr.io/quantecon/quantecon-build:latest``, the container dp's own
-  workflows build in. A site on another class (``g4dn.2xlarge``, the RunsOn
-  GPU class) is refused: its leg is not written yet (no container, the
-  series' environment through conda, JAX for CUDA).
+* ``runs_on``: the runner label for the site's ``runner`` class. Only
+  ``ubuntu-latest`` has a leg so far. A site on another class
+  (``g4dn.2xlarge``, the RunsOn GPU class) is refused: its leg is not
+  written yet (no container, the environment through conda, JAX for CUDA).
+* ``environment``, ``image``, ``env_file`` and ``cache_tag``: what the site
+  builds in, from ``site.yml``'s optional ``environment``
+  (QuantEcon/project-monorepo#77, ``ideas/one-environment-for-every-site.md``
+  in QuantEcon/project-monorepo):
+
+  - ``series`` (the default): the lean image,
+    ``ghcr.io/quantecon/quantecon-build:latest``, the container dp's own
+    workflows build in. The leg installs nothing but ``extra_packages``; the
+    execution cache is keyed on the series' ``mirror/<key>/environment.yml``,
+    which names the environment the series declares.
+  - ``base``: the full image, ``ghcr.io/quantecon/quantecon:latest``, with
+    ``_base/environment-update.yml``, the one package list every site is to
+    build with, applied by QuantEcon/actions' ``setup-environment``; the
+    cache is keyed on that list, and its key carries ``base-``, so it never
+    meets a cache built in the series' environment.
 * ``timeout_minutes``: the job's time limit. ``site.yml`` holds no job limit
   (no series sets one; ``cell_timeout`` is the limit on one cell), so it is
   ``cell_timeout`` in whole minutes, the longest a single cell may run, plus
@@ -29,8 +42,7 @@ order named, each with the job settings its ``sites/<key>/site.yml`` decides.
   requirement (``tools/pool-check``'s pattern) is refused.
 * ``cell_timeout`` and ``publishes`` as ``site.yml`` gives them.
 
-Only a site of ``type: series`` is built so far: its execution cache is keyed
-on its series' ``environment.yml``. ``tools/pool-check`` checks every
+Only a site of ``type: series`` is built so far. ``tools/pool-check`` checks every
 ``site.yml`` field; this tool only reads them, and refuses one it cannot use.
 
 Usage
@@ -57,9 +69,15 @@ import yaml
 ROOT = Path(__file__).resolve().parent.parent
 SITES_DIR = ROOT / "sites"
 KEY_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]*")
-# Runner class -> (runs-on label, container image), for the classes with a leg.
+# Runner class -> runs-on label, for the classes with a leg.
 RUNNERS = {
-    "ubuntu-latest": ("ubuntu-latest", "ghcr.io/quantecon/quantecon-build:latest"),
+    "ubuntu-latest": "ubuntu-latest",
+}
+# site.yml's environment -> (container image, the file the cache key hashes, the
+# key's tag). The default is `series`; tools/pool-check allows the same values.
+ENVIRONMENTS = {
+    "series": ("ghcr.io/quantecon/quantecon-build:latest", "mirror/{key}/environment.yml", ""),
+    "base": ("ghcr.io/quantecon/quantecon:latest", "_base/environment-update.yml", "base-"),
 }
 # Minutes a whole build from an empty cache may take, beyond one cell's limit.
 BUILD_ALLOWANCE = 120
@@ -82,7 +100,9 @@ def entry(key: str):
     if data.get("type") != "series":
         return None, f"sites/{key}: type {data.get('type')!r} has no leg yet (only `series`)"
     runner = data.get("runner")
-    if runner not in RUNNERS:
+    # A string first: a list or mapping cannot be looked up in the table, and
+    # gets the same refusal as an unknown name.
+    if not isinstance(runner, str) or runner not in RUNNERS:
         return None, (f"sites/{key}: runner {runner!r} has no leg yet (only {', '.join(RUNNERS)}); "
                       "the GPU leg needs its own job shape")
     cell_timeout = data.get("cell_timeout")
@@ -99,11 +119,17 @@ def entry(key: str):
     ):
         return None, (f"sites/{key}: extra_packages {packages!r} is not a list of pip requirements, "
                       "non-empty and each at most once")
-    runs_on, image = RUNNERS[runner]
+    environment = data.get("environment", "series")
+    if not isinstance(environment, str) or environment not in ENVIRONMENTS:
+        return None, f"sites/{key}: environment {environment!r} is not one of {', '.join(ENVIRONMENTS)}"
+    image, env_file, cache_tag = ENVIRONMENTS[environment]
     return {
         "key": key,
-        "runs_on": runs_on,
+        "runs_on": RUNNERS[runner],
+        "environment": environment,
         "image": image,
+        "env_file": env_file.format(key=key),
+        "cache_tag": cache_tag,
         "timeout_minutes": math.ceil(cell_timeout / 60) + BUILD_ALLOWANCE,
         "cell_timeout": cell_timeout,
         "publishes": list(data.get("publishes") or []),
