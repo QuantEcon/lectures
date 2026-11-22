@@ -11,7 +11,7 @@
 # of a GPU site again.
 name: quantecon
 channels:
-  - default
+  - defaults
 dependencies:
   - python=3.13
   - anaconda=2026.07

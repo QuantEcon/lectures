@@ -30,17 +30,18 @@ name: site-build
 #     site.yml's extra_packages. dp stays here until its first shadow
 #     comparison, so that comparison measures the move of the build alone
 #     (QuantEcon/project-monorepo ideas/one-environment-for-every-site.md).
-#   base (intro, advanced; programming on the GPU leg):
-#     ghcr.io/quantecon/quantecon:latest, the full
-#     image, whose anaconda=2026.07 is what every series' environment.yml
-#     names, with _base/environment-update.yml, the one package list every
-#     site is to build with, applied by QuantEcon/actions' setup-environment
-#     (conda env update in the image's environment). The image runs as root,
-#     so the leg sets PIP_ROOT_USER_ACTION=ignore: without it every install
+#   base (intro, advanced; programming on the GPU leg, below): in a
+#     container, ghcr.io/quantecon/quantecon:latest, the full image, whose
+#     anaconda=2026.07 is what every series' environment.yml names, with
+#     _base/environment-update.yml, the one package list every site is to
+#     build with, applied by QuantEcon/actions' setup-environment (conda env
+#     update in the image's environment). The image runs as root, so the
+#     container leg sets PIP_ROOT_USER_ACTION=ignore: without it every install
 #     cell's output carries pip's root-user warning, which the series' own
 #     builds (not root) do not print. It also builds matplotlib's font cache
 #     before the build, so no lecture's first plot prints that it is building
 #     it.
+#
 # THE GPU LEG (the g4dn.2xlarge class; programming so far) runs on a RunsOn
 # machine with one NVIDIA T4, from QuantEcon's GPU machine image (its AMI ID
 # is in tools/site-matrix), with no container, and in the base environment
@@ -69,7 +70,7 @@ name: site-build
 #      _base/environment-update.yml instead (on the GPU leg, creates the base
 #      first and adds jax for CUDA after: above), and builds the font cache;
 #   3. installs site.yml's extra_packages, if it has any, with pip into the
-#      image's environment, which jb runs in. dp's is jax, the CPU wheel: the
+#      environment jb runs in. dp's is jax, the CPU wheel: the
 #      image has none, and mccall_risk imports it without installing it.
 #      Then it records the environment as installed (pip freeze), which the
 #      execution report's artefact keeps;
@@ -354,6 +355,7 @@ jobs:
         id: site
         env:
           KEY: ${{ matrix.site.key }}
+          LEG: ${{ matrix.site.leg }}
           MACHINE: ${{ matrix.site.machine }}
           ENV_FILE: ${{ matrix.site.env_file }}
           ENV_HASH: ${{ hashFiles(matrix.site.env_file) }}
@@ -365,7 +367,7 @@ jobs:
             echo "::error::$ENV_FILE does not exist, so the cache has no key (in the series environment, tools/sync did not reconstruct it)"
             exit 1
           fi
-          if [ -n "$MACHINE" ]; then
+          if [ "$LEG" = gpu ]; then
             # The GPU leg: the machine image, by its AMI ID in RunsOn's spec,
             # and the base environment the leg created on it.
             echo "  $MACHINE"
