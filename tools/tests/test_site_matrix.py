@@ -47,14 +47,40 @@ def test_a_cpu_series_site_gets_its_runner_container_and_time_limit(tmp_path):
     assert res.returncode == 0, res.stderr
     assert "\n" not in res.stdout.strip()  # one line, for $GITHUB_OUTPUT
     assert json.loads(res.stdout) == [
-        {"key": "intro", "runs_on": "ubuntu-latest", "image": "ghcr.io/quantecon/quantecon-build:latest",
-         "timeout_minutes": 11 + 120, "cell_timeout": 601, "publishes": ["html", "pdf"],
+        {"key": "intro", "runs_on": "ubuntu-latest", "environment": "series",
+         "image": "ghcr.io/quantecon/quantecon-build:latest", "env_file": "mirror/intro/environment.yml",
+         "cache_tag": "", "timeout_minutes": 11 + 120, "cell_timeout": 601, "publishes": ["html", "pdf"],
          "extra_packages": [], "packages_hash": "none"},
-        {"key": "dp", "runs_on": "ubuntu-latest", "image": "ghcr.io/quantecon/quantecon-build:latest",
-         "timeout_minutes": 40 + 120, "cell_timeout": 2400, "publishes": ["html"],
+        {"key": "dp", "runs_on": "ubuntu-latest", "environment": "series",
+         "image": "ghcr.io/quantecon/quantecon-build:latest", "env_file": "mirror/dp/environment.yml",
+         "cache_tag": "", "timeout_minutes": 40 + 120, "cell_timeout": 2400, "publishes": ["html"],
          "extra_packages": ["jax"], "packages_hash": hashlib.sha256(b"jax").hexdigest()[:16]},
     ]
     assert "not built (not named): jax" in res.stderr
+
+
+def test_a_site_in_the_base_environment_builds_in_the_full_image_keyed_on_the_list(tmp_path):
+    root = scratch(tmp_path, {"intro": site_yml(cell_timeout=600, environment="base"),
+                              "dp": site_yml(environment="series"),
+                              "odd": site_yml(environment="universal"),
+                              "gpu": site_yml(runner="g4dn.2xlarge", environment="base")})
+
+    res = run(root, "intro", "dp")
+
+    assert res.returncode == 0, res.stderr
+    intro, dp = json.loads(res.stdout)
+    assert {k: intro[k] for k in ("environment", "image", "env_file", "cache_tag")} == {
+        "environment": "base", "image": "ghcr.io/quantecon/quantecon:latest",
+        "env_file": "_base/environment-update.yml", "cache_tag": "base-"}
+    assert {k: dp[k] for k in ("environment", "image", "env_file", "cache_tag")} == {
+        "environment": "series", "image": "ghcr.io/quantecon/quantecon-build:latest",
+        "env_file": "mirror/dp/environment.yml", "cache_tag": ""}
+
+    res = run(root, "odd", "gpu")
+    assert res.returncode == 1
+    assert res.stdout == ""
+    assert "sites/odd: environment 'universal' is not one of series, base" in res.stderr
+    assert "sites/gpu: runner 'g4dn.2xlarge' has no leg yet" in res.stderr
 
 
 def test_a_site_with_no_leg_yet_is_refused_and_nothing_is_printed(tmp_path):

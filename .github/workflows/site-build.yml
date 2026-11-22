@@ -8,12 +8,12 @@ name: site-build
 # and each series keeps building and publishing from its own repository until
 # its cutover.
 #
-# WHICH SITES: the ones named in SITES below, today `dp` alone. The other five
-# folders in sites/ are not built until their turn, so a pull request is never
+# WHICH SITES: the ones named in SITES below, today `dp` and `intro`. The
+# other four folders in sites/ are not built until their turn, so a pull request is never
 # held up by a site that has not been brought through yet. The first job reads
 # each named site's sites/<key>/site.yml (tools/site-matrix) and hands the
-# matrix to the second: the runner class gives runs-on and the container, the
-# job's time limit is site.yml's cell_timeout plus an allowance for a build
+# matrix to the second: the runner class gives runs-on, the environment
+# (below) the container and what the cache key hashes, the job's time limit is site.yml's cell_timeout plus an allowance for a build
 # from an empty cache (site.yml holds no job limit; tools/site-matrix says
 # why), and extra_packages lists what the leg installs. Only an ubuntu-latest
 # series site has a leg so far; a GPU site is refused until its leg is
@@ -22,21 +22,39 @@ name: site-build
 # every named site, whatever it changed: no site is skipped yet because its
 # toc does not reach the change.
 #
-# THE CONTAINER is ghcr.io/quantecon/quantecon-build:latest, the image dp's
-# own workflows build in. It is not public: the build job pulls it with its
-# GITHUB_TOKEN, so it has `packages: read`, and the package's Actions access
-# list (Manage Actions access, in the QuantEcon organisation's package
-# settings) must include QuantEcon/lectures, which nothing here can check.
-# Without that, the job fails in "Initialize containers" with unauthorized.
+# THE ENVIRONMENT is site.yml's optional `environment` (sites/README.md):
+#   series (the default; dp): ghcr.io/quantecon/quantecon-build:latest, the
+#     lean image dp's own workflows build in, with nothing installed but
+#     site.yml's extra_packages. dp stays here until its first shadow
+#     comparison, so that comparison measures the move of the build alone
+#     (QuantEcon/project-monorepo ideas/one-environment-for-every-site.md).
+#   base (intro): ghcr.io/quantecon/quantecon:latest, the full image, whose
+#     anaconda=2026.07 is what every series' environment.yml names, with
+#     _base/environment-update.yml, the one package list every site is to
+#     build with, applied by QuantEcon/actions' setup-environment (conda env
+#     update in the image's environment). The image runs as root, so the leg
+#     sets PIP_ROOT_USER_ACTION=ignore: without it every install cell's output
+#     carries pip's root-user warning, which the series' own builds (not
+#     root) do not print. It also builds matplotlib's font cache before the
+#     build, so no lecture's first plot prints that it is building it.
+# Neither image is public: the build job pulls with its GITHUB_TOKEN, so it
+# has `packages: read`, and each package's Actions access list (Manage
+# Actions access, in the QuantEcon organisation's package settings) must
+# include QuantEcon/lectures, which nothing here can check. Without that, the
+# job fails in "Initialize containers" with unauthorized.
 #
 # EACH LEG, in the container:
 #   1. checks out with full history (the theme dates each page from git log);
-#   2. reconstructs mirror/<key>/ at its pin (tools/sync <key>: a sparse,
-#      shallow fetch of the series' lectures/ and environment.yml, a few
-#      seconds), for the one file the cache key needs, environment.yml;
+#   2. in the series environment, reconstructs mirror/<key>/ at its pin
+#      (tools/sync <key>: a sparse, shallow fetch of the series' lectures/
+#      and environment.yml, a few seconds), for the one file the cache key
+#      needs, environment.yml; in the base environment, applies
+#      _base/environment-update.yml instead, and builds the font cache;
 #   3. installs site.yml's extra_packages, if it has any, with pip into the
 #      image's environment, which jb runs in. dp's is jax, the CPU wheel: the
-#      image has none, and mccall_risk imports it without installing it;
+#      image has none, and mccall_risk imports it without installing it.
+#      Then it records the environment as installed (pip freeze), which the
+#      execution report's artefact keeps;
 #   4. restores the site's execution cache (below);
 #   5. stages the site into lectures/ (tools/stage-site): its own pages and
 #      files, and its _config.yml and _toc.yml, where `jb build lectures`
@@ -53,7 +71,7 @@ name: site-build
 #      executed or taken from the cache, with status, seconds, kernel and
 #      which of the two; it runs after a failed build too;
 #   8. keeps the HTML (html-<key>, green builds only, 7 days) and the report
-#      (execution-status-<key>) as artefacts. A failed build also uploads
+#      with the environment record (execution-status-<key>) as artefacts. A failed build also uploads
 #      build-lectures' failure reports (execution-reports-<key>): each failed
 #      page's traceback, from _build/html/reports. It does not hold the
 #      site's execution cache, which build-lectures looks for at
@@ -62,19 +80,23 @@ name: site-build
 #
 # THE EXECUTION CACHE is actions/cache, one per site, at the path every
 # site's _config.yml names, _build/jupyter_cache/<key> (pool-check rule 7).
-# Its key is jb1-<key>-<env hash>-<packages hash>-<run>: the hash of
-# mirror/<key>/environment.yml, the hash of site.yml's extra_packages
-# (tools/site-matrix), and the run. A cache is never overwritten, so each save
+# Its key is jb1-<key>-<tag><env hash>-<packages hash>-<run>: the tag is
+# empty in the series environment and `base-` in the base one; the env hash
+# is of mirror/<key>/environment.yml in the series environment and of
+# _base/environment-update.yml in the base one; then the hash of site.yml's
+# extra_packages (tools/site-matrix), and the run. A cache is never overwritten, so each save
 # is a new key, and a restore takes the newest saved under the same two
 # hashes; there is no fallback to another key's cache.
-#   What the key catches: a change to the series' environment.yml, or to the
-#   site's extra_packages, starts an empty cache, so every page is executed
-#   again. The build never installs environment.yml (the packages come from
-#   the image): the file only names the environment the series declares, as
-#   in dp's own cache keys.
+#   What the key catches: a change to the file it hashes, or to the site's
+#   extra_packages, starts an empty cache, so every page is executed again.
+#   In the series environment the build never installs environment.yml (the
+#   packages come from the image): the file only names the environment the
+#   series declares, as in dp's own cache keys. In the base environment the
+#   list it hashes is what the build installs.
 #   What it does not catch: the packages that execute a page come from the
-#   floating :latest image and, for an extra package such as jax, from the
-#   newest release pip finds. A change in either keeps the key, so a page is
+#   floating :latest image (in the base environment, those the list does not
+#   pin) and, for an extra package such as jax, from the newest release pip
+#   finds. A change in either keeps the key, so a page is
 #   executed again only when its own code changes (jupyter-cache matches a
 #   page by its code cells) or the key does. dp's own cache has the same gap.
 # Pull requests only restore. A save happens on main alone (a push, a manual
@@ -95,7 +117,8 @@ name: site-build
 # executed).
 #
 # TRIGGERS: a push to main or a pull request that touches the pool, the sites,
-# the tools a leg runs or what tools/sync reads, and this file; a manual run;
+# the tools a leg runs, what tools/sync reads, the environment list in
+# _base/, and this file; a manual run;
 # and twice a week on main, Monday and Thursday at 05:17 UTC, which keeps each
 # site's cache in use (GitHub drops a cache not read for 7 days, after which
 # every pull request would build cold). With every page in the cache, such a
@@ -108,8 +131,8 @@ name: site-build
 # WHAT IT DOES NOT DO (yet): publish; build the PDF or the notebooks (dp
 # publishes HTML alone); post a preview (QuantEcon/actions#336); build on
 # mystmd (QuantEcon/actions#337); build only the sites whose toc lists a
-# changed file; give every site one environment (each installs its own
-# extra_packages for now).
+# changed file; build a GPU site (its leg is not written yet); share one
+# execution cache between the sites of one environment.
 
 on:
   push:
@@ -123,6 +146,7 @@ on:
       - 'tools/execution-report'
       - 'sync/manifest.yml'
       - 'sync/state.yml'
+      - '_base/**'
       - '.github/workflows/site-build.yml'
   # The same paths: keep the two lists in step.
   pull_request:
@@ -135,6 +159,7 @@ on:
       - 'tools/execution-report'
       - 'sync/manifest.yml'
       - 'sync/state.yml'
+      - '_base/**'
       - '.github/workflows/site-build.yml'
   workflow_dispatch:
   schedule:
@@ -157,7 +182,7 @@ concurrency:
 env:
   # The sites this workflow builds, by folder under sites/, separated by
   # spaces. A site is added when it is brought through (QuantEcon/project-monorepo#77).
-  SITES: dp
+  SITES: dp intro
 
 defaults:
   run:
@@ -212,9 +237,29 @@ jobs:
       # the tools run with `python`, with no uv to install. tools/stage-site
       # and tools/execution-report need the standard library alone.
       - name: Reconstruct the series' files at its pin
+        if: ${{ matrix.site.environment == 'series' }}
         env:
           KEY: ${{ matrix.site.key }}
         run: python tools/sync "$KEY"
+
+      # The base environment: the one package list, applied to the full
+      # image's environment (setup-environment's container mode).
+      - name: Apply the environment list
+        if: ${{ matrix.site.environment == 'base' }}
+        uses: quantecon/actions/setup-environment@v0
+        with:
+          environment-update: _base/environment-update.yml
+
+      # The full image runs as root; the series' own builds do not, and print
+      # no root-user warning in their install cells.
+      - name: Quiet pip's root-user warning
+        if: ${{ matrix.site.environment == 'base' }}
+        run: echo "PIP_ROOT_USER_ACTION=ignore" >> "$GITHUB_ENV"
+
+      - name: Build matplotlib's font cache
+        if: ${{ matrix.site.environment == 'base' }}
+        shell: bash -leo pipefail {0}
+        run: python -c "import matplotlib.font_manager"
 
       # site.yml's extra_packages, into the environment jb runs in: a login
       # shell, as build-lectures uses, so `python` is that environment's (and
@@ -231,22 +276,31 @@ jobs:
           read -ra packages <<< "$EXTRA_PACKAGES"
           python -m pip install --no-input --root-user-action=ignore "${packages[@]}"
 
+      - name: Record the environment
+        shell: bash -leo pipefail {0}
+        run: |
+          mkdir -p _build
+          python -m pip freeze > _build/pip-freeze.txt
+          echo "$(wc -l < _build/pip-freeze.txt) packages; jupyter-book $(python -m pip show jupyter-book 2>/dev/null | sed -n 's/^Version: //p')"
+
       - name: Name the site's cache and its key
         id: site
         env:
           KEY: ${{ matrix.site.key }}
-          ENV_HASH: ${{ hashFiles(format('mirror/{0}/environment.yml', matrix.site.key)) }}
+          ENV_FILE: ${{ matrix.site.env_file }}
+          ENV_HASH: ${{ hashFiles(matrix.site.env_file) }}
+          TAG: ${{ matrix.site.cache_tag }}
           PACKAGES_HASH: ${{ matrix.site.packages_hash }}
           RUN: ${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           if [ -z "$ENV_HASH" ]; then
-            echo "::error::mirror/$KEY/environment.yml does not exist, so the cache has no key: tools/sync did not reconstruct it"
+            echo "::error::$ENV_FILE does not exist, so the cache has no key (in the series environment, tools/sync did not reconstruct it)"
             exit 1
           fi
           {
             echo "cache-path=_build/jupyter_cache/$KEY"
-            echo "cache-prefix=jb1-$KEY-$ENV_HASH-$PACKAGES_HASH-"
-            echo "cache-key=jb1-$KEY-$ENV_HASH-$PACKAGES_HASH-$RUN"
+            echo "cache-prefix=jb1-$KEY-$TAG$ENV_HASH-$PACKAGES_HASH-"
+            echo "cache-key=jb1-$KEY-$TAG$ENV_HASH-$PACKAGES_HASH-$RUN"
           } >> "$GITHUB_OUTPUT"
 
       # The primary key carries this run's ID, so it never matches: the
@@ -313,7 +367,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: execution-status-${{ matrix.site.key }}
-          path: _build/execution_status.json
+          path: |
+            _build/execution_status.json
+            _build/pip-freeze.txt
           if-no-files-found: warn
 
       - name: Keep the site's HTML
