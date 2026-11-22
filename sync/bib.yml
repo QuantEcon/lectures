@@ -101,8 +101,8 @@ rulings:
   hansen1995discounted:
     take: intermediate
     set: {title: 'Discounted linear exponential quadratic {G}aussian control', journal: IEEE Transactions on Automatic Control}
-    because: 'owner''s ruling of 2026-11-02 (QuantEcon/project-monorepo#10): Hansen and Sargent (1995), IEEE TAC; advanced''s copy is Hansen, Sargent and Tallarini (1999), which is HST_1999, and every citing sentence means the 1995 paper; Gaussian braced and the journal''s name corrected 2026-11-22 (QuantEcon/lecture-python-advanced.myst#420)'
-    seal: {intermediate: ca1f2a81828ec3c7, advanced: 10c6c72c63ee6a2e}
+    because: 'owner''s ruling of 2026-11-02 (QuantEcon/project-monorepo#10): Hansen and Sargent (1995), IEEE TAC; advanced''s copy is Hansen, Sargent and Tallarini (1999), which is HST_1999, and every citing sentence means the 1995 paper; Gaussian braced and the journal''s name corrected 2026-11-22, and advanced''s copy re-sealed when it took the result (QuantEcon/lecture-python-advanced.myst#420)'
+    seal: {intermediate: ca1f2a81828ec3c7, advanced: d704144efd75e109}
   hansen2008consumption:
     take: intermediate
     because: 'rule: one copy has more fields (#10): intermediate''s adds the DOI, the journal''s capitals and the title''s'
@@ -268,8 +268,8 @@ rulings:
   SvenssonWilliams2009:
     take: intermediate
     set: {title: 'Optimal Monetary Policy under Uncertainty in {DSGE} Models: A {Markov} Jump-Linear-Quadratic Approach'}
-    because: 'rule: one copy is broken (#10): advanced''s editor list is truncated mid-name; the editors also list the series editors, which is #112''s to correct; DSGE and Markov braced 2026-11-22, since the reference style sets titles in sentence case (advanced''s copy braced the whole title; QuantEcon/lecture-python-advanced.myst#420)'
-    seal: {intro: 3603af09c33264d1, intermediate: 3603af09c33264d1, advanced: e0dc98e4769af2f9, jax: 3603af09c33264d1}
+    because: 'rule: one copy is broken (#10): advanced''s editor list is truncated mid-name; the editors also list the series editors, which is #112''s to correct; DSGE and Markov braced 2026-11-22, since the reference style sets titles in sentence case (advanced''s copy braced the whole title), and advanced''s copy re-sealed when it took the result (QuantEcon/lecture-python-advanced.myst#420)'
+    seal: {intro: 3603af09c33264d1, intermediate: 3603af09c33264d1, advanced: 78aa844ba6e29016, jax: 3603af09c33264d1}
   szoke2022estimating:
     take: advanced
     because: 'owner''s ruling of 2026-11-02 (QuantEcon/project-monorepo#10): Bálint Szőke, with the DOI; intermediate has "Balázs"'
