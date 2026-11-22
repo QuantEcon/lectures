@@ -4,17 +4,17 @@
 # once what follows it (its site's sites/<key>/_toc.yml, or the pool's
 # selection by `tools/promote --toc`) follows the new toc.
 advanced:
-  accepted_at: '2026-11-11T08:59:46Z'
-  digest: 9dc7df699eea3da340204a56cff83c11a8ddd1389764dfc04e6f0a80d28fcd6f
-  sha: aa81cd96fca8e445df16a9097cfe15fb6ee2b984
+  accepted_at: '2026-11-22T05:18:53Z'
+  digest: ec60e73f62c917ad2f833595e5d4327361dd3f98873dcd4b73f284bfb95c902b
+  sha: 63ef0beabb94871048e2efe567758ec78b39fecb
 dp:
   accepted_at: '2026-11-03T06:44:55Z'
   digest: 20e9bf17df8bd7c49c525583afa4d29940b8d1110d769fcfcee5becda9942967
   sha: da83d88d8de7ab04a4c722bdbd0ce6e2c8333c7c
 intermediate:
-  accepted_at: '2026-11-18T21:51:02Z'
-  digest: a3eea27b02d59027757270785bb73dc4f272f17e389b6b47492804d6131c1794
-  sha: 0d5c6873873de21f824fae15d157980e68267fba
+  accepted_at: '2026-11-22T05:18:54Z'
+  digest: 46b77877700982d4fbd387556df470087915bca8a1eba1e517a26c779230076c
+  sha: 220fb976b301d27c514e4e2c0a30693541ed71b2
 intro:
   accepted_at: '2026-11-05T02:28:07Z'
   digest: 9d78617d85298dd431bbf158593528db398ca96c89a0d9bd7e930a61e00e8120
