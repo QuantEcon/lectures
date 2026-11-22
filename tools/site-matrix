@@ -100,7 +100,9 @@ def entry(key: str):
     if data.get("type") != "series":
         return None, f"sites/{key}: type {data.get('type')!r} has no leg yet (only `series`)"
     runner = data.get("runner")
-    if runner not in RUNNERS:
+    # A string first: a list or mapping cannot be looked up in the table, and
+    # gets the same refusal as an unknown name.
+    if not isinstance(runner, str) or runner not in RUNNERS:
         return None, (f"sites/{key}: runner {runner!r} has no leg yet (only {', '.join(RUNNERS)}); "
                       "the GPU leg needs its own job shape")
     cell_timeout = data.get("cell_timeout")
@@ -118,7 +120,7 @@ def entry(key: str):
         return None, (f"sites/{key}: extra_packages {packages!r} is not a list of pip requirements, "
                       "non-empty and each at most once")
     environment = data.get("environment", "series")
-    if environment not in ENVIRONMENTS:
+    if not isinstance(environment, str) or environment not in ENVIRONMENTS:
         return None, f"sites/{key}: environment {environment!r} is not one of {', '.join(ENVIRONMENTS)}"
     image, env_file, cache_tag = ENVIRONMENTS[environment]
     return {

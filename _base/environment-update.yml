@@ -3,9 +3,10 @@
 # (Python 3.13 and the anaconda=2026.07 metapackage, the base every series'
 # environment.yml names), with QuantEcon/actions' setup-environment
 # (`environment-update:`), which runs `conda env update` on the environment
-# the build runs in. Nothing builds with it yet: the site-build workflow moves
-# to it in a later pull request, dp after its first shadow comparison
-# (QuantEcon/project-monorepo#26, QuantEcon/project-monorepo#80).
+# the build runs in. The site-build workflow builds with it every site whose
+# site.yml sets `environment: base`, intro first (QuantEcon/lectures#84); dp
+# moves after its first shadow comparison (QuantEcon/project-monorepo#26,
+# QuantEcon/project-monorepo#80).
 #
 # ONE UP-TO-DATE BASELINE (the owner's decisions of 2026-11-18 and -19): every
 # version is exact, for stability while the sites' builds are first
@@ -17,11 +18,11 @@
 #   - a version a lecture asks for (`"prettytable<3.18"`): the newest it allows.
 # Where it moves the full image: quantecon-book-theme, sphinx-proof and
 # sphinx-exercise stay at the image's versions; kaleido goes to 1.5.2 from the
-# image's 0.2.1, and needs a Chrome, which the image does not hold yet
-# (QuantEcon/actions#85; QuantEcon/actions#342 adds a pinned Chrome for
-# Testing to the images); sphinx, markdown-it-py and alabaster go back to what
-# jupyter-book 1.x needs, as in every series' build. The six series are being
-# brought to this baseline upstream, one pull request each.
+# image's 0.2.1, and needs a Chrome: since QuantEcon/actions#346 (2026-11-19)
+# both images carry Chrome for Testing 158.0.8127.36 at /opt/chrome, with
+# BROWSER_PATH set (QuantEcon/actions#85, QuantEcon/actions#342); sphinx, markdown-it-py and alabaster go back to what
+# jupyter-book 1.x needs, as in every series' build. The six series were
+# brought to this baseline upstream by 2026-11-20, one pull request each.
 #
 # A person changes a pin, after testing (a workflow that watches for new
 # releases is QuantEcon/project-monorepo#134). An entry without a version

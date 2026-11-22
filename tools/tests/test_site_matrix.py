@@ -83,6 +83,25 @@ def test_a_site_in_the_base_environment_builds_in_the_full_image_keyed_on_the_li
     assert "sites/gpu: runner 'g4dn.2xlarge' has no leg yet" in res.stderr
 
 
+def test_a_list_or_mapping_where_a_name_belongs_is_refused_like_an_unknown_name(tmp_path):
+    root = scratch(tmp_path, {"envlist": site_yml(environment=["base"]),
+                              "envmap": site_yml(environment={"name": "base"}),
+                              "runlist": site_yml(runner=["ubuntu-latest"]),
+                              "runmap": site_yml(runner={"label": "ubuntu-latest"}),
+                              "dp": site_yml()})
+
+    res = run(root, "envlist", "envmap", "runlist", "runmap", "dp")
+
+    # Every refusal is collected and reported, with no traceback.
+    assert res.returncode == 1
+    assert res.stdout == ""
+    assert "Traceback" not in res.stderr
+    assert "sites/envlist: environment ['base'] is not one of series, base" in res.stderr
+    assert "sites/envmap: environment {'name': 'base'} is not one of series, base" in res.stderr
+    assert "sites/runlist: runner ['ubuntu-latest'] has no leg yet" in res.stderr
+    assert "sites/runmap: runner {'label': 'ubuntu-latest'} has no leg yet" in res.stderr
+
+
 def test_a_site_with_no_leg_yet_is_refused_and_nothing_is_printed(tmp_path):
     root = scratch(tmp_path, {"dp": site_yml(), "jax": site_yml(runner="g4dn.2xlarge"),
                               "course": site_yml(type_="course")})

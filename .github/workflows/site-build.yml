@@ -280,7 +280,9 @@ jobs:
         shell: bash -leo pipefail {0}
         run: |
           mkdir -p _build
-          python -m pip freeze > _build/pip-freeze.txt
+          # pip list, not pip freeze: freeze gives a package conda installed
+          # as `name @ file:///...`, with no version.
+          python -m pip list --format=freeze > _build/pip-freeze.txt
           echo "$(wc -l < _build/pip-freeze.txt) packages; jupyter-book $(python -m pip show jupyter-book 2>/dev/null | sed -n 's/^Version: //p')"
 
       - name: Name the site's cache and its key
