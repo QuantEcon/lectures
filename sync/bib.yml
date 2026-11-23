@@ -31,8 +31,8 @@ rulings:
   AKR1990:
     take: intermediate
     set: {publisher: Elsevier}
-    because: 'owner''s ruling of 2026-11-02 (QuantEcon/project-monorepo#10): the Handbook of Computational Economics (1996), which Amman, Kendrick and Rust edited; the others say 1990 and list them as authors'
-    seal: {intro: 7cc7b798cc306eb3, intermediate: a229f98efbe3e257, advanced: 7cc7b798cc306eb3, jax: 7cc7b798cc306eb3}
+    because: 'owner''s ruling of 2026-11-02 (QuantEcon/project-monorepo#10): the Handbook of Computational Economics (1996), which Amman, Kendrick and Rust edited; the others say 1990 and list them as authors; re-sealed 2026-11-23, when intermediate''s copy took the result (QuantEcon/lecture-python.myst#1140)'
+    seal: {intro: 7cc7b798cc306eb3, intermediate: 0517d1216224e38a, advanced: 7cc7b798cc306eb3, jax: 7cc7b798cc306eb3}
   AlonsoMatouschek2008:
     take: intermediate
     because: 'rule: one copy has more fields (#10): intermediate''s adds the DOI'
@@ -114,8 +114,8 @@ rulings:
   hansen2020twisted:
     take: intermediate
     set: {author: 'Hansen, Lars Peter and Sz\H{o}ke, B\''{a}lint and Han, Lloyd S. and Sargent, Thomas J.'}
-    because: 'owner''s ruling of 2026-11-02 (QuantEcon/project-monorepo#10): Hansen, Szőke, Han and Sargent (2020), with the second author''s given name corrected to Bálint; advanced''s copy is a different paper'
-    seal: {intermediate: 3521470dba8bdbc0, advanced: 89402ddf67159cac}
+    because: 'owner''s ruling of 2026-11-02 (QuantEcon/project-monorepo#10): Hansen, Szőke, Han and Sargent (2020), with the second author''s given name corrected to Bálint; advanced''s copy is a different paper; re-sealed 2026-11-23, when intermediate''s copy took the result (QuantEcon/lecture-python.myst#1140)'
+    seal: {intermediate: 12c2453dc0203a9f, advanced: 89402ddf67159cac}
   Hansen_Jagannathan_1991:
     take: advanced
     drop: [url]
@@ -124,13 +124,13 @@ rulings:
   HansenRichard1987:
     take: intermediate
     set: {title: The Role of Conditioning Information in Deducing Testable Restrictions Implied by Dynamic Asset Pricing Models}
-    because: 'rule: one copy is broken (#10): every copy misspells or truncates the title, corrected from the publisher''s record'
-    seal: {intro: 3bbc65ca3cdefc33, intermediate: 3bbc65ca3cdefc33, advanced: ca75df9a41b3bb8b, jax: 3bbc65ca3cdefc33}
+    because: 'rule: one copy is broken (#10): every copy misspells or truncates the title, corrected from the publisher''s record; re-sealed 2026-11-23, when intermediate''s copy took the result (QuantEcon/lecture-python.myst#1140)'
+    seal: {intro: 3bbc65ca3cdefc33, intermediate: dff11e9d6d462585, advanced: ca75df9a41b3bb8b, jax: 3bbc65ca3cdefc33}
   Helpman1985:
     take: intermediate
     set: {year: '1985'}
-    because: 'owner''s ruling of 2026-11-02 (QuantEcon/project-monorepo#10): the full title, with the year kept at 1985 (1987 is the paperback)'
-    seal: {intro: ac0c02587b4d71db, intermediate: cf417eed8a3dacef, advanced: ac0c02587b4d71db, jax: ac0c02587b4d71db}
+    because: 'owner''s ruling of 2026-11-02 (QuantEcon/project-monorepo#10): the full title, with the year kept at 1985 (1987 is the paperback); re-sealed 2026-11-23, when intermediate''s copy took the result (QuantEcon/lecture-python.myst#1140)'
+    seal: {intro: ac0c02587b4d71db, intermediate: 26992dc65b708457, advanced: ac0c02587b4d71db, jax: ac0c02587b4d71db}
   hicks1937mr:
     take: advanced
     because: 'rule: one copy is broken (#10): advanced''s has the title as published, with volume and number; intermediate''s title is mangled'
@@ -198,8 +198,8 @@ rulings:
     set: {institution: Universitat Pompeu Fabra, type: Economics Working Paper}
     drop: [booktitle]
     type: techreport
-    because: 'style fix (#10, decision D3): a working paper is an @techreport with its institution and number (rule 2); it was typed as an @incollection whose booktitle named the series'
-    seal: {intermediate: 5bc8e38b782615e6}
+    because: 'style fix (#10, decision D3): a working paper is an @techreport with its institution and number (rule 2); it was typed as an @incollection whose booktitle named the series; re-sealed 2026-11-23, when intermediate''s copy took the result (QuantEcon/lecture-python.myst#1140)'
+    seal: {intermediate: 1340b06a614cbba3}
   ModiglianiBrumberg1954:
     take: intro
     set: {publisher: Rutgers University Press}
@@ -212,8 +212,8 @@ rulings:
   pareto1896cours:
     take: intermediate
     drop: [volume]
-    because: 'owner''s ruling of 2026-11-02 (QuantEcon/project-monorepo#10): a book (F. Rouge, Lausanne, 1896), the Cours cited as a whole: the income-distribution law is in volume II (1897), so volume 1 would point at the wrong volume'
-    seal: {intro: b3ff36006857ebbb, intermediate: 3af6b01cc3c7cc6c, advanced: 0bff74c55a618d9c, jax: b3ff36006857ebbb}
+    because: 'owner''s ruling of 2026-11-02 (QuantEcon/project-monorepo#10): a book (F. Rouge, Lausanne, 1896), the Cours cited as a whole: the income-distribution law is in volume II (1897), so volume 1 would point at the wrong volume; re-sealed 2026-11-23, when intermediate''s copy took the result (QuantEcon/lecture-python.myst#1140)'
+    seal: {intro: b3ff36006857ebbb, intermediate: 04762a3685a82856, advanced: 0bff74c55a618d9c, jax: b3ff36006857ebbb}
   PearlmanCurrieLevine1986:
     take: intermediate
     because: 'owner''s ruling of 2026-11-02 (QuantEcon/project-monorepo#10): Economic Modelling, 1986, with its full title'
