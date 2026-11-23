@@ -92,16 +92,17 @@ rulings:
   hamburger1967computation:
     take: advanced
     drop: [publisher]
-    because: 'rule: the same fact written two ways (#10): the journal''s own name, Econometrica; "publisher = JSTOR" is left out, as an article does not print it and the manual says to remove it'
-    seal: {intro: b036b143f82511bd, intermediate: b036b143f82511bd, advanced: 1ac1e05eda8c0cb9, jax: b036b143f82511bd}
+    because: 'rule: the same fact written two ways (#10): the journal''s own name, Econometrica; "publisher = JSTOR" is left out, as an article does not print it and the manual says to remove it; re-sealed 2026-11-22, when advanced''s copy took the result (QuantEcon/lecture-python-advanced.myst#420)'
+    seal: {intro: b036b143f82511bd, intermediate: b036b143f82511bd, advanced: 41e739dc6614068b, jax: b036b143f82511bd}
   hansen1983stochastic:
     take: advanced
     because: 'rule: one copy has more fields (#10): advanced''s has the journal''s own name and the title''s capitals; intermediate''s extra field is a publisher, which an article does not print'
     seal: {intermediate: 6358085604f239ac, advanced: 5191f1ab4eace27b}
   hansen1995discounted:
     take: intermediate
-    because: 'owner''s ruling of 2026-11-02 (QuantEcon/project-monorepo#10): Hansen and Sargent (1995), IEEE TAC; advanced''s copy is Hansen, Sargent and Tallarini (1999), which is HST_1999, and every citing sentence means the 1995 paper'
-    seal: {intermediate: ca1f2a81828ec3c7, advanced: 10c6c72c63ee6a2e}
+    set: {title: 'Discounted linear exponential quadratic {G}aussian control', journal: IEEE Transactions on Automatic Control}
+    because: 'owner''s ruling of 2026-11-02 (QuantEcon/project-monorepo#10): Hansen and Sargent (1995), IEEE TAC; advanced''s copy is Hansen, Sargent and Tallarini (1999), which is HST_1999, and every citing sentence means the 1995 paper; Gaussian braced and the journal''s name corrected 2026-11-22, and advanced''s copy re-sealed when it took the result (QuantEcon/lecture-python-advanced.myst#420)'
+    seal: {intermediate: ca1f2a81828ec3c7, advanced: d704144efd75e109}
   hansen2008consumption:
     take: intermediate
     because: 'rule: one copy has more fields (#10): intermediate''s adds the DOI, the journal''s capitals and the title''s'
@@ -118,8 +119,8 @@ rulings:
   Hansen_Jagannathan_1991:
     take: advanced
     drop: [url]
-    because: 'owner''s ruling of 2026-11-02 (QuantEcon/project-monorepo#10): intermediate''s DOI points to the next article in the issue; the RePEc url is left out because the DOI exists (rule 9), as the owner ruled the same day'
-    seal: {intermediate: fc2091edc196ecae, advanced: dbcc56ecafed336b}
+    because: 'owner''s ruling of 2026-11-02 (QuantEcon/project-monorepo#10): intermediate''s DOI points to the next article in the issue; the RePEc url is left out because the DOI exists (rule 9), as the owner ruled the same day; re-sealed 2026-11-22, when advanced''s copy took the result (QuantEcon/lecture-python-advanced.myst#420)'
+    seal: {intermediate: fc2091edc196ecae, advanced: 93d63b4feacae11d}
   HansenRichard1987:
     take: intermediate
     set: {title: The Role of Conditioning Information in Deducing Testable Restrictions Implied by Dynamic Asset Pricing Models}
@@ -149,8 +150,8 @@ rulings:
   kemeny1956generalization:
     take: advanced
     drop: [publisher]
-    because: 'rule: the same fact written two ways (#10): the journal''s own name, Econometrica; "publisher = JSTOR" is left out, as an article does not print it and the manual says to remove it'
-    seal: {intro: ec40c4a35c10aeb7, intermediate: ec40c4a35c10aeb7, advanced: 6f763ea2a15a7bd9, jax: ec40c4a35c10aeb7}
+    because: 'rule: the same fact written two ways (#10): the journal''s own name, Econometrica; "publisher = JSTOR" is left out, as an article does not print it and the manual says to remove it; re-sealed 2026-11-22, when advanced''s copy took the result (QuantEcon/lecture-python-advanced.myst#420)'
+    seal: {intro: ec40c4a35c10aeb7, intermediate: ec40c4a35c10aeb7, advanced: 7a8a2cfca70ed6d0, jax: ec40c4a35c10aeb7}
   Koopmans:
     take: intermediate
     because: 'rule: one copy is broken (#10): the others misspell the field as "publilsher", so no publisher prints'
@@ -170,8 +171,8 @@ rulings:
   Ljungqvist2012:
     take: advanced
     set: {publisher: MIT Press}
-    because: 'rule: the same fact written two ways (#10): the fuller given names, and "MIT Press" over "The MIT Press"'
-    seal: {intro: 48fe30fec593fbab, intermediate: 48fe30fec593fbab, advanced: a5c7961f8719d053, jax: 48fe30fec593fbab}
+    because: 'rule: the same fact written two ways (#10): the fuller given names, and "MIT Press" over "The MIT Press"; re-sealed 2026-11-22, when advanced''s copy took the result (QuantEcon/lecture-python-advanced.myst#420)'
+    seal: {intro: 48fe30fec593fbab, intermediate: 48fe30fec593fbab, advanced: c63920f7bd8c7767, jax: 48fe30fec593fbab}
   LubikSchorfheide2004:
     take: advanced
     because: 'rule: one copy has more fields (#10): advanced''s adds the DOI'
@@ -202,8 +203,8 @@ rulings:
   ModiglianiBrumberg1954:
     take: intro
     set: {publisher: Rutgers University Press}
-    because: 'style fix (#10, decision D3): an @incollection needs its publisher (rule 2); Post-Keynesian Economics (Kurihara, ed.) is Rutgers University Press, 1954'
-    seal: {intro: 1b5b4d953cab4093, intermediate: 1b5b4d953cab4093, advanced: 1b5b4d953cab4093, jax: 1b5b4d953cab4093}
+    because: 'style fix (#10, decision D3): an @incollection needs its publisher (rule 2); Post-Keynesian Economics (Kurihara, ed.) is Rutgers University Press, 1954; re-sealed 2026-11-22, when intro''s copy took the result (QuantEcon/lecture-python-intro#875)'
+    seal: {intro: 1ca767d52640eaed, intermediate: 1b5b4d953cab4093, advanced: 1b5b4d953cab4093, jax: 1b5b4d953cab4093}
   Neyman_Pearson:
     take: intermediate
     because: 'rule: one copy is broken (#10): the others put volume and issue inside an abbreviated journal name'
@@ -220,8 +221,8 @@ rulings:
   Phelan_Townsend_91:
     take: advanced
     drop: [url]
-    because: 'rule: one copy has more fields (#10): advanced''s adds the DOI; its RePEc url is left out because the DOI exists (rule 9)'
-    seal: {intro: 61014964c2276bc7, intermediate: 61014964c2276bc7, advanced: 4013dae8eba610c4, jax: 61014964c2276bc7}
+    because: 'rule: one copy has more fields (#10): advanced''s adds the DOI; its RePEc url is left out because the DOI exists (rule 9); re-sealed 2026-11-22, when advanced''s copy took the result (QuantEcon/lecture-python-advanced.myst#420)'
+    seal: {intro: 61014964c2276bc7, intermediate: 61014964c2276bc7, advanced: 3d36111d3f983750, jax: 61014964c2276bc7}
   piazzesi2015trend:
     take: advanced
     because: 'rule: the same fact written two ways (#10): the longer note'
@@ -241,8 +242,8 @@ rulings:
   sargent1989least:
     take: intro
     set: {editor: William Barnett and John Geweke and Karl Shell}
-    because: 'style fix (#10, decision D3): the editors were separated by commas and a stray comma before "and", so BibTeX read one malformed name; the same three names, joined by "and" (rule 3)'
-    seal: {intro: b5017575cd6e8580}
+    because: 'style fix (#10, decision D3): the editors were separated by commas and a stray comma before "and", so BibTeX read one malformed name; the same three names, joined by "and" (rule 3); re-sealed 2026-11-22, when intro''s copy took the result (QuantEcon/lecture-python-intro#875)'
+    seal: {intro: 1bcb74219e915562}
   Sargent_Stachurski_2025:
     take: advanced
     because: 'rule: one copy has more fields (#10): advanced''s adds the DOI; the others'' extra field, place, is one neither reader prints'
@@ -262,12 +263,13 @@ rulings:
   Spear_Srivastava_87:
     take: advanced
     drop: [url]
-    because: 'rule: one copy has more fields (#10): advanced''s adds the DOI; its RePEc url is left out because the DOI exists (rule 9)'
-    seal: {intro: c59395ec8e29abba, intermediate: c59395ec8e29abba, advanced: e941cb15275c5de1, jax: c59395ec8e29abba}
+    because: 'rule: one copy has more fields (#10): advanced''s adds the DOI; its RePEc url is left out because the DOI exists (rule 9); re-sealed 2026-11-22, when advanced''s copy took the result (QuantEcon/lecture-python-advanced.myst#420)'
+    seal: {intro: c59395ec8e29abba, intermediate: c59395ec8e29abba, advanced: c0bf35d9851dffb4, jax: c59395ec8e29abba}
   SvenssonWilliams2009:
     take: intermediate
-    because: 'rule: one copy is broken (#10): advanced''s editor list is truncated mid-name; the editors also list the series editors, which is #112''s to correct'
-    seal: {intro: 3603af09c33264d1, intermediate: 3603af09c33264d1, advanced: e0dc98e4769af2f9, jax: 3603af09c33264d1}
+    set: {title: 'Optimal Monetary Policy under Uncertainty in {DSGE} Models: A {Markov} Jump-Linear-Quadratic Approach'}
+    because: 'rule: one copy is broken (#10): advanced''s editor list is truncated mid-name; the editors also list the series editors, which is #112''s to correct; DSGE and Markov braced 2026-11-22, since the reference style sets titles in sentence case (advanced''s copy braced the whole title), and advanced''s copy re-sealed when it took the result (QuantEcon/lecture-python-advanced.myst#420)'
+    seal: {intro: 3603af09c33264d1, intermediate: 3603af09c33264d1, advanced: 78aa844ba6e29016, jax: 3603af09c33264d1}
   szoke2022estimating:
     take: advanced
     because: 'owner''s ruling of 2026-11-02 (QuantEcon/project-monorepo#10): Bálint Szőke, with the DOI; intermediate has "Balázs"'
