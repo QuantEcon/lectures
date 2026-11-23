@@ -58,6 +58,8 @@ The large-deviation results are statements about small gains.
 
 {ref}`en_simulation` simulates the model and finds that, at the gains used in this suite, escapes are frequent rather than rare.
 
+{ref}`en_tilts` describes escapes as exponential tilts of the distribution of shocks, in the sense of {doc}`information_projections`, and prices them by KL divergence.
+
 We work with the analytically tractable **static** model, in which the government regresses unemployment on current inflation and a constant.
 
 {doc}`phillips_learning` simulates CWS's richer *dynamic* model, in which the government's regression also includes lags; we compare the two near the end of the lecture.
@@ -75,6 +77,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.integrate import solve_ivp
 from scipy.linalg import solve_discrete_are
+from scipy.optimize import minimize_scalar
 ```
 
 ## The model
@@ -361,7 +364,7 @@ subject to the *perturbed* mean dynamics
 \gamma(0) = \bar\gamma, \; \gamma(T) \notin G .
 ```
 
-Read {eq}`en_control` as a least squares problem: $v$ is the extra "forcing" that the mean dynamics would need to escape, $Q$ plays the role of a covariance matrix, and the least-cost forcing is the most likely unusual shock sequence.
+Read {eq}`en_control` as a least squares problem: $v$ is the extra "forcing" that the mean dynamics would need to escape, $Q$ is the covariance matrix of the noise in the belief updates, and the least-cost forcing is the most likely unusual shock sequence.
 
 {cite:t}`Williams2019` (p. 892) reports that the 2001 version computed $H$ by misapplying a theorem of Worms (1999).
 
@@ -585,6 +588,102 @@ So pair 1 wins the race, and the escape forcing it induces is the $R^{-1}(\sigma
 
 CWS describe the winner's velocity as substantially larger than the other three; the table shows that this holds along the route, not at its start.
 
+(en_tilts)=
+## Escapes as exponential tilts
+
+Pair 1 replaces the four equally likely shock realizations by a distribution that puts probability $1/2$ on each of $(1, 1)$ and $(-1, -1)$, so that $W_1 W_2 = 1$ in every period.
+
+That distribution is the limit of a family of **exponential tilts** of the true shock distribution, in the sense of {doc}`information_projections`.
+
+For each real $\eta$, let
+
+$$
+q_\eta(w) = \frac{\exp(\eta \, w_1 w_2)}{4 \cosh \eta} ,
+\qquad w \in \{-1, 1\}^2 .
+$$
+
+Under $q_\eta$, the mean of $W_1 W_2$ is $m = \tanh \eta$, while $W_1$ and $W_2$ each still take the values $\pm 1$ with probability $1/2$.
+
+Because $W_2$ keeps its distribution, $R$ still follows its mean dynamics.
+
+The least squares update depends on the shocks only through their first and second moments, and the tilt changes only the mean of $W_1 W_2$, so averaging the update under $q_\eta$ adds the forcing $m \, (\sigma_1 \sigma_2, 0)^\top$ to $\bar g$.
+
+A tilt of size $m$ pushes beliefs in the direction of pair 1 at $m$ times its strength.
+
+Pair 1 is the limit $m \to 1$, reached only as $\eta \to \infty$, just as the distribution of a die whose mean is $6$ in {doc}`information_projections` is a limit of tilts whose parameter diverges.
+
+Large deviations theory puts a price on each tilt.
+
+By Sanov's theorem, as stated in {doc}`information_projections`, the probability that $n$ periods of shocks have empirical frequencies close to $q_\eta$ falls like $\exp(-n D(q_\eta \| q_0))$, where $q_0$ is the true distribution and
+
+$$
+D(q_\eta \| q_0) = \frac12 \left[ (1 + m) \log(1 + m) + (1 - m) \log(1 - m) \right] \equiv L(m) ,
+$$ (en_tilt_cost)
+
+which equals $\log 2$ at $m = 1$.
+
+$L$ is the Legendre transform {eq}`pl_legendre` of $\log \mathbb{E} \exp(\eta W_1 W_2) = \log \cosh \eta$, the log-partition function of the tilts, so {eq}`en_tilt_cost` bounds from above the integrand of the action functional {eq}`pl_action` along a path driven by a constant tilt.
+
+A path that takes time $t = n \varepsilon$ has probability of order $\exp(-t L(m) / \varepsilon)$, so its cost $t \, L(m)$ is measured in the same units as $\bar S$ in {eq}`en_control`.
+
+We compute escapes under constant tilts and find the cheapest one.
+
+```{code-cell} ipython3
+def tilt_cost(m):
+    "KL divergence (en_tilt_cost) of the tilt with E[W1 W2] = m from the true shocks."
+    if m == 1:
+        return np.log(2)
+    return 0.5 * ((1 + m) * np.log1p(m) + (1 - m) * np.log1p(-m))
+
+
+def tilted_escape(m, t_max=400):
+    "Conditional mean dynamics under the tilt with E[W1 W2] = m."
+    f = lambda γ, mod: m * np.array([mod.σ1 * mod.σ2, 0.0])
+    return solve_ivp(cond_ode, [0, t_max], z0, args=(model, f), events=left_circle,
+                     max_step=0.05, rtol=1e-9, atol=1e-11)
+
+
+cheapest = minimize_scalar(lambda m: tilted_escape(m).t[-1] * tilt_cost(m),
+                           bounds=(0.021, 0.1), method="bounded", options={"xatol": 1e-5})
+
+print(f"{'tilt m':>8s} {'exit time':>10s} {'cost t·L(m)':>12s} {'exit slope':>11s} {'exit x':>7s}")
+for m in (1.0, 0.5, 0.2, 0.1, 0.05, cheapest.x, 0.02):
+    s = tilted_escape(m)
+    γ_end = s.y[:2, -1]
+    if s.status == 1:
+        print(f"{m:8.4f} {s.t[-1]:10.3f} {s.t[-1] * tilt_cost(m):12.2e} "
+              f"{γ_end[0]:11.4f} {model.x(γ_end):7.3f}")
+    else:
+        print(f"{m:8.4f} {'never':>10s}   beliefs settle at "
+              f"({γ_end[0]:.3f}, {γ_end[1]:.2f}), x = {model.x(γ_end):.2f}")
+```
+
+Every tilt that escapes leaves the circle at nearly the same point, with a slope between $-0.023$ and $-0.026$ and inflation near $0.12$.
+
+The tilt determines how fast the beliefs travel along the route; the route itself barely changes.
+
+The changed measure of CWS, the tilt $m = 1$, escapes fastest, by $t = 0.34$, but it is also the most expensive, at a cost of $0.24$.
+
+Weaker tilts take longer and cost less, down to a tilt of about $m = 0.0225$, which escapes at $t \approx 3.1$ at a cost of about $8 \times 10^{-4}$.
+
+Below $m = 0.02$ the mean dynamics win, and the beliefs settle near the self-confirming equilibrium.
+
+The cheapest constant tilt reproduces the timing of the dominant path in CWS's Figure 4, which leaves at about $t = 3$, and its exit slope, $-0.025$ in their Table 1.
+
+Its cost is an upper bound on $\bar S$, because a cheaper escape could vary the tilt along the way or tilt other statistics of the shocks; CWS find $\bar S \approx 5 \times 10^{-4}$.
+
+This explains the warning in CWS's footnote 14.
+
+The changed measure is the extreme tilt: it reaches the boundary first, but it is far less likely than the gentle tilts that a dominant escape uses.
+
+The lecture's shocks are Gaussian, while CWS's changed-measure argument uses binomial shocks.
+
+For Gaussian shocks whose variances stay at one, the cheapest distribution with $\mathbb{E}[W_1 W_2] = m$ is the bivariate normal with correlation $m$, whose KL divergence from the true distribution is $-\frac12 \log(1 - m^2)$; at $m = 0.0225$ it differs from $L(m)$ by less than $10^{-7}$.
+
+The epigraph states the conditional limit theorem of {doc}`information_projections` in words.
+
+Conditional on an escape, the shocks look as though they were drawn from the e-projection of their true distribution onto the set of distributions that produce the escape, the most likely of the unlikely distributions.
+
 (en_vector_field)=
 ## Mean dynamics reinforce the escape
 
@@ -669,6 +768,64 @@ As CWS note, overweighting recent observations helps this process along.
 This self-reinforcing process halts when the perceived Phillips curve is vertical, and inflation is near Ramsey.
 
 The system cannot stay there forever: in truth there *is* a short-run Phillips curve, which the government eventually rediscovers, rekindling the mean dynamics that carry it back to Nash.
+
+Fisher information makes the trap precise.
+
+At the self-confirming equilibrium the residual of the perceived model {eq}`en_belief` has variance $\sigma_1^2$, so each observation carries Fisher information $\bar M(\bar\gamma)/\sigma_1^2$ about $\gamma$, as in {ref}`ppr_natural_gradient`.
+
+The perceived model is right about everything the government sees there ({ref}`sc_why_nash`), so this is also the information in the true data.
+
+```{code-cell} ipython3
+fisher = model.M(γ_sce) / model.σ1**2            # Fisher information per observation
+eigvals, eigvecs = np.linalg.eigh(fisher)
+γ_ramsey = np.array([0.0, model.u])              # Belief 2
+d_ramsey = γ_ramsey - γ_sce
+v_least = eigvecs[:, 0]
+angle = np.degrees(np.arccos(abs(v_least @ d_ramsey) / np.linalg.norm(d_ramsey)))
+
+print(f"Fisher information eigenvalues at the SCE: {eigvals[0]:.4f} and {eigvals[1]:.1f}")
+print(f"least-informative direction {v_least.round(4)}, "
+      f"{angle:.2f} degrees from the Nash-to-Ramsey direction")
+print(f"KL rate of the true data from the Ramsey belief: "
+      f"{0.5 * d_ramsey @ fisher @ d_ramsey:.3f} nats per observation")
+
+K_center = np.array([[1.0, 0.0], [model.x(γ_sce), 1.0]])   # coefficients on (π - θu, 1)
+K_inv = np.linalg.inv(K_center)
+print(f"eigenvalues with inflation measured from θu: "
+      f"{np.linalg.eigvalsh(K_inv.T @ fisher @ K_inv).round(4)}")
+```
+
+The two eigenvalues differ by a factor of about 7,600.
+
+The eigenvector of the small one points along $(1, -\theta u)$, the direction from the Nash belief $(-\theta, u(1 + \theta^2))$ to the Ramsey belief $(0, u)$.
+
+A move in that direction rotates the perceived Phillips curve about the point $(\pi, U) = (\theta u, u)$ where the data sit.
+
+The Nash curve and the Ramsey curve both predict unemployment $u$ at inflation $\theta u$.
+
+They disagree only about unemployment when inflation is away from $\theta u$, and in a self-confirming equilibrium only the surprise $\sigma_2 W_2$ moves inflation away from $\theta u$.
+
+The data still reject the Ramsey belief.
+
+The KL divergence rate of the true data from the Ramsey belief is $\theta^2 \sigma_2^2 / (2 \sigma_1^2) = 0.5$ nats per observation, so six observations give an expected log likelihood ratio of $3$, the benchmark of {ref}`pmis_ex3`.
+
+The small eigenvalue matters for learning through the noise in the updates.
+
+At the self-confirming equilibrium, an update {eq}`en_rls` with $R = \bar M(\bar\gamma)$ adds noise with covariance $\varepsilon^2 \sigma_1^2 \bar M(\bar\gamma)^{-1}$, which is $\varepsilon^2$ times the inverse of the Fisher information.
+
+So the beliefs jitter most along the direction the data inform least, the line through the Nash and Ramsey beliefs.
+
+{doc}`phillips_priors` finds the same direction as the instantaneous escape direction under its baseline prior, which is proportional to the inverse of the Fisher information ({ref}`ppr_escape_direction`).
+
+The eigenvalues depend on the coordinates in which beliefs are measured.
+
+Measuring inflation from $\theta u$, as in {ref}`ppr_ex7`, makes the Fisher information diagonal, with eigenvalues $1$ and $11.1$.
+
+In those coordinates the move from Nash to Ramsey changes the slope alone, so the slope is still the least-informative coefficient, but the ratio of the eigenvalues falls from about 7,600 to 11.
+
+The large ratio comes from measuring the intercept at $\pi = 0$, five units of inflation away from any data.
+
+The KL divergence between two beliefs does not depend on the coordinates; it is an invariant in the sense of {ref}`ef_invariants`.
 
 (en_simulation)=
 ## Simulating escapes
