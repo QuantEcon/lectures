@@ -3078,10 +3078,10 @@ lectures/pandas_panel.md:
     digest: d5b78e21062cf1a3a89c99a6df8915a350c26eb7b4210aedc4f781e1efa825da
   - series: intermediate
     path: pandas_panel.md
-    digest: 61281bfcc1924692ed866f6c078b73bf569c7baec3f91bc2dcd8c7bbe205eb01
+    digest: d5b78e21062cf1a3a89c99a6df8915a350c26eb7b4210aedc4f781e1efa825da
   promoted_at:
     programming: bae31ee496e8ef687fe7e3edbbd4699a5d42164f
-    intermediate: eb2ba52c609a72c60316ef9cc1dc87add3a872d9
+    intermediate: 0dc4fe74070fb7437da2c2761740b807f76f2f18
   assets:
   - _static/pandas_panel/venn_diag.png
   rewrites:
