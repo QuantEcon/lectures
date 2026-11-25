@@ -86,6 +86,7 @@ sphinx:
       header_organisation_url: https://quantecon.org
       header_organisation: QuantEcon
       repository_url: https://github.com/QuantEcon/lecture-dp
+      download_nb_path: https://quantecon.github.io/lecture-dp
       # site addition: each page's history is this repository's, so the theme's commit, history and GitHub links name it; the later key wins (sites/README.md)
       repository_url: https://github.com/QuantEcon/lectures  # site addition
       path_to_docs: lectures
@@ -122,7 +123,7 @@ sphinx:
     mathjax_path: https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
     rediraffe_redirects:
       index_toc.md: intro.md
-    tojupyter_static_file_path: ["source/_static", "_static"]
+    tojupyter_static_file_path: ["_static"]
     tojupyter_target_html: true
     tojupyter_urlpath: "https://quantecon.github.io/lecture-dp/"
     tojupyter_image_urlpath: "https://quantecon.github.io/lecture-dp/_static/"
