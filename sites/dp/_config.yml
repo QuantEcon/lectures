@@ -88,15 +88,12 @@ sphinx:
       repository_url: https://github.com/QuantEcon/lecture-dp
       # site addition: each page's history is this repository's, so the theme's commit, history and GitHub links name it; the later key wins (sites/README.md)
       repository_url: https://github.com/QuantEcon/lectures  # site addition
-      nb_repository_url: https://github.com/QuantEcon/lecture-dp.notebooks
       path_to_docs: lectures
       twitter: quantecon
       twitter_logo_url: https://assets.quantecon.org/img/qe-twitter-logo.png
       og_logo_url: https://assets.quantecon.org/img/qe-og-logo.png
       description: This website presents a set of lectures on dynamic programming, designed and written by Thomas J. Sargent and John Stachurski.
       keywords: Python, QuantEcon, Quantitative Economics, Economics, Dynamic Programming, Tom J. Sargent, John Stachurski
-      launch_buttons:
-        colab_url                 : https://colab.research.google.com
     # site addition: a link with no target in this site resolves on the lecture's home site (sites/README.md)
     intersphinx_disabled_reftypes: []  # site addition
     intersphinx_mapping: 
