@@ -16,6 +16,8 @@ kernelspec:
 
 ## Outline
 
+A planted test for QuantEcon/project-monorepo#22, not for merging: {ref}`no-such-label-22` and {doc}`intermediate:no_such_lecture_22`.
+
 For more than half of all countries around the globe, [commodities](https://en.wikipedia.org/wiki/Commodity) account for [the majority of total exports](https://unctad.org/publication/commodities-and-development-report-2019).
 
 Examples of commodities include copper, diamonds, iron ore, lithium, cotton
