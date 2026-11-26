@@ -8,21 +8,21 @@ name: site-build
 # and each series keeps building and publishing from its own repository until
 # its cutover.
 #
-# WHICH SITES: the ones named in SITES below, today `dp`, `intro`, `advanced`
-# and `programming`. The other two folders in sites/ are not built until their
-# turn, so a pull request is never held up by a site that has not been brought
-# through yet. The first job reads each named site's sites/<key>/site.yml
-# (tools/site-matrix) and hands the matrix to the second: the runner class
-# gives runs-on, the environment (below) the container and the file the cache
-# key hashes, the job's time limit is site.yml's cell_timeout plus an
-# allowance for a build from an empty cache (site.yml holds no job limit;
-# tools/site-matrix says why), and extra_packages lists what the leg installs.
-# The ubuntu-latest class builds in a container, the GPU class (g4dn.2xlarge)
-# on a RunsOn machine with no container (THE GPU LEG, below).
-# `fail-fast: false`, so one site's failure never stops another's build. Every
-# push or pull request that touches lectures/ or sites/ builds every named
-# site, whatever it changed: no site is skipped yet because its toc does not
-# reach the change.
+# WHICH SITES: the ones named in SITES below, today `dp`, `intro`, `advanced`,
+# `programming` and `intermediate`. The other folder in sites/, `jax`, is not
+# built until its turn, so a pull request is never held up by a site that has
+# not been brought through yet. The first job reads each named site's
+# sites/<key>/site.yml (tools/site-matrix) and hands the matrix to the second:
+# the runner class gives runs-on, the environment (below) the container and
+# the file the cache key hashes, the job's time limit is site.yml's
+# cell_timeout plus an allowance for a build from an empty cache (site.yml
+# holds no job limit; tools/site-matrix says why), and extra_packages lists
+# what the leg installs. The ubuntu-latest class builds in a container, the
+# GPU class (g4dn.2xlarge) on a RunsOn machine with no container (THE GPU LEG,
+# below). `fail-fast: false`, so one site's failure never stops another's
+# build. Every push or pull request that touches lectures/ or sites/ builds
+# every named site, whatever it changed: no site is skipped yet because its
+# toc does not reach the change.
 #
 # THE ENVIRONMENT is site.yml's optional `environment` (sites/README.md):
 #   series (the default; dp): ghcr.io/quantecon/quantecon-build:latest, the
@@ -30,9 +30,10 @@ name: site-build
 #     site.yml's extra_packages. dp stays here until its first shadow
 #     comparison, so that comparison measures the move of the build alone
 #     (QuantEcon/project-monorepo ideas/one-environment-for-every-site.md).
-#   base (intro, advanced; programming on the GPU leg, below): in a
-#     container, ghcr.io/quantecon/quantecon:latest, the full image, whose
-#     anaconda=2026.07 is what every series' environment.yml names, with
+#   base (intro, advanced; programming and intermediate on the GPU leg,
+#     below): in a container, ghcr.io/quantecon/quantecon:latest, the full
+#     image, whose anaconda=2026.07 is what every series' environment.yml
+#     names, with
 #     _base/environment-update.yml, the one package list every site is to
 #     build with, applied by QuantEcon/actions' setup-environment (conda env
 #     update in the image's environment). The image runs as root, so the
@@ -42,9 +43,10 @@ name: site-build
 #     before the build, so no lecture's first plot prints that it is building
 #     it.
 #
-# THE GPU LEG (the g4dn.2xlarge class; programming so far) runs on a RunsOn
-# machine with one NVIDIA T4, from QuantEcon's GPU machine image (its AMI ID
-# is in tools/site-matrix), with no container, and in the base environment
+# THE GPU LEG (the g4dn.2xlarge class; programming and intermediate) runs on
+# a RunsOn machine with one NVIDIA T4, from QuantEcon's GPU machine image (its
+# AMI ID is in tools/site-matrix, the one the three GPU series'
+# .github/runs-on.yml name), with no container, and in the base environment
 # alone. It builds the same environment as the container's: setup-miniconda
 # creates _base/environment.yml (Python 3.13 and anaconda=2026.07, what the
 # full image carries), as the GPU series' own workflows create theirs;
@@ -222,7 +224,7 @@ env:
   # The sites this workflow builds, by folder under sites/, separated by
   # spaces. A site is added when it is brought through
   # (QuantEcon/project-monorepo#77).
-  SITES: dp intro advanced programming
+  SITES: dp intro advanced programming intermediate
 
 defaults:
   run:

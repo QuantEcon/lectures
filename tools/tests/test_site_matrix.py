@@ -49,11 +49,11 @@ def test_a_cpu_series_site_gets_its_runner_container_and_time_limit(tmp_path):
     assert json.loads(res.stdout) == [
         {"key": "intro", "runs_on": "ubuntu-latest", "leg": "container", "machine": "", "environment": "series",
          "image": "ghcr.io/quantecon/quantecon-build:latest", "env_file": "mirror/intro/environment.yml",
-         "cache_tag": "", "timeout_minutes": 11 + 120, "cell_timeout": 601, "publishes": ["html", "pdf"],
+         "cache_tag": "", "timeout_minutes": 11 + 150, "cell_timeout": 601, "publishes": ["html", "pdf"],
          "extra_packages": [], "packages_hash": "none", "local_links": False},
         {"key": "dp", "runs_on": "ubuntu-latest", "leg": "container", "machine": "", "environment": "series",
          "image": "ghcr.io/quantecon/quantecon-build:latest", "env_file": "mirror/dp/environment.yml",
-         "cache_tag": "", "timeout_minutes": 40 + 120, "cell_timeout": 2400, "publishes": ["html"],
+         "cache_tag": "", "timeout_minutes": 40 + 150, "cell_timeout": 2400, "publishes": ["html"],
          "extra_packages": ["jax"], "packages_hash": hashlib.sha256(b"jax").hexdigest()[:16],
          "local_links": False},
     ]
@@ -96,7 +96,7 @@ def test_a_gpu_site_builds_on_its_runs_on_machine_in_the_base_environment_alone(
     assert {k: programming[k] for k in ("runs_on", "leg", "environment", "image", "env_file", "cache_tag",
                                         "timeout_minutes")} == {
         "runs_on": f"runs-on=123/{machine}", "leg": "gpu", "environment": "base", "image": "",
-        "env_file": "_base/environment-update.yml", "cache_tag": "base-", "timeout_minutes": 10 + 120}
+        "env_file": "_base/environment-update.yml", "cache_tag": "base-", "timeout_minutes": 10 + 150}
     # A container site in the same run is unchanged.
     assert {k: intro[k] for k in ("runs_on", "leg", "machine", "image")} == {
         "runs_on": "ubuntu-latest", "leg": "container", "machine": "", "image": "ghcr.io/quantecon/quantecon:latest"}

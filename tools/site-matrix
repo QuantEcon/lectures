@@ -40,7 +40,8 @@ order named, each with the job settings its ``sites/<key>/site.yml`` decides.
   ``cell_timeout`` in whole minutes, the longest a single cell may run, plus
   ``BUILD_ALLOWANCE`` minutes for the rest of a build from an empty cache. dp's
   own weekly build from an empty cache took 22 to 41 minutes in
-  October-November 2026.
+  October-November 2026, and intermediate's, the longest, 128 to 139 minutes
+  in November 2026.
 * ``extra_packages``: the pip requirements ``site.yml`` lists for the leg to
   install before the build (``[]`` without the field), and
   ``packages_hash``, the first 16 hex digits of the SHA-256 of them, one per
@@ -96,7 +97,7 @@ ENVIRONMENTS = {
     "base": ("ghcr.io/quantecon/quantecon:latest", "_base/environment-update.yml", "base-"),
 }
 # Minutes a whole build from an empty cache may take, beyond one cell's limit.
-BUILD_ALLOWANCE = 120
+BUILD_ALLOWANCE = 150
 # One pip requirement, as tools/pool-check's site-yml rule allows it.
 REQUIREMENT_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._\-\[\],<>=!~*+]*")
 
