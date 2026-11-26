@@ -4,9 +4,12 @@
 # environment.yml names), with QuantEcon/actions' setup-environment
 # (`environment-update:`), which runs `conda env update` on the environment
 # the build runs in. The site-build workflow builds with it every site whose
-# site.yml sets `environment: base`, intro first (QuantEcon/lectures#84); dp
-# moves after its first shadow comparison (QuantEcon/project-monorepo#26,
-# QuantEcon/project-monorepo#80).
+# site.yml sets `environment: base`: intro, advanced and programming so far
+# (QuantEcon/lectures#84, #86, #87); dp moves after its first shadow
+# comparison (QuantEcon/project-monorepo#26, QuantEcon/project-monorepo#80).
+# Each such site's execution cache is keyed on this file's entries, not on
+# its comments or blank lines: a change to an entry executes every page of
+# those sites again, and a change to a comment executes none.
 #
 # ONE UP-TO-DATE BASELINE (the owner's decisions of 2026-11-18 and -19): every
 # version is exact, for stability while the sites' builds are first
@@ -33,9 +36,10 @@
 # THE LECTURES KEEP THEIR INSTALL LINES, for readers running a notebook on
 # Colab or at home. In a build a plain `!pip install` finds the package
 # already here. An `--upgrade` line, or a `!conda install` of a package pinned
-# here, replaces the pin for the rest of that build, since every lecture runs
-# in the same environment: those lines are being removed upstream. When they
-# are gone, plotly-orca leaves this list too.
+# here, would replace the pin for the rest of that build, since every lecture
+# runs in the same environment, so those lines were removed upstream by
+# 2026-11-20. plotly-orca, which three of them installed from the plotly
+# channel, has left this list with them: no pool lecture installs or uses it.
 #
 # tools/pool-check's `install-listed` rule keeps the list whole: every package
 # a pool lecture's code cells install is listed here, at a version a pip
@@ -48,8 +52,8 @@
 # jax is the CPU wheel here. A GPU build adds `jax[cuda13]==0.12.1` on top,
 # the same version, which brings the CUDA plugin and the CUDA libraries it
 # bundles (nvidia-* wheels, not pinned here). The GPU machine image holds no
-# anaconda metapackage, so a GPU build needs that base as well
-# (QuantEcon/project-monorepo#77, the GPU leg).
+# anaconda metapackage, so the GPU leg creates that base first, from
+# _base/environment.yml (QuantEcon/project-monorepo#77, the GPU leg).
 # jax 0.11.1 hangs programming's numpy_vs_numba_vs_jax; 0.12.1 runs it, so the
 # list moved from 0.11.0 to 0.12.1 (the owner's decision of 2026-11-19).
 
@@ -57,8 +61,6 @@ channels:
   - defaults
 dependencies:
   - pip
-  # three lectures install it from the plotly channel; those lines are going
-  - plotly::plotly-orca==1.3.1
   - pip:
     # The build stack: the series' environment.yml, at the newest releases
     - jupyter-book==1.0.4.post1

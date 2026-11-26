@@ -5,8 +5,9 @@ type: series
 runner: ubuntu-latest
 # seconds: execute.timeout in _config.yml; no workflow of the series sets a job time limit
 cell_timeout: 2400
-# its publish.yml builds HTML alone (build-lectures, builder: html): no PDF, no notebooks
-publishes: [html]
+# its publish.yml runs two builds, the jupyter builder (notebooks) and HTML, since
+# QuantEcon/lecture-dp#87 (at afb26ea, read 2026-11-26): no PDF
+publishes: [html, notebooks]
 # html.baseurl in _config.yml
 url: https://quantecon.github.io/lecture-dp/
 # installed before the build, as the image has no jax: mccall_risk, the site's

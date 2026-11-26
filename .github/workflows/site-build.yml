@@ -102,8 +102,10 @@ name: site-build
 # site's _config.yml names, _build/jupyter_cache/<key> (pool-check rule 7).
 # Its key is jb1-<key>-<tag><env hash>-<packages hash>-<image hash>-<run>:
 #   - the tag: empty in the series environment, `base-` in the base one;
-#   - the env hash: of mirror/<key>/environment.yml in the series
-#     environment, of _base/environment-update.yml in the base one;
+#   - the env hash: of mirror/<key>/environment.yml, whole, in the series
+#     environment (as dp's own cache keys hash it); in the base one, of
+#     _base/environment-update.yml's entries, its lines without comments or
+#     blank lines, so editing a comment keeps the key;
 #   - the hash of site.yml's extra_packages (tools/site-matrix);
 #   - the image hash: in a container, of the image's
 #     /etc/quantecon-container, which names the image and the time it was
@@ -111,17 +113,19 @@ name: site-build
 #     (QuantEcon/actions, build-containers.yml, with no schedule), so a new
 #     hash is a new image, not a rebuild of the same one. On the GPU leg, of
 #     the RunsOn spec, which names the machine image by its AMI ID (an AMI
-#     never changes), and of _base/environment.yml, the base the leg creates;
+#     never changes), and of _base/environment.yml's entries, the base the
+#     leg creates;
 #   - and the run.
 # A cache is never overwritten, so each save is a new key, and a restore
 # takes the newest saved under the same tag and hashes; there is no fallback
 # to another key's cache.
-#   What the key catches: a change to the file it hashes, to the site's
-#   extra_packages or to the image starts an empty cache, so every page is
-#   executed again. In the series environment the build never installs
-#   environment.yml (the packages come from the image): the file only names
-#   the environment the series declares, as in dp's own cache keys. In the
-#   base environment the list it hashes is what the build installs.
+#   What the key catches: a change to the file it hashes (in the base
+#   environment, to an entry of the list), to the site's extra_packages or
+#   to the image starts an empty cache, so every page is executed again. In
+#   the series environment the build never installs environment.yml (the
+#   packages come from the image): the file only names the environment the
+#   series declares, as in dp's own cache keys. In the base environment the
+#   list it hashes is what the build installs.
 #   What it does not catch: an extra package such as jax comes from the
 #   newest release pip finds, so a new release keeps the key; and on the GPU
 #   leg, the CUDA libraries jax[cuda13] brings are not pinned. A page is
@@ -356,22 +360,34 @@ jobs:
         env:
           KEY: ${{ matrix.site.key }}
           LEG: ${{ matrix.site.leg }}
+          ENVIRONMENT: ${{ matrix.site.environment }}
           MACHINE: ${{ matrix.site.machine }}
           ENV_FILE: ${{ matrix.site.env_file }}
-          ENV_HASH: ${{ hashFiles(matrix.site.env_file) }}
+          SERIES_ENV_HASH: ${{ hashFiles(matrix.site.env_file) }}
           TAG: ${{ matrix.site.cache_tag }}
           PACKAGES_HASH: ${{ matrix.site.packages_hash }}
           RUN: ${{ github.run_id }}-${{ github.run_attempt }}
         run: |
-          if [ -z "$ENV_HASH" ]; then
+          # A list's entries: its lines without comments (a # at the start of
+          # a line or after a space) and blank lines, so a comment's edit
+          # keeps the key.
+          entries() { sed -E -e 's/(^|[[:space:]])#.*$//' -e 's/[[:space:]]+$//' -e '/^$/d' "$1"; }
+          if [ ! -s "$ENV_FILE" ]; then
             echo "::error::$ENV_FILE does not exist, so the cache has no key (in the series environment, tools/sync did not reconstruct it)"
             exit 1
+          fi
+          if [ "$ENVIRONMENT" = base ]; then
+            # The list the leg applied, by its entries.
+            ENV_HASH=$(entries "$ENV_FILE" | sha256sum | cut -c1-16)
+          else
+            # The series' environment.yml, whole, as dp's own cache keys hash it.
+            ENV_HASH=$SERIES_ENV_HASH
           fi
           if [ "$LEG" = gpu ]; then
             # The GPU leg: the machine image, by its AMI ID in RunsOn's spec,
             # and the base environment the leg created on it.
             echo "  $MACHINE"
-            IMAGE_HASH=$({ printf '%s\n' "$MACHINE"; cat _base/environment.yml; } | sha256sum | cut -c1-16)
+            IMAGE_HASH=$({ printf '%s\n' "$MACHINE"; entries _base/environment.yml; } | sha256sum | cut -c1-16)
           else
             # The image's own record of itself: its name and build time.
             if [ ! -s /etc/quantecon-container ]; then

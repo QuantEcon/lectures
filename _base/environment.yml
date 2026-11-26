@@ -7,8 +7,8 @@
 # machine image's own Conda environment has no anaconda metapackage, so the
 # leg creates this one with setup-miniconda, as the GPU series' own workflows
 # create theirs (the owner's choice of 2026-11-22). The GPU leg's execution
-# cache is keyed on this file as well, so a change here executes every page
-# of a GPU site again.
+# cache is keyed on this file's entries as well (not on its comments), so a
+# change to an entry executes every page of a GPU site again.
 name: quantecon
 channels:
   - defaults
