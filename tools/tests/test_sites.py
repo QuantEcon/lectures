@@ -1,7 +1,10 @@
 """sites/<key>/: tools/pool-check's site rules, tools/stage-site, and the
 drift-check's ``site-stale`` (QuantEcon/project-monorepo#21)."""
 
+import importlib.machinery
+import importlib.util
 import json
+from pathlib import Path
 
 import pytest
 import yaml
@@ -448,8 +451,109 @@ def test_stage_site_local_links_is_for_a_consumer_and_leaves_a_lecture_edited_af
     write(repo.pool("linking.md"), "edited after staging\n")
     res = repo.stage_site("--clean", "dp")
     assert res.returncode == 0
-    assert "kept lectures/linking.md: its bytes are not the ones staging copied" in res.stdout
+    assert ("kept lectures/linking.md: its bytes are not the ones staging wrote; its original is left at "
+            "_build/stage-site-originals/linking.md") in res.stdout
     assert repo.pool("linking.md").read_text() == "edited after staging\n"
+    # Staging the lecture again would replace that original, so it refuses.
+    write(repo.pool("linking.md"), lecture_text("Linking", LINKING))
+    res = repo.stage_site("--local-links", "dp")
+    assert res.returncode == 1
+    assert "  [exists] _build/stage-site-originals/linking.md" in res.stdout
+    assert "refused, nothing copied: a lecture's original is left from an earlier --clean" in res.stdout
+    assert not (repo.root / "_build" / "stage-site.json").exists()
+
+
+def stage_site_module():
+    loader = importlib.machinery.SourceFileLoader("stage_site_under_test", str(Path(__file__).parent.parent / "stage-site"))
+    spec = importlib.util.spec_from_loader("stage_site_under_test", loader)
+    tool = importlib.util.module_from_spec(spec)
+    loader.exec_module(tool)
+    return tool
+
+
+HOSTS = ["https://python.quantecon.org/"]
+LINK = "{doc}`intermediate:carried`"
+ADDRESS = "[it](https://python.quantecon.org/carried.html)"
+
+
+@pytest.mark.parametrize("text, expected, n", [
+    # A % comment line, and the blocks whose body is code or literal text:
+    # plain, with a language, and tilde fences.
+    (f"% {LINK} {ADDRESS}", None, 0),
+    (f"```\n{LINK} {ADDRESS}\n```", None, 0),
+    (f"```python\n{LINK} {ADDRESS}\n```", None, 0),
+    (f"~~~\n{LINK} {ADDRESS}\n~~~", None, 0),
+    (f"~~~~{{code-block}} md\n{LINK}\n~~~~", None, 0),
+    # A single-backtick literal is masked; a link after one on the line is read.
+    (f"`{ADDRESS}` and {LINK}", f"`{ADDRESS}` and {{doc}}`carried`", 1),
+    # A directive's body is prose, and a code cell inside it is not.
+    (f"````{{note}}\nSee {LINK} and {ADDRESS}.\n\n```{{code-cell}} ipython3\n# {LINK} {ADDRESS}\n```\n````",
+     f"````{{note}}\nSee {{doc}}`carried` and [it](carried.md).\n\n```{{code-cell}} ipython3\n# {LINK} {ADDRESS}\n```\n````",
+     2),
+    # A line opening with inline code is not a fence, and the rest is prose.
+    (f"```x``` then {LINK}", f"```x``` then {{doc}}`carried`", 1),
+])
+def test_rewrite_links_reads_prose_alone(text, expected, n):
+    tool = stage_site_module()
+
+    assert tool.rewrite_links(text, {"carried"}, {"intermediate"}, HOSTS) == (text if expected is None else expected, n)
+
+
+def test_stage_site_local_links_reads_a_nested_toc_and_the_sites_own_address_and_leaves_its_own_pages(make_repo):
+    repo = pool_repo(make_repo, series=("intro", "intermediate", "dp"), consumers=("dp",))
+    write(repo.pool("carried.md"), lecture_text("Carried"))
+    write(repo.pool("deep.md"), lecture_text("Deep"))
+    write(repo.pool("linking.md"), lecture_text("Linking", "\n".join([
+        "[Its own address](https://dp.quantecon.org/carried.html), a section {doc}`intermediate:deep`,",
+        "intro's root {doc}`intro:intro` and [by address](https://intro.quantecon.org/intro.html).",
+    ])))
+    make_site(repo, key="dp", toc=("intro", "carried"), meta=site_yml(url="https://dp.quantecon.org/"),
+              cfg=config("dp", mapping={"intro": [URL, None], "intermediate": [INT_URL, None]}))
+    write(repo.root / "sites/dp/_toc.yml", "\n".join([
+        "format: jb-book", "root: intro", "parts:", "- caption: One", "  chapters:", "  - file: carried",
+        "  - file: linking", "    sections:", "    - file: deep", "",
+    ]))
+
+    res = repo.stage_site("--local-links", "dp")
+
+    assert res.returncode == 0, res.stdout + res.stderr
+    assert "stage-site dp: 2 link(s) in 1 lecture(s) rewritten to lectures within the site" in res.stdout
+    text = repo.pool("linking.md").read_text()
+    assert "[Its own address](carried.md), a section {doc}`deep`," in text
+    # intro is the site's own page, not a lecture it carries: the links to
+    # intro's root still go to intro's site.
+    assert "intro's root {doc}`intro:intro` and [by address](https://intro.quantecon.org/intro.html)." in text
+
+
+def test_stage_site_clean_keeps_a_lecture_whose_original_is_gone_and_refuses_a_record_outside_its_folders(make_repo):
+    repo = links_repo(make_repo)
+    assert repo.stage_site("--local-links", "dp").returncode == 0
+    rewritten = repo.pool("linking.md").read_bytes()
+    (repo.root / "_build/stage-site-originals/linking.md").unlink()
+
+    res = repo.stage_site("--clean", "dp")
+
+    assert res.returncode == 0, res.stdout
+    assert ("kept lectures/linking.md as it is: its original, _build/stage-site-originals/linking.md, is gone, "
+            "so it cannot be put back") in res.stdout
+    assert "its bytes are not" not in res.stdout
+    assert repo.pool("linking.md").read_bytes() == rewritten
+    assert not (repo.root / "_build" / "stage-site.json").exists()
+
+    write(repo.pool("linking.md"), lecture_text("Linking", LINKING))
+    assert repo.stage_site("--local-links", "dp").returncode == 0
+    record_path = repo.root / "_build" / "stage-site.json"
+    record = json.loads(record_path.read_text())
+    record["rewritten"][0]["original"] = "lectures/solow.md"
+    record_path.write_text(json.dumps(record))
+    before = staged(repo)
+
+    res = repo.stage_site("--clean", "dp")
+
+    assert res.returncode == 2
+    assert "names lectures/solow.md, which is not inside _build/stage-site-originals/" in res.stderr
+    assert staged(repo) == before  # nothing removed or put back
+    assert record_path.exists()
 
 
 def test_site_yml_local_links_is_true_or_false_and_only_a_consumers(make_repo):

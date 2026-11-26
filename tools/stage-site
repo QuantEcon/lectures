@@ -21,13 +21,15 @@ Neither file is ever a pool file: ``tools/pool-check`` fails a
 ``lectures/_config.yml`` or ``lectures/_toc.yml`` (``top-level``), so
 staging must be cleaned before a commit.
 
-It never overwrites, and it never removes a file it did not copy. A
-destination that already exists, whatever its bytes, stops the run before
-anything is copied. What a run copies, and the folders it makes, are written
-first to a record outside the pool, ``_build/stage-site.json`` (``_build/``
-is ignored by git), and ``--clean`` removes only what that record lists: each
-file whose bytes are still the ones it copied, then each folder the run made
-once it is empty, then the record. One site is staged at a time: while a record
+A copy never overwrites, and staging never removes a file it did not copy:
+a destination that already exists, whatever its bytes, stops the run before
+anything is copied. The only pool files it changes in place are the
+lectures ``--local-links`` rewrites (below), each kept first as it was.
+What a run copies, and the folders it makes, are written first to a record
+outside the pool, ``_build/stage-site.json`` (``_build/`` is ignored by
+git), and ``--clean`` removes only what that record lists: each file whose
+bytes are still the ones it copied, then each folder the run made once it
+is empty, then the record. One site is staged at a time: while a record
 exists, staging refuses.
 
 With ``--local-links``, for a consumer site alone (``class: consumer`` in
@@ -63,7 +65,10 @@ Usage
 
 Exit status: 0 done, 1 refused (no such site, a destination exists, or a
 site is staged already, or another site is, or ``--local-links`` for a site
-that is not a consumer), 2 an error. It never commits anything.
+that is not a consumer, or with a lecture's original left under
+``_build/stage-site-originals/``), 2 an error (among them a record naming a
+path outside the folder it belongs in, which ``--clean`` refuses before it
+touches anything). It never commits anything.
 """
 
 from __future__ import annotations
@@ -129,9 +134,14 @@ def staged_files(site: Path):
 def prose_mask(text: str) -> str:
     """``text`` with what is not prose blanked to spaces, its length and line
     breaks kept, so a match in it is at the same place in ``text``: the bodies
-    of code cells and literal fenced blocks, ``%`` comment lines and inline
-    literals. A directive's own body (``{note}``) is prose, as tools/pool-check
-    reads it."""
+    of code cells and literal fenced blocks (backtick or tilde, plain or with a
+    language), ``%`` comment lines and inline literals. A directive's own body
+    (``{note}``) is prose, read again for the blocks inside it.
+
+    It reads fences as tools/pool-check's ``prose()`` does, so the two tools
+    agree on what is prose; like it, it reads a ``{math}`` body, a block
+    indented four spaces and a ``:::`` fence's body as prose. No pool lecture
+    has a link in one of those (2026-11-27)."""
     lines = text.split("\n")
     blank = lambda line: " " * len(line)
 
@@ -207,7 +217,10 @@ def local_link_plan(key: str, site: Path):
     """``(plan, refusal)``: ``[(lecture, rewritten text, n)]`` for each pool
     lecture of the site whose links ``--local-links`` rewrites, or why it
     refuses."""
-    import yaml
+    try:
+        import yaml
+    except ImportError:
+        raise ValueError("--local-links reads the site's YAML files with PyYAML, which this Python does not have") from None
 
     manifest = yaml.safe_load(MANIFEST_PATH.read_text(encoding="utf-8")) if MANIFEST_PATH.is_file() else None
     entry = ((manifest or {}).get("series") or {}).get(key)
@@ -252,12 +265,16 @@ def read_record():
     return record
 
 
-def inside_pool(rel: str) -> Path:
-    """``ROOT / rel``, refused unless it lies inside ``lectures/``."""
+def inside(rel: str, folder: Path) -> Path:
+    """``ROOT / rel``, refused unless it lies inside ``folder``."""
     path = (ROOT / rel).resolve()
-    if POOL_DIR.resolve() not in path.parents:
-        raise ValueError(f"{shown(RECORD_PATH)} names {rel}, which is not inside lectures/")
+    if folder.resolve() not in path.parents:
+        raise ValueError(f"{shown(RECORD_PATH)} names {rel}, which is not inside {shown(folder)}/")
     return ROOT / rel
+
+
+def inside_pool(rel: str) -> Path:
+    return inside(rel, POOL_DIR)
 
 
 def stage(key: str, site: Path, local_links: bool = False) -> int:
@@ -284,6 +301,13 @@ def stage(key: str, site: Path, local_links: bool = False) -> int:
         plan, refusal = local_link_plan(key, site)
         if refusal:
             print(f"stage-site {key}: refused, nothing copied: {refusal}")
+            return 1
+        left = [ORIGINALS_DIR / path.name for path, _, _ in plan if (ORIGINALS_DIR / path.name).exists()]
+        if left:
+            for p in left:
+                print(f"  [exists] {shown(p)}")
+            print(f"stage-site {key}: refused, nothing copied: a lecture's original is left from an earlier --clean, "
+                  "which kept the lecture; put it back or remove it first.")
             return 1
     dirs = []
     for _, dst in pairs:
@@ -332,37 +356,39 @@ def clean(key: str) -> int:
     if record.get("site") != key:
         print(f"stage-site --clean {key}: refused: the staged site is sites/{record.get('site')}, not sites/{key}")
         return 1
+    # Every path the record names, confined before anything is touched.
+    files = [(item["path"], inside_pool(item["path"]), item["sha256"]) for item in record["files"]]
+    dirs = [inside_pool(rel) for rel in record["dirs"]]
+    rewritten = [(item, inside_pool(item["path"]), inside(item["original"], ORIGINALS_DIR))
+                 for item in record.get("rewritten", [])]
     removed, kept = 0, []
-    for item in record["files"]:
-        rel = item["path"]
-        dst = inside_pool(rel)
+    for rel, dst, sha256 in files:
         if not dst.is_file():
             continue
-        if digest(dst) != item["sha256"]:
-            kept.append(rel)
+        if digest(dst) != sha256:
+            kept.append(f"kept {rel}: its bytes are not the ones staging copied")
             continue
         dst.unlink()
         removed += 1
-    for rel in reversed(record["dirs"]):
-        d = inside_pool(rel)
+    for d in reversed(dirs):
         if d.is_dir() and not any(d.iterdir()):
             d.rmdir()
     restored = 0
-    for item in record.get("rewritten", []):
-        dst, original = inside_pool(item["path"]), ROOT / item["original"]
+    for item, dst, original in rewritten:
+        rel = item["path"]
         if not original.is_file():
-            kept.append(f"{item['path']} (its original, {item['original']}, is gone)")
+            kept.append(f"kept {rel} as it is: its original, {item['original']}, is gone, so it cannot be put back")
             continue
         if dst.is_file() and digest(dst) != item["sha256"]:
-            kept.append(item["path"])
+            kept.append(f"kept {rel}: its bytes are not the ones staging wrote; its original is left at {item['original']}")
             continue
         shutil.copyfile(original, dst)
         original.unlink()
         restored += 1
     if ORIGINALS_DIR.is_dir() and not any(ORIGINALS_DIR.iterdir()):
         ORIGINALS_DIR.rmdir()
-    for rel in kept:
-        print(f"  kept {rel}: its bytes are not the ones staging copied")
+    for line in kept:
+        print(f"  {line}")
     RECORD_PATH.unlink()
     print(f"stage-site --clean {key}: {removed} file(s) removed" + (f", {restored} lecture(s) put back" if restored else ""))
     return 0

@@ -278,9 +278,11 @@ jobs:
 
       # The image's Python has PyYAML, tools/sync's one dependency, and git, so
       # the tools run with `python`, with no uv to install. tools/stage-site
-      # and tools/execution-report need the standard library alone. From the
-      # staging on, the tools run in a login shell, as build-lectures runs jb:
-      # on the GPU machine only a login shell has the environment's `python`.
+      # needs PyYAML for --local-links alone, which every leg's environment
+      # has, since Jupyter Book needs it too, and tools/execution-report the
+      # standard library alone. From the staging on, the tools run in a login
+      # shell, as build-lectures runs jb: on the GPU machine only a login shell
+      # has the environment's `python`.
       - name: Reconstruct the series' files at its pin
         if: ${{ matrix.site.environment == 'series' }}
         env:
