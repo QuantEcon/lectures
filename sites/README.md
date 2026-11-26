@@ -129,7 +129,7 @@ Each site is one leg of a matrix (`fail-fast: false`, so one site's failure stop
 | `environment` | The container, and the file the execution cache's key hashes: `series` builds in `ghcr.io/quantecon/quantecon-build:latest`, as dp's own workflows do, keyed on `mirror/<key>/environment.yml`; `base` builds in `ghcr.io/quantecon/quantecon:latest` with `_base/environment-update.yml` applied by `QuantEcon/actions`' `setup-environment`, keyed on that list; on a GPU site, `base` is created on the machine instead, with no container (the `runner` row) |
 | `cell_timeout` | The job's time limit, `timeout-minutes`: `cell_timeout` in whole minutes, the longest one cell may run, plus 120 minutes for the rest of a build from an empty cache. `site.yml` holds no job limit of its own, since no series sets one; dp's own weekly build from an empty cache took 22 to 41 minutes in October and November 2026. The per-cell limit itself stays where Jupyter Book reads it, `execute: timeout` in `_config.yml` |
 | `type` | Only `series` has a leg so far |
-| `publishes` | Not yet: every leg builds HTML alone for now; the PDF and the notebooks come later |
+| `publishes` | With `notebooks`, the leg also builds the site's notebooks (the `jupyter` builder, strict, from the cache the HTML build filled) and serves them at `_notebooks/`, where each page's "Download Notebook" button links; the PDF comes later |
 | `extra_packages` | Installed with pip into the environment the build runs in, before the build, and hashed into the execution cache's key |
 | `local_links` | `true` stages the site with `tools/stage-site --local-links` (below) |
 

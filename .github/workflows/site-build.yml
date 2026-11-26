@@ -91,14 +91,20 @@ name: site-build
 #   7. writes execution_status.json (tools/execution-report): one row per page
 #      executed or taken from the cache, with status, seconds, kernel and
 #      which of the two; it runs after a failed build too;
-#   8. keeps the HTML (html-<key>, green builds only, 7 days) and the report
+#   8. for a site whose site.yml publishes notebooks, builds them with the
+#      jupyter builder, strict, from the cache step 6 filled, and copies
+#      them into _build/html/_notebooks/, which was made before step 6 so
+#      the theme shows each page's "Download Notebook" button (the series
+#      build the notebooks first; the order here keeps the HTML build the
+#      one that executes, which step 7 counts);
+#   9. keeps the HTML (html-<key>, green builds only, 7 days) and the report
 #      with the environment record (execution-status-<key>) as artefacts. A
 #      failed build also uploads build-lectures' failure reports
 #      (execution-reports-<key>): each failed page's traceback, from
 #      _build/html/reports. It does not hold the site's execution cache,
 #      which build-lectures looks for at _build/.jupyter_cache, not at the
 #      site's path;
-#   9. saves the execution cache (below), and unstages the site.
+#   10. saves the execution cache (below), and unstages the site.
 #
 # THE EXECUTION CACHE is actions/cache, one per site, at the path every
 # site's _config.yml names, _build/jupyter_cache/<key> (pool-check rule 7).
@@ -162,8 +168,8 @@ name: site-build
 # request touches lectures/, so it is built like any other (its run waits for
 # a maintainer's approval, as that workflow notes), and so is its merge.
 #
-# WHAT IT DOES NOT DO (yet): publish; build the PDF or the notebooks (HTML
-# alone for now); post a preview (QuantEcon/actions#336); build on mystmd
+# WHAT IT DOES NOT DO (yet): publish; build the PDF (HTML and the notebooks
+# for now); post a preview (QuantEcon/actions#336); build on mystmd
 # (QuantEcon/actions#337); build only the sites whose toc lists a changed
 # file; share one execution cache between the sites of one environment.
 
@@ -449,6 +455,17 @@ jobs:
         id: start
         run: echo "since=$(date +%s)" >> "$GITHUB_OUTPUT"
 
+      # A site that publishes notebooks (site.yml's publishes) gets the theme's
+      # "Download Notebook" button, which quantecon-book-theme shows on a page
+      # when _build/html/_notebooks/ is a folder as it renders it. The series
+      # build the notebooks first and copy them in; here the folder is made
+      # first, the HTML is built, and the notebooks are built and copied in
+      # after (below). So the HTML build stays the one that executes the
+      # pages, which the execution report counts and the cache save needs.
+      - name: Make room for the site's notebooks
+        if: ${{ contains(matrix.site.publishes, 'notebooks') }}
+        run: mkdir -p _build/html/_notebooks
+
       # With the site staged, lectures/ holds its _config.yml and _toc.yml, so
       # jb needs no --config or --toc. extra-args replaces build-lectures'
       # default, so it keeps -W; nitpick adds -n.
@@ -482,6 +499,37 @@ jobs:
             _build/execution_status.json
             _build/pip-freeze.txt
           if-no-files-found: warn
+
+      # After the execution report, which reads the environment this build
+      # rewrites. Every page comes from the cache the HTML build just filled.
+      - name: Build the site's notebooks (strict)
+        id: notebooks
+        if: ${{ contains(matrix.site.publishes, 'notebooks') }}
+        uses: quantecon/actions/build-lectures@v0
+        with:
+          builder: jupyter
+          source-dir: lectures
+          extra-args: -W --keep-going
+          upload-failure-reports: true
+          failure-artifact-name: execution-reports-${{ matrix.site.key }}-notebooks
+
+      # As build-lectures' html-copy-notebooks copies them: each notebook under
+      # _build/jupyter at the same path under _build/html/_notebooks/.
+      - name: Copy the notebooks into the site
+        if: ${{ steps.notebooks.outcome == 'success' }}
+        run: |
+          n=0
+          while IFS= read -r -d '' nb; do
+            rel=${nb#_build/jupyter/}
+            mkdir -p "_build/html/_notebooks/$(dirname "$rel")"
+            cp "$nb" "_build/html/_notebooks/$rel"
+            n=$((n + 1))
+          done < <(find _build/jupyter -name '*.ipynb' -print0)
+          if [ "$n" -eq 0 ]; then
+            echo "::error::the jupyter build wrote no notebooks under _build/jupyter"
+            exit 1
+          fi
+          echo "$n notebooks copied into _build/html/_notebooks/"
 
       - name: Keep the site's HTML
         uses: actions/upload-artifact@v4
