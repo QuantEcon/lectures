@@ -47,7 +47,9 @@ order named, each with the job settings its ``sites/<key>/site.yml`` decides.
   line (``none`` for no list), which the execution cache's key carries, so a
   change to the list starts a new cache. A value that is not a plain
   requirement (``tools/pool-check``'s pattern) is refused.
-* ``cell_timeout`` and ``publishes`` as ``site.yml`` gives them.
+* ``cell_timeout`` and ``publishes`` as ``site.yml`` gives them, and
+  ``local_links`` (``false`` without the field), which has the leg stage the
+  site with ``tools/stage-site --local-links``.
 
 Only a site of ``type: series`` is built so far. ``tools/pool-check`` checks every
 ``site.yml`` field; this tool only reads them, and refuses one it cannot use.
@@ -135,6 +137,9 @@ def entry(key: str, run_id: str | None):
     environment = data.get("environment", "series")
     if not isinstance(environment, str) or environment not in ENVIRONMENTS:
         return None, f"sites/{key}: environment {environment!r} is not one of {', '.join(ENVIRONMENTS)}"
+    local_links = data.get("local_links", False)
+    if not isinstance(local_links, bool):
+        return None, f"sites/{key}: local_links {local_links!r} is not true or false"
     leg, machine = RUNNERS[runner]
     if leg == "gpu" and environment != "base":
         return None, (f"sites/{key}: a site on {runner} builds in the base environment alone "
@@ -156,6 +161,7 @@ def entry(key: str, run_id: str | None):
         "publishes": list(data.get("publishes") or []),
         "extra_packages": packages,
         "packages_hash": hashlib.sha256("\n".join(packages).encode()).hexdigest()[:16] if packages else "none",
+        "local_links": local_links,
     }, None
 
 

@@ -50,11 +50,12 @@ def test_a_cpu_series_site_gets_its_runner_container_and_time_limit(tmp_path):
         {"key": "intro", "runs_on": "ubuntu-latest", "leg": "container", "machine": "", "environment": "series",
          "image": "ghcr.io/quantecon/quantecon-build:latest", "env_file": "mirror/intro/environment.yml",
          "cache_tag": "", "timeout_minutes": 11 + 120, "cell_timeout": 601, "publishes": ["html", "pdf"],
-         "extra_packages": [], "packages_hash": "none"},
+         "extra_packages": [], "packages_hash": "none", "local_links": False},
         {"key": "dp", "runs_on": "ubuntu-latest", "leg": "container", "machine": "", "environment": "series",
          "image": "ghcr.io/quantecon/quantecon-build:latest", "env_file": "mirror/dp/environment.yml",
          "cache_tag": "", "timeout_minutes": 40 + 120, "cell_timeout": 2400, "publishes": ["html"],
-         "extra_packages": ["jax"], "packages_hash": hashlib.sha256(b"jax").hexdigest()[:16]},
+         "extra_packages": ["jax"], "packages_hash": hashlib.sha256(b"jax").hexdigest()[:16],
+         "local_links": False},
     ]
     assert "not built (not named): jax" in res.stderr
 
@@ -144,6 +145,18 @@ def test_a_site_with_no_leg_yet_is_refused_and_nothing_is_printed(tmp_path):
     assert "sites/mac: runner 'macos-latest' has no leg yet (only ubuntu-latest, g4dn.2xlarge)" in res.stderr
     assert "sites/course: type 'course' has no leg yet" in res.stderr
     assert "there is no site sites/nope/" in res.stderr
+
+
+def test_local_links_reaches_the_leg_and_a_value_that_is_not_true_or_false_is_refused(tmp_path):
+    root = scratch(tmp_path, {"dp": site_yml(local_links=True), "intro": site_yml(), "odd": site_yml(local_links="yes")})
+
+    res = run(root, "dp", "intro")
+    assert res.returncode == 0, res.stderr
+    assert [s["local_links"] for s in json.loads(res.stdout)] == [True, False]
+
+    res = run(root, "odd")
+    assert res.returncode == 1
+    assert "sites/odd: local_links 'yes' is not true or false" in res.stderr
 
 
 def test_the_packages_hash_follows_the_list_and_a_value_pip_could_read_as_an_option_is_refused(tmp_path):

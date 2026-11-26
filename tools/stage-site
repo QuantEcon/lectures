@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.9"
-# dependencies = []
+# dependencies = ["pyyaml"]
 # ///
 """tools/stage-site — copy one site's own pages and files into the pool folder.
 
@@ -30,14 +30,40 @@ file whose bytes are still the ones it copied, then each folder the run made
 once it is empty, then the record. One site is staged at a time: while a record
 exists, staging refuses.
 
+With ``--local-links``, for a consumer site alone (``class: consumer`` in
+``sync/manifest.yml``, today ``dp``; QuantEcon/project-monorepo#22), staging
+also rewrites, in the pool lectures the site lists, each link that leaves the
+site for a lecture the site carries into a link within the site. A consumer's
+copies stay byte for byte its sources' own, so a link they make to their home
+series' site would take the reader away from a page the consumer has. Two
+forms, read in prose only (not in code cells, literal blocks, inline literals
+or ``%`` comments):
+
+* a prefixed ``{doc}`` link (``{doc}`intermediate:perm_income_cons``` or
+  ``{doc}`text <intro:short_path>```), whose prefix is a key of the site's
+  ``intersphinx_mapping``, loses its prefix;
+* a markdown link to a lecture site's page by its address
+  (``[text](https://python.quantecon.org/os_stochastic.html)``), on a host the
+  site maps, the site's own, or an older address that still forwards
+  (``OLD_ADDRESSES``), becomes a link to the lecture's file
+  (``[text](os_stochastic.md)``). An address with an anchor is left alone.
+
+A lecture is the site's when its ``_toc.yml`` lists it and it is a pool
+lecture, not a page of the site's own folder. Each rewritten lecture's
+original bytes are kept under ``_build/stage-site-originals/`` and named in
+the record, and ``--clean`` puts them back, the same way it removes a copy:
+only a file whose bytes are still the ones staging wrote. The site build
+passes the option when the site's ``site.yml`` sets ``local_links: true``.
+
 Usage
 -----
-    tools/stage-site dp           # stage dp's pages, files, _config.yml and _toc.yml into lectures/
-    tools/stage-site --clean dp   # remove them again
+    tools/stage-site dp                 # stage dp's pages, files, _config.yml and _toc.yml into lectures/
+    tools/stage-site --local-links dp   # the same, and rewrite links to lectures the site carries
+    tools/stage-site --clean dp         # remove them again, and put any rewritten lecture back
 
 Exit status: 0 done, 1 refused (no such site, a destination exists, or a
-site is staged already, or another site is), 2 an error. It never commits
-anything.
+site is staged already, or another site is, or ``--local-links`` for a site
+that is not a consumer), 2 an error. It never commits anything.
 """
 
 from __future__ import annotations
@@ -54,11 +80,23 @@ ROOT = Path(__file__).resolve().parent.parent
 POOL_DIR = ROOT / "lectures"
 SITES_DIR = ROOT / "sites"
 RECORD_PATH = ROOT / "_build" / "stage-site.json"
+ORIGINALS_DIR = ROOT / "_build" / "stage-site-originals"
+MANIFEST_PATH = ROOT / "sync" / "manifest.yml"
 # The files every site holds. The first two mark a folder as a site.
 SITE_FILES = ("_toc.yml", "site.yml", "_config.yml")
 # Copied into lectures/ with the pages, for jb build to find there.
 BOOK_FILES = ("_config.yml", "_toc.yml")
 KEY_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]*")
+# --local-links. Addresses a lecture site had before, which still forward to
+# its current one: python-intro.quantecon.org was intermediate's.
+OLD_ADDRESSES = ("https://python-intro.quantecon.org/",)
+# A fence, as tools/pool-check reads one, and the fenced blocks whose body is
+# code or literal text, not prose.
+FENCE_RE = re.compile(r"^[ \t]*(`{3,}|~{3,})(.*)$")
+CODE_DIRECTIVES = ("{code-cell}", "{code-block}", "{code}", "{sourcecode}", "{literalinclude}")
+# On a prose line: a role's text ({doc}`...`), kept, or an inline literal, masked.
+BACKTICKS_RE = re.compile(r"(\{[\w:+-]+\})?(`+)(.*?)(?<!`)\2(?!`)")
+DOC_LINK_RE = re.compile(r"\{doc\}`(?P<text>[^`<>]*<)?(?P<prefix>[\w.-]+):(?P<name>[\w-]+)(?P<close>>?)`")
 
 
 def digest(path: Path) -> str:
@@ -88,6 +126,113 @@ def staged_files(site: Path):
     return pairs
 
 
+def prose_mask(text: str) -> str:
+    """``text`` with what is not prose blanked to spaces, its length and line
+    breaks kept, so a match in it is at the same place in ``text``: the bodies
+    of code cells and literal fenced blocks, ``%`` comment lines and inline
+    literals. A directive's own body (``{note}``) is prose, as tools/pool-check
+    reads it."""
+    lines = text.split("\n")
+    blank = lambda line: " " * len(line)
+
+    def is_closing(line, fence):
+        m = FENCE_RE.match(line)
+        return bool(m) and m.group(1)[0] == fence[0] and len(m.group(1)) >= len(fence) and not m.group(2).strip()
+
+    def read(start, stop):
+        i = start
+        while i < stop:
+            m = FENCE_RE.match(lines[i])
+            if not m or (m.group(1)[0] == "`" and "`" in m.group(2)):
+                if lines[i].lstrip().startswith("%"):
+                    lines[i] = blank(lines[i])
+                else:
+                    lines[i] = BACKTICKS_RE.sub(lambda r: r.group(0) if r.group(1) else blank(r.group(0)), lines[i])
+                i += 1
+                continue
+            end = next((j for j in range(i + 1, stop) if is_closing(lines[j], m.group(1))), stop)
+            info = m.group(2).strip()
+            lines[i] = blank(lines[i])
+            if not info.startswith("{") or info.startswith(CODE_DIRECTIVES):
+                for j in range(i + 1, end):
+                    lines[j] = blank(lines[j])
+            else:
+                read(i + 1, end)
+            if end < stop:
+                lines[end] = blank(lines[end])
+            i = end + 1
+
+    read(0, len(lines))
+    return "\n".join(lines)
+
+
+def rewrite_links(text: str, carried, prefixes, hosts):
+    """``(text, n)``: ``text`` with its prose links to a lecture in ``carried``
+    made links within the site, and how many it rewrote."""
+    masked = prose_mask(text)
+    edits = []
+    for m in DOC_LINK_RE.finditer(masked):
+        if m.group("prefix") in prefixes and m.group("name") in carried and bool(m.group("text")) == bool(m.group("close")):
+            edits.append((m.start("prefix"), m.end("prefix") + 1, ""))
+    url_re = re.compile(r"\]\((?P<base>" + "|".join(re.escape(h) for h in hosts) + r")(?P<name>[\w-]+)\.html\)")
+    for m in url_re.finditer(masked) if hosts else ():
+        if m.group("name") in carried:
+            edits.append((m.start("base"), m.end(), f"{m.group('name')}.md)"))
+    for start, end, new in sorted(edits, reverse=True):
+        text = text[:start] + new + text[end:]
+    return text, len(edits)
+
+
+def toc_files(toc):
+    """Every page a Jupyter Book ``_toc.yml`` lists: its root, then each ``file:``."""
+    files = []
+
+    def walk(node):
+        if isinstance(node, dict):
+            if isinstance(node.get("file"), str):
+                files.append(node["file"])
+            for key in ("parts", "chapters", "sections"):
+                walk(node.get(key))
+        elif isinstance(node, list):
+            for item in node:
+                walk(item)
+
+    if isinstance(toc, dict) and isinstance(toc.get("root"), str):
+        files.append(toc["root"])
+    walk(toc)
+    return [f[:-3] if f.endswith(".md") else f for f in files]
+
+
+def local_link_plan(key: str, site: Path):
+    """``(plan, refusal)``: ``[(lecture, rewritten text, n)]`` for each pool
+    lecture of the site whose links ``--local-links`` rewrites, or why it
+    refuses."""
+    import yaml
+
+    manifest = yaml.safe_load(MANIFEST_PATH.read_text(encoding="utf-8")) if MANIFEST_PATH.is_file() else None
+    entry = ((manifest or {}).get("series") or {}).get(key)
+    if not (isinstance(entry, dict) and entry.get("class") == "consumer"):
+        return None, f"--local-links is for a consumer site, and sync/manifest.yml does not mark {key} `class: consumer`"
+    config = yaml.safe_load((site / "_config.yml").read_text(encoding="utf-8")) or {}
+    mapping = ((config.get("sphinx") or {}).get("config") or {}).get("intersphinx_mapping") or {}
+    site_yml = yaml.safe_load((site / "site.yml").read_text(encoding="utf-8")) or {}
+    prefixes = {k for k in mapping if isinstance(k, str)}
+    hosts = {v[0] if isinstance(v, (list, tuple)) else v for v in mapping.values()}
+    hosts |= {site_yml.get("url")} | set(OLD_ADDRESSES)
+    hosts = sorted(h if h.endswith("/") else h + "/" for h in hosts if isinstance(h, str) and h.startswith("https://"))
+    toc = yaml.safe_load((site / "_toc.yml").read_text(encoding="utf-8"))
+    own = {p.stem for p in site.glob("*.md")}
+    carried = {f for f in toc_files(toc) if f not in own and (POOL_DIR / f"{f}.md").is_file()}
+    plan = []
+    for name in sorted(carried):
+        path = POOL_DIR / f"{name}.md"
+        text = path.read_text(encoding="utf-8")
+        new, n = rewrite_links(text, carried, prefixes, hosts)
+        if n:
+            plan.append((path, new, n))
+    return plan, None
+
+
 def read_record():
     if not RECORD_PATH.is_file():
         return None
@@ -99,6 +244,9 @@ def read_record():
                 for f in record["files"])
         and isinstance(record.get("dirs"), list)
         and all(isinstance(d, str) for d in record["dirs"])
+        and isinstance(record.get("rewritten", []), list)
+        and all(isinstance(f, dict) and isinstance(f.get("path"), str) and isinstance(f.get("sha256"), str)
+                and isinstance(f.get("original"), str) for f in record.get("rewritten", []))
     ):
         raise ValueError(f"{shown(RECORD_PATH)} is not a stage-site record")
     return record
@@ -112,7 +260,7 @@ def inside_pool(rel: str) -> Path:
     return ROOT / rel
 
 
-def stage(key: str, site: Path) -> int:
+def stage(key: str, site: Path, local_links: bool = False) -> int:
     record = read_record()
     if record is not None:
         print(
@@ -131,6 +279,12 @@ def stage(key: str, site: Path) -> int:
             "an earlier build, to remove first."
         )
         return 1
+    plan = []
+    if local_links:
+        plan, refusal = local_link_plan(key, site)
+        if refusal:
+            print(f"stage-site {key}: refused, nothing copied: {refusal}")
+            return 1
     dirs = []
     for _, dst in pairs:
         parent = dst.parent
@@ -141,10 +295,16 @@ def stage(key: str, site: Path) -> int:
         for d in reversed(missing):
             if shown(d) not in dirs:
                 dirs.append(shown(d))
+    rewritten = [
+        {"path": shown(path), "sha256": hashlib.sha256(new.encode("utf-8")).hexdigest(),
+         "original": shown(ORIGINALS_DIR / path.name)}
+        for path, new, _ in plan
+    ]
     RECORD_PATH.parent.mkdir(parents=True, exist_ok=True)
     RECORD_PATH.write_text(
         json.dumps(
-            {"site": key, "files": [{"path": shown(dst), "sha256": digest(src)} for src, dst in pairs], "dirs": dirs},
+            {"site": key, "files": [{"path": shown(dst), "sha256": digest(src)} for src, dst in pairs], "dirs": dirs,
+             "rewritten": rewritten},
             indent=2,
         ) + "\n",
         encoding="utf-8",
@@ -152,7 +312,15 @@ def stage(key: str, site: Path) -> int:
     for src, dst in pairs:
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(src, dst)
+    if plan:
+        ORIGINALS_DIR.mkdir(parents=True, exist_ok=True)
+        for path, new, _ in plan:
+            shutil.copyfile(path, ORIGINALS_DIR / path.name)
+            path.write_text(new, encoding="utf-8")
     print(f"stage-site {key}: {len(pairs)} file(s) copied into lectures/ (recorded in {shown(RECORD_PATH)})")
+    if local_links:
+        print(f"stage-site {key}: {sum(n for _, _, n in plan)} link(s) in {len(plan)} lecture(s) rewritten to "
+              "lectures within the site")
     return 0
 
 
@@ -179,10 +347,24 @@ def clean(key: str) -> int:
         d = inside_pool(rel)
         if d.is_dir() and not any(d.iterdir()):
             d.rmdir()
+    restored = 0
+    for item in record.get("rewritten", []):
+        dst, original = inside_pool(item["path"]), ROOT / item["original"]
+        if not original.is_file():
+            kept.append(f"{item['path']} (its original, {item['original']}, is gone)")
+            continue
+        if dst.is_file() and digest(dst) != item["sha256"]:
+            kept.append(item["path"])
+            continue
+        shutil.copyfile(original, dst)
+        original.unlink()
+        restored += 1
+    if ORIGINALS_DIR.is_dir() and not any(ORIGINALS_DIR.iterdir()):
+        ORIGINALS_DIR.rmdir()
     for rel in kept:
         print(f"  kept {rel}: its bytes are not the ones staging copied")
     RECORD_PATH.unlink()
-    print(f"stage-site --clean {key}: {removed} file(s) removed")
+    print(f"stage-site --clean {key}: {removed} file(s) removed" + (f", {restored} lecture(s) put back" if restored else ""))
     return 0
 
 
@@ -190,6 +372,8 @@ def main(argv=None):
     parser = argparse.ArgumentParser(prog="tools/stage-site", description=__doc__.split("\n\n")[0])
     parser.add_argument("key", help="the site: a folder under sites/ holding _toc.yml and site.yml")
     parser.add_argument("--clean", action="store_true", help="remove the site's staged copies instead")
+    parser.add_argument("--local-links", action="store_true",
+                        help="for a consumer site, also rewrite links to lectures the site carries into links within it")
     args = parser.parse_args(argv)
     if not (KEY_RE.fullmatch(args.key) and args.key in site_keys()):
         sys.stderr.write(f"error: there is no site sites/{args.key}/ (sites: {', '.join(site_keys()) or 'none'})\n")
@@ -198,7 +382,7 @@ def main(argv=None):
         sys.stderr.write(f"error: {POOL_DIR} does not exist\n")
         return 2
     site = SITES_DIR / args.key
-    return clean(args.key) if args.clean else stage(args.key, site)
+    return clean(args.key) if args.clean else stage(args.key, site, args.local_links)
 
 
 if __name__ == "__main__":

@@ -155,7 +155,7 @@ def test_site_yml_has_the_fields_the_build_reads_with_valid_values(make_repo):
     assert problems(res) == [
         "[site-yml] sites/intro/site.yml has no `url`",
         "[site-yml] sites/intro/site.yml: `runners` is not a field the build reads (type, runner, cell_timeout, "
-        "publishes, url; optional: extra_packages, environment)",
+        "publishes, url; optional: extra_packages, environment, local_links)",
         "[site-yml] sites/intro/site.yml: type 'course' is not one of series",
         "[site-yml] sites/intro/site.yml: runner 'macos-latest' is not one of ubuntu-latest, g4dn.2xlarge",
         "[site-yml] sites/intro/site.yml: cell_timeout '600' is not a whole number of seconds above 0",
@@ -374,6 +374,96 @@ def test_stage_site_copies_a_site_in_refuses_a_second_and_cleans_up(make_repo):
     repo.pool("_static/qe-logo.png").unlink()
     assert staged(repo) == before  # the lecture_specific/ folders it made went too
     assert repo.stage_site("dp").returncode == 0
+
+
+INT_URL = "https://python.quantecon.org/"
+LINKING = "\n".join([
+    "See {doc}`intermediate:carried` and {doc}`the other lecture <intro:carried>`.",
+    "Also [this lecture](https://python.quantecon.org/carried.html) and [the old address](https://python-intro.quantecon.org/carried.html).",
+    "Left alone: {doc}`intermediate:elsewhere`, [a page it lacks](https://python.quantecon.org/elsewhere.html),",
+    "[an anchor](https://python.quantecon.org/carried.html#a-section), an unmapped host [x](https://example.org/carried.html),",
+    "the literal ``{doc}`intermediate:carried` `` and an unmapped prefix {doc}`programming:carried`.",
+    "",
+    "```{code-cell} ipython3",
+    "url = '[here](https://python.quantecon.org/carried.html)'  # {doc}`intermediate:carried`",
+    "```",
+])
+
+
+def links_repo(make_repo):
+    """dp, a consumer that maps intro and intermediate, carries `carried` and
+    `linking`; `linking` links to `carried` in every form the rewrite reads."""
+    repo = pool_repo(make_repo, series=("intro", "intermediate", "programming", "dp"), consumers=("dp",))
+    write(repo.pool("carried.md"), lecture_text("Carried"))
+    write(repo.pool("elsewhere.md"), lecture_text("Elsewhere"))
+    write(repo.pool("linking.md"), lecture_text("Linking", LINKING))
+    make_site(repo, key="dp", toc=("intro", "carried", "linking"),
+              cfg=config("dp", mapping={"intro": [URL, None], "intermediate": [INT_URL, None]}))
+    make_site(repo, key="intro", toc=("intro", "elsewhere"))
+    return repo
+
+
+def test_stage_site_local_links_rewrites_a_consumers_links_to_lectures_it_carries_and_clean_puts_them_back(make_repo):
+    repo = links_repo(make_repo)
+    original = repo.pool("linking.md").read_bytes()
+
+    res = repo.stage_site("--local-links", "dp")
+
+    assert res.returncode == 0, res.stdout + res.stderr
+    assert "stage-site dp: 4 link(s) in 1 lecture(s) rewritten to lectures within the site" in res.stdout
+    text = repo.pool("linking.md").read_text()
+    assert "See {doc}`carried` and {doc}`the other lecture <carried>`." in text
+    assert "Also [this lecture](carried.md) and [the old address](carried.md)." in text
+    # Not a lecture the site carries, an anchor, a host the site does not map,
+    # an inline literal, a prefix the site does not map, and a code cell.
+    for kept in ("{doc}`intermediate:elsewhere`", "(https://python.quantecon.org/elsewhere.html)",
+                 "(https://python.quantecon.org/carried.html#a-section)", "(https://example.org/carried.html)",
+                 "``{doc}`intermediate:carried` ``", "{doc}`programming:carried`",
+                 "url = '[here](https://python.quantecon.org/carried.html)'  # {doc}`intermediate:carried`"):
+        assert kept in text, kept
+    record = json.loads((repo.root / "_build" / "stage-site.json").read_text())
+    assert [r["path"] for r in record["rewritten"]] == ["lectures/linking.md"]
+    assert (repo.root / "_build/stage-site-originals/linking.md").read_bytes() == original
+
+    res = repo.stage_site("--clean", "dp")
+
+    assert res.returncode == 0, res.stdout
+    assert "1 lecture(s) put back" in res.stdout
+    assert repo.pool("linking.md").read_bytes() == original
+    assert not (repo.root / "_build" / "stage-site-originals").exists()
+    assert repo.pool_check().returncode == 0
+
+
+def test_stage_site_local_links_is_for_a_consumer_and_leaves_a_lecture_edited_after_staging(make_repo):
+    repo = links_repo(make_repo)
+    before = staged(repo)
+
+    res = repo.stage_site("--local-links", "intro")
+    assert res.returncode == 1
+    assert ("stage-site intro: refused, nothing copied: --local-links is for a consumer site, and "
+            "sync/manifest.yml does not mark intro `class: consumer`") in res.stdout
+    assert staged(repo) == before
+
+    assert repo.stage_site("--local-links", "dp").returncode == 0
+    write(repo.pool("linking.md"), "edited after staging\n")
+    res = repo.stage_site("--clean", "dp")
+    assert res.returncode == 0
+    assert "kept lectures/linking.md: its bytes are not the ones staging copied" in res.stdout
+    assert repo.pool("linking.md").read_text() == "edited after staging\n"
+
+
+def test_site_yml_local_links_is_true_or_false_and_only_a_consumers(make_repo):
+    repo = pool_repo(make_repo, series=("intro", "dp"), consumers=("dp",))
+    make_site(repo, key="intro", meta=site_yml(local_links=True))
+    make_site(repo, key="dp", cfg=config("dp", mapping={"intro": [URL, None]}), meta=site_yml(local_links="yes"))
+
+    res = repo.pool_check()
+
+    assert problems(res) == [
+        "[site-yml] sites/dp/site.yml: local_links 'yes' is not true or false",
+        "[site-yml] sites/intro/site.yml: local_links is for a consumer series' site, whose copies link to their home "
+        "series' sites, and `intro` is not `class: consumer` in sync/manifest.yml",
+    ]
 
 
 @pytest.mark.parametrize("name", ["_config.yml", "_toc.yml"])

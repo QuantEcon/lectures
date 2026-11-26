@@ -37,6 +37,7 @@ The bibliography every `zreferences.md` and `_config.yml` names, `_static/quant-
 | `publishes` | What the site publishes | A list of `html`, `pdf`, `notebooks`, with `html` |
 | `url` | The published address | `html.baseurl` in the site's `_config.yml` |
 | `extra_packages` | Optional: what the build installs with pip before it builds the site | A list of pip requirements, each a name with optional `[extras]` and version specifiers, no spaces, none starting with `-`, each at most once |
+| `local_links` | Optional, a consumer series' site alone: `true` stages the site with `tools/stage-site --local-links`, which rewrites its pool lectures' links to lectures the site carries into links within the site (below) | `true` or `false` (the default) |
 | `environment` | Optional: what the build runs in | `series` (the default): the lean image, with nothing installed but `extra_packages`; or `base`: the full image with `_base/environment-update.yml` applied, or on a GPU site the same base created on its machine, with the list and `jax[cuda13]` |
 
 Today's values, read from each series at its pin on 2026-11-17, and dp's `publishes` on 2026-11-26 (each `site.yml` names its source in comments):
@@ -130,6 +131,7 @@ Each site is one leg of a matrix (`fail-fast: false`, so one site's failure stop
 | `type` | Only `series` has a leg so far |
 | `publishes` | Not yet: every leg builds HTML alone for now; the PDF and the notebooks come later |
 | `extra_packages` | Installed with pip into the environment the build runs in, before the build, and hashed into the execution cache's key |
+| `local_links` | `true` stages the site with `tools/stage-site --local-links` (below) |
 
 A leg checks the repository out with its full history. In the `series` environment it reconstructs `mirror/<key>/` at the series' pin (`tools/sync <key>`, a few seconds, for the one file the cache key hashes, `environment.yml`); in the `base` environment it applies `_base/environment-update.yml` instead (on a GPU site, after creating `_base/environment.yml` on the machine, and before adding `jax[cuda13]`), sets `PIP_ROOT_USER_ACTION=ignore` in a container (the full image runs as root, and without it every install cell's output carries pip's root-user warning, which the series' own builds do not print) and builds matplotlib's font cache, so no lecture's first plot prints that it is building it. It then installs the site's `extra_packages`, records the environment as installed (`pip freeze`), restores the site's execution cache, stages the site, and builds it with `QuantEcon/actions`' `build-lectures`: `builder: html`, `source-dir: lectures` and `extra-args: -W --keep-going` (`build-lectures` adds `-n`), with the staged `_config.yml` and `_toc.yml`. So a warning, a cell that raises, a reference that does not resolve, or a label that two of the site's lectures both define fails the build, and `--keep-going` lists every failure, not only the first. It then writes the execution report, keeps the HTML (`html-<key>`, after a green build, for 7 days) and the report with the environment record (`execution-status-<key>`) as artefacts, saves the cache and unstages the site. A failed build also uploads `build-lectures`' failure reports (`execution-reports-<key>`): each failed page's traceback, from `_build/html/reports/`. They do not include the site's execution cache: `build-lectures` collects `_build/.jupyter_cache`, and a site's cache is at `_build/jupyter_cache/<key>`.
 
@@ -151,6 +153,10 @@ A leg checks the repository out with its full history. In the `series` environme
 | `execution` | `executed` by this build, or `cached`: its outputs were taken from the execution cache |
 
 The report also records the site, the build's start, the versions of the packages that decide what a page's execution produces, and the counts. The counts and the full table go to the run's summary.
+
+## Links to lectures a consumer site carries
+
+A consumer site's copies (dp's) are byte for byte its sources' own, so their links to their home series' sites, by prefix (``{doc}`intermediate:perm_income_cons` ``) or by address (`[this lecture](https://python.quantecon.org/os_stochastic.html)`), take a reader to another site for a lecture the consumer itself has. dp has 31 such links (QuantEcon/project-monorepo#22). With `local_links: true` in `site.yml`, the build stages the site with [`tools/stage-site`](../tools/stage-site) `--local-links`, which rewrites them in the staged copy only: a prefixed `{doc}` link to a lecture the site carries, whose prefix the site maps, loses its prefix, and a markdown link to such a lecture's page on a host the site maps, its own, or an older address that still forwards (`python-intro.quantecon.org`) becomes a link to the lecture's file. Prose only: code cells, literal blocks, inline literals and `%` comments are not read, and an address with an anchor is left alone. Each rewritten lecture's original is kept under `_build/` and put back by `--clean`, so the pool's copies stay verbatim and the drift-check is unaffected. Only a consumer may set it (pool-check's `site-yml`, and the tool refuses otherwise). It is what readers of the site see, so it is switched on at the site's cutover, by the owner's decision of 2026-11-26 ("(b) rewrite at staging"); until then dp's builds, like its own site, link out.
 
 ## The rules
 
