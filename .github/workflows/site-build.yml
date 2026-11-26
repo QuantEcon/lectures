@@ -97,14 +97,18 @@ name: site-build
 #      the theme shows each page's "Download Notebook" button (the series
 #      build the notebooks first; the order here keeps the HTML build the
 #      one that executes, which step 7 counts);
-#   9. keeps the HTML (html-<key>, green builds only, 7 days) and the report
+#   9. for a site whose site.yml publishes a pdf, builds it the same way,
+#      with the pdflatex builder, strict, from the same cache, and copies it
+#      into _build/html/_pdf/, also made before step 6, so the theme shows
+#      the "Book (PDF)" link; then checks the PDF the pages link to is there;
+#   10. keeps the HTML (html-<key>, green builds only, 7 days) and the report
 #      with the environment record (execution-status-<key>) as artefacts. A
 #      failed build also uploads build-lectures' failure reports
 #      (execution-reports-<key>): each failed page's traceback, from
 #      _build/html/reports. It does not hold the site's execution cache,
 #      which build-lectures looks for at _build/.jupyter_cache, not at the
 #      site's path;
-#   10. saves the execution cache (below), and unstages the site.
+#   11. saves the execution cache (below), and unstages the site.
 #
 # THE EXECUTION CACHE is actions/cache, one per site, at the path every
 # site's _config.yml names, _build/jupyter_cache/<key> (pool-check rule 7).
@@ -168,8 +172,7 @@ name: site-build
 # request touches lectures/, so it is built like any other (its run waits for
 # a maintainer's approval, as that workflow notes), and so is its merge.
 #
-# WHAT IT DOES NOT DO (yet): publish; build the PDF (HTML and the notebooks
-# for now); post a preview (QuantEcon/actions#336); build on mystmd
+# WHAT IT DOES NOT DO (yet): publish; post a preview (QuantEcon/actions#336); build on mystmd
 # (QuantEcon/actions#337); build only the sites whose toc lists a changed
 # file; share one execution cache between the sites of one environment.
 
@@ -447,16 +450,23 @@ jobs:
         id: start
         run: echo "since=$(date +%s)" >> "$GITHUB_OUTPUT"
 
-      # A site that publishes notebooks (site.yml's publishes) gets the theme's
-      # "Download Notebook" button, which quantecon-book-theme shows on a page
-      # when _build/html/_notebooks/ is a folder as it renders it. The series
-      # build the notebooks first and copy them in; here the folder is made
-      # first, the HTML is built, and the notebooks are built and copied in
-      # after (below). So the HTML build stays the one that executes the
-      # pages, which the execution report counts and the cache save needs.
-      - name: Make room for the site's notebooks
-        if: ${{ contains(matrix.site.publishes, 'notebooks') }}
-        run: mkdir -p _build/html/_notebooks
+      # A site that publishes notebooks or a PDF (site.yml's publishes) gets
+      # the theme's "Download Notebook" button and its "Book (PDF)" link,
+      # which quantecon-book-theme shows on a page when _build/html/_notebooks/
+      # or _build/html/_pdf/ is a folder as it renders it. The series build
+      # the PDF and the notebooks first and copy them in; here the folders are
+      # made first, the HTML is built, and the notebooks and the PDF are built
+      # and copied in after (below). So the HTML build stays the one that
+      # executes the pages, which the execution report counts and the cache
+      # save needs.
+      - name: Make room for the site's downloads
+        if: ${{ contains(matrix.site.publishes, 'notebooks') || contains(matrix.site.publishes, 'pdf') }}
+        env:
+          NOTEBOOKS: ${{ contains(matrix.site.publishes, 'notebooks') }}
+          PDF: ${{ contains(matrix.site.publishes, 'pdf') }}
+        run: |
+          if [ "$NOTEBOOKS" = true ]; then mkdir -p _build/html/_notebooks; fi
+          if [ "$PDF" = true ]; then mkdir -p _build/html/_pdf; fi
 
       # With the site staged, lectures/ holds its _config.yml and _toc.yml, so
       # jb needs no --config or --toc. extra-args replaces build-lectures'
@@ -522,6 +532,47 @@ jobs:
             exit 1
           fi
           echo "$n notebooks copied into _build/html/_notebooks/"
+
+      # The PDF, as the series build theirs (pdflatex builder, -n -W), from
+      # the cache the HTML build filled, so it executes nothing. LaTeX comes
+      # with the full image and with the GPU machine image, as the GPU
+      # series' own PDF builds use it.
+      - name: Build the site's PDF (strict)
+        id: pdf
+        if: ${{ contains(matrix.site.publishes, 'pdf') }}
+        uses: quantecon/actions/build-lectures@v0
+        with:
+          builder: pdflatex
+          source-dir: lectures
+          extra-args: -W --keep-going
+          upload-failure-reports: true
+          failure-artifact-name: execution-reports-${{ matrix.site.key }}-pdf
+
+      # As the series copy theirs (cp _build/latex/*.pdf _build/html/_pdf).
+      # The theme links each page to /_pdf/<latex targetname>.pdf, so every
+      # such link the pages carry is checked against the files copied.
+      - name: Copy the PDF into the site
+        if: ${{ steps.pdf.outcome == 'success' }}
+        run: |
+          shopt -s nullglob
+          pdfs=(_build/latex/*.pdf)
+          if [ "${#pdfs[@]}" -eq 0 ]; then
+            echo "::error::the pdflatex build wrote no PDF under _build/latex"
+            exit 1
+          fi
+          cp "${pdfs[@]}" _build/html/_pdf/
+          links=$(grep -rhoE 'href="/_pdf/[^"]+\.pdf"' --include='*.html' _build/html | sed -e 's#^href="/##' -e 's#"$##' | sort -u)
+          if [ -z "$links" ]; then
+            echo "::error::no page links to a PDF under /_pdf/, so the theme did not see _build/html/_pdf/"
+            exit 1
+          fi
+          while IFS= read -r link; do
+            if [ ! -f "_build/html/$link" ]; then
+              echo "::error::the pages link to /$link, which the build did not make (it made: ${pdfs[*]})"
+              exit 1
+            fi
+          done <<< "$links"
+          echo "${#pdfs[@]} PDF(s) copied into _build/html/_pdf/; the pages link to /$(paste -sd ' ' - <<< "$links")"
 
       - name: Keep the site's HTML
         uses: actions/upload-artifact@v4
