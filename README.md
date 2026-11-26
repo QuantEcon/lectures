@@ -91,6 +91,7 @@ The repository is organised around three layers.
     ├── sync.yml         # daily job that refreshes the pinned SHAs (pin-only)
     ├── drift-check.yml  # runs after sync: drift issues, refresh PR (pool and bibliography), red on a pool edit or a refused refresh; the assets report
     ├── pool-check.yml   # runs tools/pool-check and the _shared/ index check on pull requests that touch the pool or the sites
+    ├── publish.yml      # by hand: builds one site with site-build.yml and releases it in its target repository with the App's token (a test double until the site's cutover)
     ├── site-build.yml   # builds the sites it names (four today) from the pool, strict, HTML; keeps the HTML and the execution report; publishes nothing
     └── tests.yml        # runs tools/tests on pull requests
 ```
