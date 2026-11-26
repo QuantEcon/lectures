@@ -61,6 +61,17 @@ too, so a site's folder stays true to the pool it is built from:
   ``intersphinx_disabled_reftypes: []``, maps no consumer series (``dp``)
   in ``intersphinx_mapping``, and, unless it is a consumer, maps itself, to
   the address in its ``site.yml``.
+* ``ref-target``    — a ``{ref}`` link that leaves its site has one target:
+  a label the site's pages do not define is defined by the pages of at most
+  one of the pool's sites in the site's ``intersphinx_mapping``
+  (QuantEcon/project-monorepo#22). Intersphinx merges the mapped sites'
+  inventories in sorted name order, the last one winning, so a label that two
+  mapped sites define sends the link to whichever name sorts last, whatever
+  the lecture meant. A prefixed link (``{ref}`intermediate:lln_mr```) names
+  its site and is not counted; a mapped site outside the pool (a retired
+  site) is not read. Labels are targets (``(name)=``, ``:name:``) and a
+  directive's ``:label:`` (a proof's or an exercise's), compared without
+  case, as Sphinx does.
 * ``site-yml``      — ``site.yml`` has the fields the build reads, each with
   a valid value (``SITE_FIELDS``), and no other field but the optional ones
   (``SITE_OPTIONAL_FIELDS``: ``extra_packages``, pip requirements the build
@@ -153,6 +164,8 @@ HEURISTIC_KINDS = ("link", "code-str")
 # ``{doc}`<x>``` as the target ``<x>``.
 DOC_RE = re.compile(r"\{doc\}(`+)(.+?)\1(?!`)", re.S)
 DOC_TITLED_RE = re.compile(r"^.*\S.*<([^<>]+)>\s*$", re.S)
+# A {ref} link, its target written alone or after link text, as a {doc}'s.
+REF_RE = re.compile(r"\{ref\}(`+)(.+?)\1(?!`)", re.S)
 # Prefixes lectures use for links to another site that are not series keys:
 # older names for a series' site. Recorded, not endorsed: the cross-reference
 # policy (QuantEcon/project-monorepo#22) decides what a link that leaves the
@@ -712,6 +725,73 @@ def check_sites(sites: Path, pool: Path, lectures, series_keys, consumers):
     return keys, problems
 
 
+def site_texts(sites: Path, pool: Path, key: str, files):
+    """``{where: prose}`` for each page a site's ``_toc.yml`` lists, read from the
+    site's folder or the pool; a page that is in neither is the ``site-toc``
+    rule's, and left out."""
+    texts = {}
+    for name in dict.fromkeys(files):
+        for where, path in ((f"sites/{key}/{name}.md", sites / key / f"{name}.md"), (f"lectures/{name}.md", pool / f"{name}.md")):
+            if path.is_file():
+                texts[where] = prose(path.read_text(encoding="utf-8"))
+                break
+    return texts
+
+
+def defined_labels(text: str):
+    """The labels a page defines that a ``{ref}`` reaches, lower-cased."""
+    labels = set()
+    for pattern in (*TARGET_RES, EQUATION_RES[0]):
+        labels |= {m.group(1).lower() for m in pattern.finditer(text)}
+    return labels
+
+
+def check_ref_targets(sites: Path, pool: Path):
+    """Every ``{ref}`` link that leaves its site for a label two or more of the
+    pool's mapped sites define (``ref-target``), as ``(tag, message)``."""
+    import yaml
+
+    texts, labels, mappings = {}, {}, {}
+    if not sites.is_dir():
+        return []
+    for entry in sorted(p for p in sites.iterdir() if p.is_dir() and not p.name.startswith(".")):
+        key = entry.name
+        try:
+            toc = yaml.safe_load((entry / "_toc.yml").read_text(encoding="utf-8"))
+            config = yaml.safe_load((entry / "_config.yml").read_text(encoding="utf-8"))
+            mapping = config["sphinx"]["config"].get("intersphinx_mapping") or {}
+        except (OSError, yaml.YAMLError, KeyError, TypeError, AttributeError):
+            continue  # the site rules report a folder they cannot read
+        if not isinstance(mapping, dict):
+            continue
+        texts[key] = site_texts(sites, pool, key, toc_entries(toc)[0])
+        labels[key] = set().union(*map(defined_labels, texts[key].values()))
+        mappings[key] = [k for k in mapping if isinstance(k, str)]
+    problems, seen = [], set()
+    for key, pages in texts.items():
+        for where, text in pages.items():
+            for m in REF_RE.finditer(text):
+                titled = DOC_TITLED_RE.match(m.group(2))
+                target = (titled.group(1) if titled else m.group(2)).strip()
+                prefix, sep, _ = target.partition(":")
+                if sep and prefix in mappings[key]:
+                    continue  # it names its site
+                label = target.lower()
+                if label in labels[key] or (key, where, label) in seen:
+                    continue
+                on = sorted(k for k in mappings[key] if k != key and label in labels.get(k, ()))
+                if len(on) > 1:
+                    seen.add((key, where, label))
+                    problems.append((
+                        "ref-target",
+                        f"sites/{key}: {where} links to {{ref}}`{label}`, which no page of the site defines and "
+                        f"{len(on)} of the sites it maps do ({', '.join(on)}): intersphinx takes the name that sorts "
+                        f"last, `{on[-1]}`, whichever the lecture meant; name the site with a prefix "
+                        f"({{ref}}`<site>:{label}`) or rename one of the labels",
+                    ))
+    return problems
+
+
 def code_cells(text: str):
     """``(line number, lines, tags)`` for each of a lecture's code cells: the
     top-level ``{code-cell}`` blocks MyST-NB makes notebook cells of. A code
@@ -1064,6 +1144,7 @@ def main(argv=None):
         problems += check_doc_targets(POOL_DIR, lectures, promote.SITE_PAGES, series_keys, held)
         sites, site_problems = check_sites(SITES_DIR, POOL_DIR, lectures, series_keys, consumers)
         problems += site_problems
+        problems += check_ref_targets(SITES_DIR, POOL_DIR)
         environment_problems, environment, replacing = check_environment(ENVIRONMENT_PATH, POOL_DIR, lectures)
         problems += environment_problems
         labels = shared_labels(POOL_DIR, lectures)
