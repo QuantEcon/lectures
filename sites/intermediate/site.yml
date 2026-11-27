@@ -9,3 +9,9 @@ cell_timeout: 2400
 publishes: [html, pdf, notebooks]
 # html.baseurl in _config.yml
 url: https://python.quantecon.org/
+# the one environment every site is to build with (QuantEcon/project-monorepo#77),
+# on the GPU leg: _base/environment.yml created on the RunsOn machine,
+# _base/environment-update.yml applied and jax[cuda13] added (the owner's
+# choice of 2026-11-22); intermediate is the second GPU site brought into it,
+# after programming, by the owner's order of 2026-11-22
+environment: base
