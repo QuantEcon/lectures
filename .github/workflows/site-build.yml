@@ -93,16 +93,17 @@ name: site-build
 #      executed or taken from the cache, with status, seconds, kernel and
 #      which of the two; it runs after a failed build too;
 #   8. for a site whose site.yml publishes notebooks, builds them with the
-#      jupyter builder, strict, from the cache step 6 filled, and copies
-#      them into _build/html/_notebooks/, which was made before step 6 so
+#      jupyter builder, strict, reusing step 6's Sphinx environment (it
+#      re-reads no page, so executes none), and copies them into
+#      _build/html/_notebooks/, which was made before step 6 so
 #      the theme shows each page's "Download Notebook" button (the series
 #      build the notebooks first; the order here keeps the HTML build the
 #      one that executes, which step 7 counts);
 #   9. for a site whose site.yml publishes a pdf, installs ImageMagick and
-#      builds it the same way, with the pdflatex builder, strict, from the
-#      same cache, and copies it into _build/html/_pdf/, also made before
-#      step 6, so the theme shows the "Book (PDF)" link; then checks the PDF
-#      the pages link to is there;
+#      builds it the same way, with the pdflatex builder, strict, reusing the
+#      same environment, and copies it into _build/html/_pdf/, also made
+#      before step 6, so the theme shows the "Book (PDF)" link; then checks
+#      the PDF the pages link to is there;
 #   10. keeps the HTML (html-<key>, green builds only, 7 days) and the report
 #      with the environment record (execution-status-<key>) as artefacts. A
 #      failed build also uploads build-lectures' failure reports
@@ -110,7 +111,11 @@ name: site-build
 #      _build/html/reports. It does not hold the site's execution cache,
 #      which build-lectures looks for at _build/.jupyter_cache, not at the
 #      site's path;
-#   11. saves the execution cache (below), and unstages the site.
+#   11. saves the execution cache (below) when the HTML build succeeded, even
+#      if a later step failed: the cache is the HTML build's alone, so a
+#      failed notebooks or PDF build (a LaTeX error, an apt mirror down while
+#      ImageMagick installs) does not throw a cold build's execution away;
+#      and unstages the site.
 #
 # THE EXECUTION CACHE is actions/cache, one per site, at the path every
 # site's _config.yml names, _build/jupyter_cache/<key> (pool-check rule 7).
@@ -516,7 +521,8 @@ jobs:
           if-no-files-found: warn
 
       # After the execution report, which reads the environment this build
-      # rewrites. Every page comes from the cache the HTML build just filled.
+      # rewrites. It reuses the HTML build's Sphinx environment ("0 added, 0
+      # changed, 0 removed"), so it re-reads and executes no page.
       - name: Build the site's notebooks (strict)
         id: notebooks
         if: ${{ contains(matrix.site.publishes, 'notebooks') }}
@@ -546,8 +552,9 @@ jobs:
           fi
           echo "$n notebooks copied into _build/html/_notebooks/"
 
-      # The PDF, as the series build theirs (pdflatex builder, -n -W), from
-      # the cache the HTML build filled, so it executes nothing. LaTeX comes
+      # The PDF, as the series build theirs (pdflatex builder, -n -W), reusing
+      # the HTML build's Sphinx environment, so it re-reads and executes no
+      # page. LaTeX comes
       # with the full image and with the GPU machine image, as the GPU
       # series' own PDF builds use it.
       # Jupyter Book's PDF build turns on sphinx.ext.imgconverter, which runs
@@ -564,7 +571,7 @@ jobs:
           if ! command -v convert >/dev/null; then
             sudo=""
             if [ "$(id -u)" -ne 0 ]; then sudo=sudo; fi
-            $sudo apt-get update
+            $sudo apt-get -o DPkg::Lock::Timeout=600 update
             $sudo apt-get -o DPkg::Lock::Timeout=600 install -y imagemagick
           fi
           convert -version | sed -n 1p
@@ -582,7 +589,10 @@ jobs:
 
       # As the series copy theirs (cp _build/latex/*.pdf _build/html/_pdf).
       # The theme links each page to /_pdf/<latex targetname>.pdf, so every
-      # such link the pages carry is checked against the files copied.
+      # such link the pages carry is checked against the files copied. The
+      # link is from the domain's root: right for the five PDF sites, which
+      # are served at their domain's root, but a PDF site served under a path
+      # (as dp is, which publishes none) would pass this check and 404.
       - name: Copy the PDF into the site
         if: ${{ steps.pdf.outcome == 'success' }}
         run: |
@@ -593,7 +603,7 @@ jobs:
             exit 1
           fi
           cp "${pdfs[@]}" _build/html/_pdf/
-          links=$(grep -rhoE 'href="/_pdf/[^"]+\.pdf"' --include='*.html' _build/html | sed -e 's#^href="/##' -e 's#"$##' | sort -u)
+          links=$({ grep -rhoE 'href="/_pdf/[^"]+\.pdf"' --include='*.html' _build/html || true; } | sed -e 's#^href="/##' -e 's#"$##' | sort -u)
           if [ -z "$links" ]; then
             echo "::error::no page links to a PDF under /_pdf/, so the theme did not see _build/html/_pdf/"
             exit 1
@@ -614,7 +624,7 @@ jobs:
           retention-days: 7
 
       - name: Save the execution cache
-        if: success() && github.ref == 'refs/heads/main' && steps.report.outputs.executed != '0'
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && github.ref == 'refs/heads/main' && steps.report.outputs.executed != '0' }}
         uses: actions/cache/save@v4
         with:
           path: ${{ steps.site.outputs.cache-path }}
