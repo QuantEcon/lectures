@@ -68,7 +68,8 @@ Usage
 Exit status: 0 done, 1 refused (no such site, a destination exists, or a
 site is staged already, or another site is, or ``--local-links`` for a site
 that is not a consumer, or with a lecture's original left under
-``_build/stage-site-originals/``), 2 an error (among them a record naming a
+``_build/stage-site-originals/`` that differs from the lecture now, or with
+that folder a link or a file), 2 an error (among them a record naming a
 path outside the folder it belongs in, which ``--clean`` refuses before it
 touches anything). It never commits anything.
 """
@@ -312,7 +313,10 @@ def read_record():
 
 
 def inside(rel: str, folder: Path) -> Path:
-    """``ROOT / rel``, refused unless it lies inside ``folder``."""
+    """``ROOT / rel``, refused unless it lies inside ``folder``, which must not
+    itself be a link (its target would be what it confines to)."""
+    if folder.is_symlink():
+        raise ValueError(f"{shown(folder)} is a link, so what {shown(RECORD_PATH)} names cannot be confined to it")
     path = (ROOT / rel).resolve()
     if folder.resolve() not in path.parents:
         raise ValueError(f"{shown(RECORD_PATH)} names {rel}, which is not inside {shown(folder)}/")
@@ -348,12 +352,24 @@ def stage(key: str, site: Path, local_links: bool = False) -> int:
         if refusal:
             print(f"stage-site {key}: refused, nothing copied: {refusal}")
             return 1
-        left = [ORIGINALS_DIR / path.name for path, _, _ in plan if (ORIGINALS_DIR / path.name).exists()]
+        if plan and (ORIGINALS_DIR.is_symlink() or (ORIGINALS_DIR.exists() and not ORIGINALS_DIR.is_dir())):
+            print(f"stage-site {key}: refused, nothing copied: {shown(ORIGINALS_DIR)} is not a folder of its own "
+                  "(a link, or a file), so the originals could not be kept there; remove it first.")
+            return 1
+        # An original left by an earlier --clean, which kept the lecture, is
+        # replaced only when it is a plain file holding what the pool lecture
+        # holds now, so nothing is lost; anything else there refuses.
+        left = []
+        for path, _, _ in plan:
+            kept = ORIGINALS_DIR / path.name
+            if kept.is_symlink() or (kept.exists() and not (kept.is_file() and kept.read_bytes() == path.read_bytes())):
+                left.append(kept)
         if left:
             for p in left:
                 print(f"  [exists] {shown(p)}")
             print(f"stage-site {key}: refused, nothing copied: a lecture's original is left from an earlier --clean, "
-                  "which kept the lecture; put it back or remove it first.")
+                  "which kept the lecture, and it is not a plain file holding the lecture in the pool now; put it "
+                  "back or remove it first.")
             return 1
     dirs = []
     for _, dst in pairs:

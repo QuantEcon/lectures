@@ -111,11 +111,12 @@ name: site-build
 #      _build/html/reports. It does not hold the site's execution cache,
 #      which build-lectures looks for at _build/.jupyter_cache, not at the
 #      site's path;
-#   11. saves the execution cache (below) when the HTML build succeeded, even
-#      if a later step failed: the cache is the HTML build's alone, so a
-#      failed notebooks or PDF build (a LaTeX error, an apt mirror down while
-#      ImageMagick installs) does not throw a cold build's execution away;
-#      and unstages the site.
+#   11. saves the execution cache (below) when the HTML build and the
+#      report (which counts what it executed) succeeded, even if a later step
+#      failed or the job was cancelled or timed out: the cache is the HTML
+#      build's alone, so a failed notebooks or PDF build (a LaTeX error, an
+#      apt mirror down while ImageMagick installs) does not throw a cold
+#      build's execution away; and unstages the site.
 #
 # THE EXECUTION CACHE is actions/cache, one per site, at the path every
 # site's _config.yml names, _build/jupyter_cache/<key> (pool-check rule 7).
@@ -151,14 +152,16 @@ name: site-build
 #   executed again only when its own code changes (jupyter-cache matches a
 #   page by its code cells) or the key does.
 # Pull requests only restore. A save happens on main alone (a push, a manual
-# run or the schedule), after a green build that executed at least one page;
-# a build that took every page from the cache has nothing new to save.
+# run or the schedule), after an HTML build that succeeded and executed at
+# least one page, and its execution report, whatever a later step did (step
+# 11); a build that took every page from the cache has nothing new to save.
 #
 # COLD BUILDS: until a run on main has saved a cache under the current key,
 # every build of a site executes every page (dp: about 50 pages, 20 to 40
 # minutes on ubuntu-latest). So every pull request before this workflow's
-# first green run on main builds cold, every time it runs, and so does every
-# build after the key changes, until main saves again.
+# first run on main whose HTML build and report succeed builds cold, every
+# time it runs, and so does every build after the key changes, until main
+# saves again.
 #
 # SHOWING THE CACHE RESTORE (QuantEcon/project-monorepo#25 asks for it):
 # a pull request never saves, so its own runs cannot show one. It is shown
@@ -554,9 +557,8 @@ jobs:
 
       # The PDF, as the series build theirs (pdflatex builder, -n -W), reusing
       # the HTML build's Sphinx environment, so it re-reads and executes no
-      # page. LaTeX comes
-      # with the full image and with the GPU machine image, as the GPU
-      # series' own PDF builds use it.
+      # page. LaTeX comes with the full image and with the GPU machine image,
+      # as the GPU series' own PDF builds use it.
       # Jupyter Book's PDF build turns on sphinx.ext.imgconverter, which runs
       # ImageMagick's `convert` on an image LaTeX can't take, an SVG or a GIF:
       # today the remote SVG logo that MyST's html_image makes an image of on
@@ -603,7 +605,8 @@ jobs:
             exit 1
           fi
           cp "${pdfs[@]}" _build/html/_pdf/
-          links=$({ grep -rhoE 'href="/_pdf/[^"]+\.pdf"' --include='*.html' _build/html || true; } | sed -e 's#^href="/##' -e 's#"$##' | sort -u)
+          # grep finding nothing (1) is checked below; a real error (2) fails here.
+          links=$({ grep -rhoE 'href="/_pdf/[^"]+\.pdf"' --include='*.html' _build/html || [ $? -eq 1 ]; } | sed -e 's#^href="/##' -e 's#"$##' | sort -u)
           if [ -z "$links" ]; then
             echo "::error::no page links to a PDF under /_pdf/, so the theme did not see _build/html/_pdf/"
             exit 1
@@ -624,7 +627,7 @@ jobs:
           retention-days: 7
 
       - name: Save the execution cache
-        if: ${{ !cancelled() && steps.build.outcome == 'success' && github.ref == 'refs/heads/main' && steps.report.outputs.executed != '0' }}
+        if: ${{ always() && steps.build.outcome == 'success' && steps.report.outcome == 'success' && github.ref == 'refs/heads/main' && steps.report.outputs.executed != '0' }}
         uses: actions/cache/save@v4
         with:
           path: ${{ steps.site.outputs.cache-path }}

@@ -454,13 +454,24 @@ def test_stage_site_local_links_is_for_a_consumer_and_leaves_a_lecture_edited_af
     assert ("kept lectures/linking.md: its bytes are not the ones staging wrote; its original is left at "
             "_build/stage-site-originals/linking.md") in res.stdout
     assert repo.pool("linking.md").read_text() == "edited after staging\n"
-    # Staging the lecture again would replace that original, so it refuses.
-    write(repo.pool("linking.md"), lecture_text("Linking", LINKING))
+    # Staging the lecture again would replace that original, which holds what
+    # the pool's lecture no longer does, so it refuses.
+    write(repo.pool("linking.md"), "edited after staging, with a link to [it](https://python.quantecon.org/carried.html)\n")
     res = repo.stage_site("--local-links", "dp")
     assert res.returncode == 1
     assert "  [exists] _build/stage-site-originals/linking.md" in res.stdout
-    assert "refused, nothing copied: a lecture's original is left from an earlier --clean" in res.stdout
+    assert ("refused, nothing copied: a lecture's original is left from an earlier --clean, which kept the lecture, "
+            "and it is not a plain file holding the lecture in the pool now") in res.stdout
     assert not (repo.root / "_build" / "stage-site.json").exists()
+    # Once the lecture is put back as it was, the original left holds nothing
+    # the pool lacks, and staging goes ahead.
+    original = lecture_text("Linking", LINKING).encode()
+    write(repo.pool("linking.md"), original)
+    assert repo.stage_site("--local-links", "dp").returncode == 0
+    res = repo.stage_site("--clean", "dp")
+    assert res.returncode == 0 and "1 lecture(s) put back" in res.stdout
+    assert repo.pool("linking.md").read_bytes() == original
+    assert not (repo.root / "_build" / "stage-site-originals").exists()
 
 
 def stage_site_module():
@@ -631,6 +642,77 @@ def test_stage_site_clean_never_writes_through_a_link_left_in_a_lectures_place(m
     assert res.returncode == 0, res.stdout
     assert "kept lectures/linking.md as it is: it is no longer a plain file" in res.stdout
     assert (repo.root / "_build/stage-site-originals/linking.md").is_file()
+
+
+def test_stage_site_refuses_a_link_left_where_an_original_goes(make_repo):
+    repo = links_repo(make_repo)
+    target = repo.root / "notes" / "would-be-written.md"
+    originals = repo.root / "_build" / "stage-site-originals"
+    originals.mkdir(parents=True)
+    (originals / "linking.md").symlink_to(target)  # dangling: .exists() is False
+    before = staged(repo)
+
+    res = repo.stage_site("--local-links", "dp")
+
+    assert res.returncode == 1, res.stdout
+    assert "  [exists] _build/stage-site-originals/linking.md" in res.stdout
+    assert not target.exists()
+    assert staged(repo) == before
+
+
+def test_stage_site_refuses_a_folder_left_where_an_original_goes(make_repo):
+    repo = links_repo(make_repo)
+    (repo.root / "_build" / "stage-site-originals" / "linking.md").mkdir(parents=True)
+    before = staged(repo)
+
+    res = repo.stage_site("--local-links", "dp")
+
+    assert res.returncode == 1, res.stdout + res.stderr
+    assert "  [exists] _build/stage-site-originals/linking.md" in res.stdout
+    assert "and it is not a plain file holding the lecture in the pool now" in res.stdout
+    assert staged(repo) == before
+
+
+def test_stage_site_refuses_an_originals_folder_that_is_a_file(make_repo):
+    repo = links_repo(make_repo)
+    write(repo.root / "_build" / "stage-site-originals", "a file where the folder goes\n")
+    before = staged(repo)
+
+    res = repo.stage_site("--local-links", "dp")
+
+    assert res.returncode == 1, res.stdout + res.stderr
+    assert "_build/stage-site-originals is not a folder of its own (a link, or a file)" in res.stdout
+    assert staged(repo) == before
+    assert not (repo.root / "_build" / "stage-site.json").exists()
+
+
+def test_stage_site_refuses_an_originals_folder_that_is_a_link(make_repo):
+    repo = links_repo(make_repo)
+    elsewhere = repo.root / "notes" / "elsewhere"
+    elsewhere.mkdir(parents=True)
+    (repo.root / "_build").mkdir()
+    (repo.root / "_build" / "stage-site-originals").symlink_to(elsewhere)
+    before = staged(repo)
+
+    res = repo.stage_site("--local-links", "dp")
+
+    assert res.returncode == 1, res.stdout
+    assert "_build/stage-site-originals is not a folder of its own (a link, or a file)" in res.stdout
+    assert staged(repo) == before and not any(elsewhere.iterdir())
+
+    # A link put there after staging: --clean refuses before it touches anything.
+    (repo.root / "_build" / "stage-site-originals").unlink()
+    assert repo.stage_site("--local-links", "dp").returncode == 0
+    originals = repo.root / "_build" / "stage-site-originals"
+    originals.rename(elsewhere / "kept")
+    originals.symlink_to(elsewhere / "kept")
+    rewritten = staged(repo)
+
+    res = repo.stage_site("--clean", "dp")
+
+    assert res.returncode == 2
+    assert "_build/stage-site-originals is a link, so what _build/stage-site.json names cannot be confined to it" in res.stderr
+    assert staged(repo) == rewritten
 
 
 def test_site_yml_local_links_is_true_or_false_and_only_a_consumers(make_repo):
