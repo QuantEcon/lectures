@@ -4,6 +4,7 @@ drift-check's ``site-stale`` (QuantEcon/project-monorepo#21)."""
 import importlib.machinery
 import importlib.util
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -523,6 +524,99 @@ def test_rewrite_links_reads_prose_alone(text, expected, n):
     tool = stage_site_module()
 
     assert tool.rewrite_links(text, {"carried"}, {"intermediate"}, HOSTS) == (text if expected is None else expected, n)
+
+
+# Each case's count is markdown-it's (CommonMark with MyST's block plugin):
+# how many of its links to carried.html it renders as links (2026-11-27,
+# from the reviews of QuantEcon/lectures#108). The rewrite must make exactly
+# those, and leave the rest, inside a literal, as they are.
+@pytest.mark.parametrize("text, n", [
+    (f'- a `stray\n    2. b {ADDRESS} and `x`', 0),
+    (f'1. a `stray\n   14. b {ADDRESS} and `x`', 0),
+    (f'- a\n\n# H\nText `stray\n2024. Then {ADDRESS} and `x`', 0),
+    (f'- a\n# H\nText `stray\n2024. Then {ADDRESS} and `x`', 0),
+    (f'- a\n\nText `stray\n2024. Then {ADDRESS} and `x`', 0),
+    (f'A `stray\n2024. Then {ADDRESS} and `x`', 0),
+    (f'- a `stray\n    - nested {ADDRESS} and `x`', 1),
+    (f'A `stray\n    - not an item {ADDRESS} and `x`', 0),
+    (f'1. a\n\n   more `stray\n2. {ADDRESS} and `x`', 1),
+    (f'1. a `stray\n   still the item `\n2. {ADDRESS}', 1),
+    (f'- a `stray\n- {ADDRESS} and `x`', 1),
+    (f'- a `literal\n  {ADDRESS}` here', 0),
+    (f'Before `a literal that\n{ADDRESS}` crosses a line.', 0),
+    (f'`x`\n{ADDRESS}', 1),
+    (f'`unclosed\n\n{ADDRESS}`', 1),
+    (f'# A `heading\n{ADDRESS}`', 1),
+    (f'A `stray\n(here)=\n{ADDRESS} and `x`', 1),
+    (f'1. a\n   1. b `stray\n2. {ADDRESS} and `x`', 1),
+    (f'- a\n  - b `stray\n- {ADDRESS} and `x`', 1),
+    (f'2. a `stray\n3. {ADDRESS} and `x`', 1),
+    (f'1. a `stray\n   2. b {ADDRESS} and `x`', 0),
+    (f'Text `stray\n2. b {ADDRESS} and `x`', 0),
+    (f'Text `stray\n1) b {ADDRESS} and `x`', 1),
+    (f'Text `stray\n2) b {ADDRESS} and `x`', 0),
+    (f'1. a `stray\n2) b {ADDRESS} and `x`', 1),
+    (f'1. a `stray\n   2) b {ADDRESS} and `x`', 0),
+    (f'1. a `stray\n   1) b {ADDRESS} and `x`', 1),
+    (f'- a `stray\n* b {ADDRESS} and `x`', 1),
+    (f'- a `stray\n  + b {ADDRESS} and `x`', 1),
+    (f'* a `stray\n - b {ADDRESS} and `x`', 1),
+    (f'- a `stray\nlazy {ADDRESS} and `x`', 0),
+    (f'- a `stray\nlazy\n2. b {ADDRESS} and `x`', 1),
+    (f'- a\n\n      code `stray\n- b {ADDRESS} and `x`', 1),
+    (f'- a `stray\n      2. b {ADDRESS} and `x`', 0),
+    (f'- a `stray\n      1. b {ADDRESS} and `x`', 0),
+    (f'- a `stray\n      - b {ADDRESS} and `x`', 0),
+    (f'1. a `stray\n\n2. b {ADDRESS} and `x`', 1),
+    (f'1. a\n\n   b `stray\n   2. c {ADDRESS} and `x`', 0),
+    (f'1. a\n   1. b\n      1. c `stray\n      2. d {ADDRESS} and `x`', 1),
+    (f'1. a\n   1. b\n      1. c `stray\n   2. d {ADDRESS} and `x`', 1),
+    (f'1. a\n   1. b\n      1. c `stray\n         2. d {ADDRESS} and `x`', 0),
+    (f'1. a\n   1. b\n      1. c `stray\n        2. d {ADDRESS} and `x`', 1),
+    (f'1. a\n   ```python\n   x = `1\n   ```\n   2. b {ADDRESS} and `x`', 1),
+    (f'1. a\n   ```python\n   x = 1\n   ```\n   c `stray\n   2. b {ADDRESS} and `x`', 0),
+    (f'1. a `stray\n 2. b {ADDRESS} and `x`', 1),
+    (f'1. a `stray\n  2. b {ADDRESS} and `x`', 1),
+    (f'- a `stray\n 2. b {ADDRESS} and `x`', 1),
+    (f'10. a `stray\n   2. b {ADDRESS} and `x`', 1),
+    (f'1.   a `stray\n   2. b {ADDRESS} and `x`', 1),
+    (f'1. a\n   - b\n\n   para `stray\n   2. c {ADDRESS} and `x`', 0),
+    (f'1. a\n   - b `stray\n   2. c {ADDRESS} and `x`', 1),
+    (f'- a\n  # H\ntext `stray\n2. b {ADDRESS} and `x`', 0),
+    (f'- a\n\n  Text `stray\n2. b {ADDRESS} and `x`', 1),
+    (f'- a\n***\nText `stray\n2. b {ADDRESS} and `x`', 0),
+    (f'- a\n(t)=\nText `stray\n2. b {ADDRESS} and `x`', 0),
+    (f'- a\n% c\nText `stray\n2. b {ADDRESS} and `x`', 0),
+    (f'- a\n+++\nText `stray\n2. b {ADDRESS} and `x`', 0),
+    (f'1. a\n\n  Text `stray\n  2. b {ADDRESS} and `x`', 0),
+    (f'1. a\n   - b `stray\n2. c {ADDRESS} and `x`', 1),
+    (f'Text `stray\n- \n{ADDRESS} and `x`', 1),
+    (f'Text `stray\n    1. b {ADDRESS} and `x`', 0),
+    (f'> - a `stray\n>   2. b {ADDRESS} and `x`', 0),
+    # A table's cells, a list item's next line, a blockquote, and a directive
+    # inside a list.
+    (f"| a | b |\n|---|---|\n| {ADDRESS} | {ADDRESS} |", 2),
+    (f"- a list item with a link\n  that runs {ADDRESS} on", 1),
+    (f"> quoted {ADDRESS}\n> more", 1),
+    (f"1. a\n   ```{{tip}}\n   {ADDRESS}\n   ```", 1),
+])
+def test_rewrite_links_makes_the_links_markdown_it_makes(text, n):
+    tool = stage_site_module()
+
+    new, count = tool.rewrite_links(text, {"carried"}, set(), HOSTS)
+
+    assert count == n
+    assert new.count("[it](carried.md)") == n
+    assert new.count(ADDRESS) == text.count(ADDRESS) - n
+
+
+def test_rewrite_links_needs_myst_parser_and_says_so(monkeypatch):
+    tool = stage_site_module()
+    for name in ("myst_parser", "myst_parser.config.main", "myst_parser.parsers.mdit"):
+        monkeypatch.setitem(sys.modules, name, None)  # as if not installed, though imported before
+
+    with pytest.raises(ValueError, match="reads pages with MyST's parser"):
+        tool.rewrite_links(ADDRESS, {"carried"}, set(), HOSTS)
 
 
 def test_stage_site_local_links_reads_a_nested_toc_and_the_sites_own_address_and_leaves_its_own_pages(make_repo):

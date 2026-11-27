@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.9"
-# dependencies = ["pyyaml"]
+# dependencies = ["pyyaml", "myst-parser>=3,<5", "linkify-it-py"]
 # ///
 """tools/stage-site — copy one site's own pages and files into the pool folder.
 
@@ -37,9 +37,13 @@ With ``--local-links``, for a consumer site alone (``class: consumer`` in
 also rewrites, in the pool lectures the site lists, each link that leaves the
 site for a lecture the site carries into a link within the site. A consumer's
 copies stay byte for byte its sources' own, so a link they make to their home
-series' site would take the reader away from a page the consumer has. Two
-forms, read in prose only (not in code cells, literal blocks, inline literals
-or ``%`` comments):
+series' site would take the reader away from a page the consumer has. A
+page is read as MyST reads it, with MyST's own parser (myst-parser's
+markdown-it, with the extensions the site's ``_config.yml`` enables), and a
+link counts only where that parser makes one: in prose, not in a code cell, a
+literal block, an inline literal, a ``%`` comment, raw HTML or maths. A
+directive's body is read the same way, but for a directive whose body is code
+or literal text (``LITERAL_DIRECTIVES``). Two forms:
 
 * a prefixed ``{doc}`` link (``{doc}`intermediate:perm_income_cons``` or
   ``{doc}`text <intro:short_path>```), whose prefix is a key of the site's
@@ -98,23 +102,11 @@ KEY_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]*")
 # --local-links. Addresses a lecture site had before, which still forward to
 # its current one: python-intro.quantecon.org was intermediate's.
 OLD_ADDRESSES = ("https://python-intro.quantecon.org/",)
-# A fence, as tools/pool-check reads one, and the fenced blocks whose body is
-# code or literal text, not prose.
-FENCE_RE = re.compile(r"^[ \t]*(`{3,}|~{3,})(.*)$")
-CODE_DIRECTIVES = ("{code-cell}", "{code-block}", "{code}", "{sourcecode}", "{literalinclude}")
-# In a paragraph: a role's text ({doc}`...`), kept, or an inline literal,
-# masked, each from a whole run of backticks to a run of the same length.
-# Either may run across a line break.
-BACKTICKS_RE = re.compile(r"(\{[\w:+-]+\})?(?<!`)(`+)(?!`)(.*?)(?<!`)\2(?!`)", re.DOTALL)
-# A line that starts a block of its own, so ends the paragraph before it: a
-# list item, which its next lines continue, or a line that is a block by
-# itself and ends the paragraph after it too: a heading, a target
-# ((name)=), a cell break (+++), a $$ line, a ::: fence, or a thematic break
-# or setext underline.
-BLOCK_START_RE = re.compile(
-    r"^ {0,3}(?:(?P<item>[-+*]\s|\d{1,9}[.)]\s)|#{1,6}(?:\s|$)|\([^()\s]+\)=\s*$|\+\+\+|\$\$|:{3,}"
-    r"|([-*_=])[ \t]*(?:\2[ \t]*){2,}$)"
-)
+# Directives whose body is code or literal text, not prose, so not read.
+LITERAL_DIRECTIVES = ("code-cell", "code-block", "code", "sourcecode", "literalinclude", "math", "raw")
+# The extensions MyST enables when a site's _config.yml names none.
+DEFAULT_EXTENSIONS = ("amsmath", "colon_fence", "deflist", "dollarmath", "html_admonition", "html_image", "linkify",
+                      "replacements", "smartquotes", "substitution")
 DOC_LINK_RE = re.compile(r"\{doc\}`(?P<text>[^`<>]*<)?(?P<prefix>[\w.-]+):(?P<name>[\w-]+)(?P<close>>?)`")
 
 
@@ -145,92 +137,128 @@ def staged_files(site: Path):
     return pairs
 
 
-def prose_mask(text: str) -> str:
-    """``text`` with what is not prose blanked to spaces, its length and line
-    breaks kept, so a match in it is at the same place in ``text``: the bodies
-    of code cells and literal fenced blocks (backtick or tilde, plain or with a
-    language), ``%`` comment lines and inline literals. A directive's own body
-    (``{note}``) is prose, read again for the blocks inside it. An inline
-    literal is read a paragraph at a time: it may run across a line break, but
-    not across a blank line, a fenced block or a line ``BLOCK_START_RE``
-    matches (a list item, a heading, a target and the like). That is near
-    CommonMark's reading, not the same: lines it would part (a blockquote's
-    start, table rows, HTML, a list item nested four spaces deep) are read
-    together, and a line such as ``2024. Then`` is parted, so a stray
-    backtick can pair with the wrong one, masking a link or leaving one inside
-    a literal to be rewritten. No pool lecture has a literal that holds a
-    link, as markdown-it reads them (2026-11-27).
+class Reader:
+    """MyST's markdown-it parser, with ``extensions``, which records where each
+    markdown link and each role it parses starts and ends in the text it reads."""
 
-    It reads fences as tools/pool-check's ``prose()`` does, so the two tools
-    agree on what is prose; like it, it reads a ``{math}`` body, a block
-    indented four spaces and a ``:::`` fence's body as prose. No pool lecture
-    has a link in one of those (2026-11-27)."""
-    lines = text.split("\n")
-    blank = lambda line: " " * len(line)
-    prose_rows = []
+    RULES = ("link", "myst_role")
 
-    def is_closing(line, fence):
-        m = FENCE_RE.match(line)
-        return bool(m) and m.group(1)[0] == fence[0] and len(m.group(1)) >= len(fence) and not m.group(2).strip()
+    def __init__(self, extensions=DEFAULT_EXTENSIONS):
+        try:
+            from markdown_it.renderer import RendererHTML
+            from myst_parser.config.main import MdParserConfig
+            from myst_parser.parsers.mdit import create_md_parser
+        except ImportError:
+            raise ValueError("--local-links reads pages with MyST's parser (myst-parser), which this Python does not "
+                             "have") from None
+        self.md = create_md_parser(MdParserConfig(enable_extensions=set(extensions)), RendererHTML)
+        self.found = []
+        for rule in [r for r in self.md.inline.ruler.__rules__ if r.name in self.RULES]:
+            self.md.inline.ruler.at(rule.name, self._recording(rule.name, rule.fn))
 
-    def read(start, stop):
-        i = start
-        while i < stop:
-            m = FENCE_RE.match(lines[i])
-            if not m or (m.group(1)[0] == "`" and "`" in m.group(2)):
-                if lines[i].lstrip().startswith("%"):
-                    lines[i] = blank(lines[i])
-                else:
-                    prose_rows.append(i)
-                i += 1
-                continue
-            end = next((j for j in range(i + 1, stop) if is_closing(lines[j], m.group(1))), stop)
-            info = m.group(2).strip()
-            lines[i] = blank(lines[i])
-            if not info.startswith("{") or info.startswith(CODE_DIRECTIVES):
-                for j in range(i + 1, end):
-                    lines[j] = blank(lines[j])
-            else:
-                read(i + 1, end)
-            if end < stop:
-                lines[end] = blank(lines[end])
-            i = end + 1
+    def _recording(self, name, fn):
+        def rule(state, silent):
+            start, before = state.pos, len(state.tokens)
+            ok = fn(state, silent)
+            if ok and not silent:
+                self.found.append((name, start, state.pos, state.tokens[before:]))
+            return ok
+        return rule
 
-    read(0, len(lines))
-    def block(line):
-        m = BLOCK_START_RE.match(line)
-        return None if not m else "item" if m.group("item") else "line"
+    def spans(self, text):
+        """``[(kind, source, start, end, place)]`` for each link (``"link"``)
+        and role (``"myst_role"``) MyST's parser makes in ``text``'s prose:
+        ``source[start:end]`` is it as the parser read it (a paragraph, a
+        heading or a table cell, without the prefixes its lines carry, such
+        as a list's indent), and ``place(i)`` the position in ``text`` of
+        ``source[i]``."""
+        lines = text.split("\n")
+        line_start = [0]
+        for line in lines:
+            line_start.append(line_start[-1] + len(line) + 1)
+        out = []
+        self._read(text, [(i, 0) for i in range(len(lines))], lines, line_start, out)
+        return out
 
-    paragraphs = []
-    for i in prose_rows:
-        if not lines[i].strip():
-            continue
-        if paragraphs and paragraphs[-1][-1] == i - 1 and block(lines[i]) is None and block(lines[i - 1]) != "line":
-            paragraphs[-1].append(i)
-        else:
-            paragraphs.append([i])
-    keep_breaks = lambda r: r.group(0) if r.group(1) else re.sub(r"[^\n]", " ", r.group(0))
-    for rows in paragraphs:
-        masked = BACKTICKS_RE.sub(keep_breaks, "\n".join(lines[i] for i in rows)).split("\n")
-        for i, line in zip(rows, masked):
-            lines[i] = line
-    return "\n".join(lines)
+    def _read(self, doc, where, lines, line_start, out):
+        """Read ``doc``, whose line j is ``lines[where[j][0]]`` from column
+        ``where[j][1]`` on."""
+        env, taken = {}, {}  # taken: the column each row is read up to (table cells share a row)
+        for token in self.md.parse(doc, env):
+            if token.type in ("fence", "colon_fence") and token.map:
+                name = token.info.strip()
+                if not (name.startswith("{") and "}" in name) or name[1:name.index("}")] in LITERAL_DIRECTIVES:
+                    continue  # a literal block, or a directive whose body is not prose
+                inner = self._place(token.content.split("\n")[:-1], where[token.map[0] + 1:token.map[1]], lines, taken)
+                if inner is not None:
+                    self._read(token.content, inner, lines, line_start, out)
+            elif token.type == "inline" and token.map:
+                content_lines = token.content.split("\n")
+                placed = self._place(content_lines, where[token.map[0]:token.map[1]], lines, taken)
+                if placed is None:
+                    continue  # a line not found as written: its links are left alone
+                offsets = [0]
+                for cl in content_lines:
+                    offsets.append(offsets[-1] + len(cl) + 1)
+
+                def place(i, placed=placed, offsets=offsets):
+                    k = max(j for j in range(len(placed)) if offsets[j] <= i)
+                    row, col = placed[k]
+                    return line_start[row] + col + (i - offsets[k])
+
+                self.found = []
+                self.md.inline.parse(token.content, self.md, env, [])
+                out.extend((kind, token.content, start, end, place) for kind, start, end, _ in self.found)
+
+    @staticmethod
+    def _place(content_lines, where, lines, taken):
+        """``[(row, col)]``: where each of ``content_lines`` is, as written, in
+        the source line ``where`` names for it, one for one, after what an
+        earlier token took of that line; None if one is not there."""
+        if len(content_lines) > len(where):
+            return None
+        placed = []
+        for cl, (row, col) in zip(content_lines, where):
+            k = lines[row].find(cl, max(col, taken.get(row, 0)))
+            if k < 0:
+                return None
+            placed.append((row, k))
+        for (row, k), cl in zip(placed, content_lines):
+            taken[row] = k + len(cl)
+        return placed
 
 
-def rewrite_links(text: str, carried, prefixes, hosts):
+def reader_for(config):
+    """A Reader with the MyST extensions a site's ``_config.yml`` enables."""
+    extensions = ((config.get("parse") or {}).get("myst_enable_extensions")) or DEFAULT_EXTENSIONS
+    return Reader(tuple(e for e in extensions if isinstance(e, str)))
+
+
+def rewrite_links(text: str, carried, prefixes, hosts, reader=None):
     """``(text, n)``: ``text`` with its prose links to a lecture in ``carried``
-    made links within the site, and how many it rewrote."""
-    masked = prose_mask(text)
-    edits = []
-    for m in DOC_LINK_RE.finditer(masked):
-        if m.group("prefix") in prefixes and m.group("name") in carried and bool(m.group("text")) == bool(m.group("close")):
-            edits.append((m.start("prefix"), m.end("prefix") + 1, ""))
-    url_re = re.compile(r"\]\((?P<base>" + "|".join(re.escape(h) for h in hosts) + r")(?P<name>[\w-]+)\.html\)")
-    for m in url_re.finditer(masked) if hosts else ():
-        if m.group("name") in carried:
-            edits.append((m.start("base"), m.end(), f"{m.group('name')}.md)"))
-    for start, end, new in sorted(edits, reverse=True):
-        text = text[:start] + new + text[end:]
+    made links within the site, and how many it rewrote. An edit is made only
+    where ``text`` holds, at the place found, what the parser read there."""
+    reader = reader or Reader()
+    url_re = re.compile(r"\]\((?P<base>" + "|".join(re.escape(h) for h in hosts) + r")(?P<name>[\w-]+)\.html\)$") if hosts else None
+    edits = {}
+    for kind, source, start, end, place in reader.spans(text):
+        span = source[start:end]
+        if kind == "myst_role":
+            m = DOC_LINK_RE.fullmatch(span)
+            if not (m and m.group("prefix") in prefixes and m.group("name") in carried
+                    and bool(m.group("text")) == bool(m.group("close"))):
+                continue
+            a, b, new = start + m.start("prefix"), start + m.end("prefix") + 1, ""
+        else:
+            m = url_re.search(span) if url_re else None
+            if not (m and m.group("name") in carried):
+                continue
+            a, b, new = start + m.start("base"), start + m.end(), f"{m.group('name')}.md)"
+        at, to = place(a), place(b - 1) + 1
+        if text[at:to] == source[a:b]:
+            edits[(at, to)] = new
+    for (at, to), new in sorted(edits.items(), reverse=True):
+        text = text[:at] + new + text[to:]
     return text, len(edits)
 
 
@@ -268,6 +296,7 @@ def local_link_plan(key: str, site: Path):
     if not (isinstance(entry, dict) and entry.get("class") == "consumer"):
         return None, f"--local-links is for a consumer site, and sync/manifest.yml does not mark {key} `class: consumer`"
     config = yaml.safe_load((site / "_config.yml").read_text(encoding="utf-8")) or {}
+    reader = reader_for(config)
     mapping = ((config.get("sphinx") or {}).get("config") or {}).get("intersphinx_mapping") or {}
     site_yml = yaml.safe_load((site / "site.yml").read_text(encoding="utf-8")) or {}
     prefixes = {k for k in mapping if isinstance(k, str)}
@@ -287,7 +316,7 @@ def local_link_plan(key: str, site: Path):
     for name in sorted(carried):
         path = POOL_DIR / f"{name}.md"
         text = path.read_text(encoding="utf-8")
-        new, n = rewrite_links(text, carried, prefixes, hosts)
+        new, n = rewrite_links(text, carried, prefixes, hosts, reader)
         if n:
             plan.append((path, new, n))
     return plan, None
