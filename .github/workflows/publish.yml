@@ -16,8 +16,10 @@ name: publish
 # person dispatches it. A test double is sent the site as its cutover will
 # publish it, built from the site's own _config.yml, so its pages keep the live
 # site's addresses: their canonical links (html.baseurl), their Download
-# Notebook links (download_nb_path) and their links to the site itself. The
-# rehearsal checks the release, the deploy and the rollback, not those links.
+# Notebook links (download_nb_path), the addresses in the notebooks they offer
+# (tojupyter_urlpath and tojupyter_image_urlpath, for links and images), and,
+# for a site that maps itself, its intersphinx links to itself. The rehearsal
+# checks the release, the deploy and the rollback, not those links.
 #
 # THE TAG is `publish-<YYYY-MM-DD>`, the day in Sydney, as the series' own
 # publish tags are named; a second publish that day takes `b`, then `c` and
