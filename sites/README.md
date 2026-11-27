@@ -177,3 +177,5 @@ A hard-coded address (`https://python.quantecon.org/...`) is outside these rules
 ## Keeping the copies true to the series
 
 A site's files are copies of its series' files, so they follow the series until its cutover. After every sync the drift-check ([`tools/drift-check`](../tools/drift-check)) compares every file in each series' site folder but `site.yml` with the series' `lectures/<path>` at the pin: the pages and the `_static/` files byte for byte, and `_config.yml` and `_toc.yml` with every `# site addition` line removed. Each file that differs, or that the series no longer has, is `site-stale`, a `drift` finding: the nightly run opens an issue for it, with the diff, and closes the issue once the copy matches again. To settle one, copy the series' file at the pin over the site's and put back the lines marked `# site addition`. A change the site must not take is a decision to record here, as a marked addition, not a copy to leave stale.
+
+<!-- A throwaway line, to test QuantEcon/lectures#111 skips the build when no site is reached; never merged. -->
