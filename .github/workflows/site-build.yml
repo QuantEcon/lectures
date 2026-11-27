@@ -11,7 +11,12 @@ name: site-build
 # WHICH SITES: the ones named in SITES below, today every folder in sites/:
 # `dp`, `intro`, `advanced`, `programming`, `intermediate` and `jax`. A site
 # joins SITES when it is brought through, so a pull request is never held up
-# by a site that has not been. The first job reads each named site's
+# by a site that has not been. A pull request or a push to main builds only
+# those its change reaches (tools/affected-sites, from the changed paths: a
+# lecture builds the sites that list it, a site's own file that site, and any
+# other input of the build every site; the owner's choice of 2026-11-27 for
+# main); the schedule and a manual run build them all, and when a change
+# reaches none the build job is skipped. The first job reads each named site's
 # sites/<key>/site.yml (tools/site-matrix) and hands the matrix to the second:
 # the runner class gives runs-on, the environment (below) the container and
 # the file the cache key hashes, the job's time limit is site.yml's
@@ -182,10 +187,10 @@ name: site-build
 # request touches lectures/, so it is built like any other (its run waits for
 # a maintainer's approval, as that workflow notes), and so is its merge.
 #
-# WHAT IT DOES NOT DO (yet): publish; post a preview (QuantEcon/actions#336);
-# build on mystmd (QuantEcon/actions#337); build only the sites whose toc
-# lists a changed file; share one execution cache between the sites of one
-# environment.
+# WHAT IT DOES NOT DO (yet): publish; post a preview (QuantEcon/actions#336).
+# Later, in the second phase, after the cutovers (2026-11-27): build on
+# mystmd (QuantEcon/actions#337), and share one execution cache between the
+# sites of one environment (each site keeps its own until then).
 
 on:
   push:
@@ -197,6 +202,7 @@ on:
       - 'tools/stage-site'
       - 'tools/site-matrix'
       - 'tools/execution-report'
+      - 'tools/affected-sites'
       - 'sync/manifest.yml'
       - 'sync/state.yml'
       - '_base/**'
@@ -210,6 +216,7 @@ on:
       - 'tools/stage-site'
       - 'tools/site-matrix'
       - 'tools/execution-report'
+      - 'tools/affected-sites'
       - 'sync/manifest.yml'
       - 'sync/state.yml'
       - '_base/**'
@@ -248,6 +255,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.matrix.outputs.matrix }}
+      any: ${{ steps.matrix.outputs.any }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -257,18 +265,61 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v6
 
+      # A pull request is compared with its base, a push with the commit
+      # before it; the schedule and a manual run take every site. The base is
+      # fetched alone: a diff of two commits needs their trees, not history.
+      - name: Choose the sites the change reaches
+        id: affected
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          read -ra all <<< "$SITES"
+          case "$EVENT" in
+            pull_request) base=$PR_BASE ;;
+            push) base=$BEFORE ;;
+            *) base="" ;;
+          esac
+          if [ -z "$base" ] || [ "$base" = 0000000000000000000000000000000000000000 ]; then
+            keys="${all[*]}"
+            why="every site ($EVENT)"
+          else
+            git fetch --no-tags --depth=1 origin "$base"
+            changed=$(git diff --name-only "$base" HEAD)
+            keys=$(uv run --script tools/affected-sites --base "$base" "${all[@]}" <<< "$changed")
+            why="the sites the change reaches, from $(wc -l <<< "$changed" | tr -d ' ') changed path(s) against ${base:0:7}"
+          fi
+          echo "keys=$keys" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Sites built"
+            echo ""
+            echo "${keys:-none}: $why."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "${keys:-none}: $why"
+
       - name: Read each site's site.yml
         id: matrix
+        env:
+          KEYS: ${{ steps.affected.outputs.keys }}
         run: |
-          read -ra keys <<< "$SITES"
+          read -ra keys <<< "$KEYS"
+          if [ "${#keys[@]}" -eq 0 ]; then
+            echo "any=false" >> "$GITHUB_OUTPUT"
+            echo "matrix=[]" >> "$GITHUB_OUTPUT"
+            echo "No site is affected, so none is built."
+            exit 0
+          fi
           # The run's ID goes into a GPU site's RunsOn label.
           matrix=$(uv run --script tools/site-matrix --run-id "$GITHUB_RUN_ID" "${keys[@]}")
+          echo "any=true" >> "$GITHUB_OUTPUT"
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
           echo "$matrix"
 
   build:
     name: ${{ matrix.site.key }}
     needs: sites
+    if: ${{ needs.sites.outputs.any == 'true' }}
     strategy:
       fail-fast: false
       matrix:
