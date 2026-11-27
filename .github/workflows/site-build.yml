@@ -96,10 +96,11 @@ name: site-build
 #      the theme shows each page's "Download Notebook" button (the series
 #      build the notebooks first; the order here keeps the HTML build the
 #      one that executes, which step 7 counts);
-#   9. for a site whose site.yml publishes a pdf, builds it the same way,
-#      with the pdflatex builder, strict, from the same cache, and copies it
-#      into _build/html/_pdf/, also made before step 6, so the theme shows
-#      the "Book (PDF)" link; then checks the PDF the pages link to is there;
+#   9. for a site whose site.yml publishes a pdf, installs ImageMagick and
+#      builds it the same way, with the pdflatex builder, strict, from the
+#      same cache, and copies it into _build/html/_pdf/, also made before
+#      step 6, so the theme shows the "Book (PDF)" link; then checks the PDF
+#      the pages link to is there;
 #   10. keeps the HTML (html-<key>, green builds only, 7 days) and the report
 #      with the environment record (execution-status-<key>) as artefacts. A
 #      failed build also uploads build-lectures' failure reports
@@ -537,6 +538,25 @@ jobs:
       # the cache the HTML build filled, so it executes nothing. LaTeX comes
       # with the full image and with the GPU machine image, as the GPU
       # series' own PDF builds use it.
+      # Jupyter Book's PDF build turns on sphinx.ext.imgconverter, which runs
+      # ImageMagick's `convert` on an image LaTeX can't take, an SVG or a GIF:
+      # today the remote SVG logo that MyST's html_image makes an image of on
+      # three of jax's pages, without which the strict build fails on "Unable
+      # to run the image conversion command". Neither the full image nor the
+      # GPU machine image has it, so every leg that builds a PDF installs it,
+      # as lecture-jax's workflows do: as root in a container, with sudo on
+      # the GPU machine.
+      - name: Install ImageMagick for the PDF
+        if: ${{ contains(matrix.site.publishes, 'pdf') }}
+        run: |
+          if ! command -v convert >/dev/null; then
+            sudo=""
+            if [ "$(id -u)" -ne 0 ]; then sudo=sudo; fi
+            $sudo apt-get update
+            $sudo apt-get -o DPkg::Lock::Timeout=600 install -y imagemagick
+          fi
+          convert -version | sed -n 1p
+
       - name: Build the site's PDF (strict)
         id: pdf
         if: ${{ contains(matrix.site.publishes, 'pdf') }}
