@@ -461,7 +461,7 @@ def test_stage_site_local_links_is_for_a_consumer_and_leaves_a_lecture_edited_af
     assert res.returncode == 1
     assert "  [exists] _build/stage-site-originals/linking.md" in res.stdout
     assert ("refused, nothing copied: a lecture's original is left from an earlier --clean, which kept the lecture, "
-            "and it differs from the lecture in the pool now") in res.stdout
+            "and it is not a plain file holding the lecture in the pool now") in res.stdout
     assert not (repo.root / "_build" / "stage-site.json").exists()
     # Once the lecture is put back as it was, the original left holds nothing
     # the pool lacks, and staging goes ahead.
@@ -522,6 +522,16 @@ ADDRESS = "[it](https://python.quantecon.org/carried.html)"
     (f"- a `stray\n    - nested {ADDRESS} and `x`", "- a `stray\n    - nested [it](carried.md) and `x`", 1),
     (f"A `stray\n    - not an item {ADDRESS} and `x`", None, 0),
     (f"1. a\n\n   more `stray\n2. {ADDRESS} and `x`", "1. a\n\n   more `stray\n2. [it](carried.md) and `x`", 1),
+    # A nested list numbered other than 1 cannot interrupt a paragraph, at any
+    # depth, and a list ends at a block that is not indented: each line below
+    # continues the paragraph before it, as markdown-it reads them.
+    (f"- a `stray\n    2. b {ADDRESS} and `x`", None, 0),
+    (f"1. a `stray\n   14. b {ADDRESS} and `x`", None, 0),
+    (f"1. a `stray\n   2. b {ADDRESS} and `x`", None, 0),
+    (f"- a\n# H\nText `stray\n2024. Then {ADDRESS} and `x`", None, 0),
+    (f"- a\n\nText `stray\n2024. Then {ADDRESS} and `x`", None, 0),
+    # A sibling item still ends one, a level up too.
+    (f"1. a\n   1. b `stray\n2. {ADDRESS} and `x`", "1. a\n   1. b `stray\n2. [it](carried.md) and `x`", 1),
     # A literal opens at a whole run: two backticks are not a single one's opener.
     (f"``x {ADDRESS} `", "``x [it](carried.md) `", 1),
 ])
@@ -664,6 +674,19 @@ def test_stage_site_refuses_a_link_left_where_an_original_goes(make_repo):
     assert "  [exists] _build/stage-site-originals/linking.md" in res.stdout
     assert not target.exists()
     assert staged(repo) == before
+
+
+def test_stage_site_refuses_an_originals_folder_that_is_a_file(make_repo):
+    repo = links_repo(make_repo)
+    write(repo.root / "_build" / "stage-site-originals", "a file where the folder goes\n")
+    before = staged(repo)
+
+    res = repo.stage_site("--local-links", "dp")
+
+    assert res.returncode == 1, res.stdout + res.stderr
+    assert "_build/stage-site-originals is not a folder of its own (a link, or a file)" in res.stdout
+    assert staged(repo) == before
+    assert not (repo.root / "_build" / "stage-site.json").exists()
 
 
 def test_stage_site_refuses_an_originals_folder_that_is_a_link(make_repo):

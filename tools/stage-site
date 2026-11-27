@@ -153,15 +153,19 @@ def prose_mask(text: str) -> str:
     (``{note}``) is prose, read again for the blocks inside it. An inline
     literal is read a paragraph at a time: it may run across a line break, but
     not across a blank line, a fenced block, a line ``BLOCK_START_RE``
-    matches (a heading, a target and the like) or a list item. As CommonMark
-    has it, an item ends the paragraph before it when it is a bullet or ``1.``
-    or the paragraph is in a list, and an item indented four spaces or more
-    only in a list, as a nested one; ``2024. Then`` in a paragraph continues
-    it. That is near CommonMark's reading, not the same: lines it would part
-    (a blockquote's start, table rows, HTML) are read together, so a stray
-    backtick there can pair with the wrong one, masking a link or leaving one
-    inside a literal to be rewritten. No pool lecture has a literal that holds
-    a link, as markdown-it reads them (2026-11-27).
+    matches (a heading, a target and the like) or a list item. An item ends
+    the paragraph before it when it is a bullet or ``1.``, or, in a list, a
+    sibling or a parent item, at the indent of the list's last item or less;
+    an ordered item numbered other than 1 and indented deeper would start a
+    nested list, which may not interrupt a paragraph, so it continues the
+    paragraph (``2024. Then`` outside a list does too). An item indented four
+    spaces or more ends one only in a list. A list ends at a line that is not
+    indented and starts a block that is not an item. That is near
+    CommonMark's reading, not the same: lines it would part (a blockquote's
+    start, table rows, HTML) are read together, so a stray backtick there can
+    pair with the wrong one, masking a link or leaving one inside a literal
+    to be rewritten. No pool lecture has a literal that holds a link, as
+    markdown-it reads them (2026-11-27).
 
     It reads fences as tools/pool-check's ``prose()`` does, so the two tools
     agree on what is prose; like it, it reads a ``{math}`` body, a block
@@ -199,32 +203,38 @@ def prose_mask(text: str) -> str:
             i = end + 1
 
     read(0, len(lines))
-    def block(line, in_list, adjacent):
+    def block(line, item_indent, adjacent):
         """What ``line`` starts: ``"line"``, ``"item"`` or None, after a
-        paragraph's line when ``adjacent``, while a list is open when
-        ``in_list``."""
+        paragraph's line when ``adjacent``, while a list whose last item is
+        indented ``item_indent`` spaces is open (None when none is)."""
         if BLOCK_START_RE.match(line):
             return "line"
         m = ITEM_RE.match(line)
         if not m:
             return None
-        if len(m.group("indent")) >= 4:
-            return "item" if in_list else None
-        if m.group("number") in (None, "1") or in_list or not adjacent:
+        indent = len(m.group("indent"))
+        in_list = item_indent is not None
+        other_number = m.group("number") not in (None, "1")
+        if not in_list:
+            if indent >= 4 or (other_number and adjacent):
+                return None
             return "item"
-        return None
+        if other_number and adjacent and indent > item_indent:
+            return None  # a nested list that does not start at 1 cannot interrupt a paragraph
+        return "item"
 
-    paragraphs, in_list, previous = [], False, None
+    paragraphs, item_indent, previous = [], None, None
     for i in prose_rows:
         if not lines[i].strip():
             continue
         adjacent = bool(paragraphs) and paragraphs[-1][-1] == i - 1
-        kind = block(lines[i], in_list, adjacent)
+        kind = block(lines[i], item_indent, adjacent)
+        joins = adjacent and kind is None and previous != "line"
         if kind == "item":
-            in_list = True
-        elif not adjacent and not lines[i].startswith(" "):
-            in_list = False  # a paragraph that is not indented ends a list
-        if adjacent and kind is None and previous != "line":
+            item_indent = len(ITEM_RE.match(lines[i]).group("indent"))
+        elif not joins and not lines[i].startswith(" "):
+            item_indent = None  # a block that is not indented and not an item ends a list
+        if joins:
             paragraphs[-1].append(i)
         else:
             paragraphs.append([i])
@@ -377,8 +387,8 @@ def stage(key: str, site: Path, local_links: bool = False) -> int:
                   "(a link, or a file), so the originals could not be kept there; remove it first.")
             return 1
         # An original left by an earlier --clean, which kept the lecture, is
-        # replaced only when it holds what the pool lecture holds now, so
-        # nothing is lost; one that differs, or is a link, refuses.
+        # replaced only when it is a plain file holding what the pool lecture
+        # holds now, so nothing is lost; anything else there refuses.
         left = []
         for path, _, _ in plan:
             kept = ORIGINALS_DIR / path.name
@@ -388,8 +398,8 @@ def stage(key: str, site: Path, local_links: bool = False) -> int:
             for p in left:
                 print(f"  [exists] {shown(p)}")
             print(f"stage-site {key}: refused, nothing copied: a lecture's original is left from an earlier --clean, "
-                  "which kept the lecture, and it differs from the lecture in the pool now; put it back or remove it "
-                  "first.")
+                  "which kept the lecture, and it is not a plain file holding the lecture in the pool now; put it "
+                  "back or remove it first.")
             return 1
     dirs = []
     for _, dst in pairs:

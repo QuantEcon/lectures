@@ -111,11 +111,12 @@ name: site-build
 #      _build/html/reports. It does not hold the site's execution cache,
 #      which build-lectures looks for at _build/.jupyter_cache, not at the
 #      site's path;
-#   11. saves the execution cache (below) when the HTML build succeeded, even
-#      if a later step failed or the job was cancelled or timed out: the
-#      cache is the HTML build's alone, so a failed notebooks or PDF build (a
-#      LaTeX error, an apt mirror down while ImageMagick installs) does not
-#      throw a cold build's execution away; and unstages the site.
+#   11. saves the execution cache (below) when the HTML build and the
+#      report (which counts what it executed) succeeded, even if a later step
+#      failed or the job was cancelled or timed out: the cache is the HTML
+#      build's alone, so a failed notebooks or PDF build (a LaTeX error, an
+#      apt mirror down while ImageMagick installs) does not throw a cold
+#      build's execution away; and unstages the site.
 #
 # THE EXECUTION CACHE is actions/cache, one per site, at the path every
 # site's _config.yml names, _build/jupyter_cache/<key> (pool-check rule 7).
@@ -158,8 +159,9 @@ name: site-build
 # COLD BUILDS: until a run on main has saved a cache under the current key,
 # every build of a site executes every page (dp: about 50 pages, 20 to 40
 # minutes on ubuntu-latest). So every pull request before this workflow's
-# first green run on main builds cold, every time it runs, and so does every
-# build after the key changes, until main saves again.
+# first run on main whose HTML build succeeds builds cold, every time it
+# runs, and so does every build after the key changes, until main saves
+# again.
 #
 # SHOWING THE CACHE RESTORE (QuantEcon/project-monorepo#25 asks for it):
 # a pull request never saves, so its own runs cannot show one. It is shown
@@ -625,7 +627,7 @@ jobs:
           retention-days: 7
 
       - name: Save the execution cache
-        if: ${{ always() && steps.build.outcome == 'success' && github.ref == 'refs/heads/main' && steps.report.outputs.executed != '0' }}
+        if: ${{ always() && steps.build.outcome == 'success' && steps.report.outcome == 'success' && github.ref == 'refs/heads/main' && steps.report.outputs.executed != '0' }}
         uses: actions/cache/save@v4
         with:
           path: ${{ steps.site.outputs.cache-path }}
