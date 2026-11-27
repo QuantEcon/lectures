@@ -236,20 +236,20 @@ Its checks: every key a pool lecture cites resolves (in the nightly check, `--re
 
 ## The plan
 
-The move is planned in ten stages: reorganise first on today's toolchain (Jupyter Book 1), then switch the engine once, later.
+The move is planned in ten stages: reorganise first on today's toolchain (Jupyter Book 1), then switch the engine once, later. Since 2026-11-27, stages 1 to 8 move every series onto this repository on Jupyter Book 1, which makes validation against the live sites easier. Stages 9 and 10 are a second phase: an upgrade of the live sites to mystmd, once this repository publishes them.
 
 1. **Set up** access and tracking.
 2. **Sources in.** Bring every lecture of every series into the pool, reconciling differences in the series repositories.
-3. **One publishing workflow** that builds any site on either engine, rehearsed end to end, including a rollback, on a sandbox series.
+3. **One publishing workflow** that builds any site on Jupyter Book 1, rehearsed end to end, including a rollback, on a sandbox series. The engine input comes with mystmd, in the second phase.
 4. **Shadow builds.** Build each series here from the pool and compare it with its own published build, with nothing going live.
 5. **Cutovers, one series at a time.** Each series is published through a release in its own repository, so every earlier release is a rollback.
 6. **The order of cutovers:** `dp` (a publishing-only move, since it owns no lectures), programming, a go/no-go review, then intro, intermediate, advanced and JAX.
 7. **A relay** that keeps the translated editions fed from here.
 8. **Page history**, carried across at each cutover.
-9. **mystmd builds alongside**, from stage 3, publishing nothing.
-10. **One engine switch** for all series and editions together, after full testing.
+9. **mystmd, after the cutovers**: every site built on mystmd, publishing nothing, as the second phase's first step (2026-11-27; it was "mystmd builds alongside", from stage 3).
+10. **One engine switch** for all series and editions together, after full testing: the end of the second phase.
 
-As of October 2026, stage 2 is under way. The promote tool is ready, and the renames that make lecture names unique come next.
+As of 2026-11-27, stage 3, the publishing pathway, is under way. Every site builds from the pool in CI on Jupyter Book 1, with its notebooks and, for the five that publish one, its PDF. Publishing through a release in each series' repository, and its rehearsal on the test double, come next.
 
 ## Licence
 
