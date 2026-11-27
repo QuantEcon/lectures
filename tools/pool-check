@@ -64,9 +64,11 @@ too, so a site's folder stays true to the pool it is built from:
 * ``site-yml``      — ``site.yml`` has the fields the build reads, each with
   a valid value (``SITE_FIELDS``), and no other field but the optional ones
   (``SITE_OPTIONAL_FIELDS``: ``extra_packages``, pip requirements the build
-  installs, and ``environment``, what it builds in: ``series``, the default,
-  or ``base``, the full image with ``_base/environment-update.yml``), and its
-  ``url`` is ``html.baseurl``.
+  installs; ``environment``, what it builds in: ``series``, the default,
+  or ``base``, the full image with ``_base/environment-update.yml``; and
+  ``local_links``, ``true`` or ``false``, which only a consumer series' site
+  may set ``true``: ``tools/stage-site --local-links``), and its ``url`` is
+  ``html.baseurl``.
 
 The environment the sites are to build in, ``_base/environment-update.yml``,
 is checked against the lectures, so a package a lecture installs is never
@@ -184,7 +186,7 @@ SITE_FIELDS = ("type", "runner", "cell_timeout", "publishes", "url")
 # installs into the image's environment before it builds the site.
 # environment: what the site builds in (SITE_ENVIRONMENTS; series if absent),
 # as tools/site-matrix reads it.
-SITE_OPTIONAL_FIELDS = ("extra_packages", "environment")
+SITE_OPTIONAL_FIELDS = ("extra_packages", "environment", "local_links")
 # series: the lean image and the series' own environment, as dp's own
 # workflows build; base: the full image with _base/environment-update.yml.
 SITE_ENVIRONMENTS = ("series", "base")
@@ -537,6 +539,9 @@ def check_site_yml(where: str, data, problems):
     value = data.get("environment")
     if "environment" in data and value not in SITE_ENVIRONMENTS:
         problems.append(("site-yml", f"{where}: environment {value!r} is not one of {', '.join(SITE_ENVIRONMENTS)}"))
+    value = data.get("local_links")
+    if "local_links" in data and not isinstance(value, bool):
+        problems.append(("site-yml", f"{where}: local_links {value!r} is not true or false"))
     value = data.get("extra_packages")
     if "extra_packages" in data and not (
         isinstance(value, list)
@@ -699,6 +704,12 @@ def check_sites(sites: Path, pool: Path, lectures, series_keys, consumers):
         site_yml = read_yaml(entry / "site.yml", f"sites/{key}/site.yml", problems) if (entry / "site.yml").is_file() else None
         if (entry / "site.yml").is_file():
             check_site_yml(f"sites/{key}/site.yml", site_yml, problems)
+            if isinstance(site_yml, dict) and site_yml.get("local_links") is True and key not in consumers:
+                problems.append((
+                    "site-yml",
+                    f"sites/{key}/site.yml: local_links is for a consumer series' site, whose copies link to their home "
+                    f"series' sites, and `{key}` is not `class: consumer` in sync/manifest.yml",
+                ))
             if isinstance(site_yml, dict) and site_yml.get("type") == "series" and key not in series_keys:
                 problems.append((
                     "site-yml",
