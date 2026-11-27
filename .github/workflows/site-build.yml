@@ -153,15 +153,15 @@ name: site-build
 #   page by its code cells) or the key does.
 # Pull requests only restore. A save happens on main alone (a push, a manual
 # run or the schedule), after an HTML build that succeeded and executed at
-# least one page, whatever a later step did (step 11); a build that took
-# every page from the cache has nothing new to save.
+# least one page, and its execution report, whatever a later step did (step
+# 11); a build that took every page from the cache has nothing new to save.
 #
 # COLD BUILDS: until a run on main has saved a cache under the current key,
 # every build of a site executes every page (dp: about 50 pages, 20 to 40
 # minutes on ubuntu-latest). So every pull request before this workflow's
-# first run on main whose HTML build succeeds builds cold, every time it
-# runs, and so does every build after the key changes, until main saves
-# again.
+# first run on main whose HTML build and report succeed builds cold, every
+# time it runs, and so does every build after the key changes, until main
+# saves again.
 #
 # SHOWING THE CACHE RESTORE (QuantEcon/project-monorepo#25 asks for it):
 # a pull request never saves, so its own runs cannot show one. It is shown

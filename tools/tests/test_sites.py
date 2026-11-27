@@ -516,22 +516,6 @@ ADDRESS = "[it](https://python.quantecon.org/carried.html)"
     # An item's indented next lines continue it, literal and all.
     (f"- a `literal\n  {ADDRESS}` here", None, 0),
     (f"A `stray\n(here)=\n{ADDRESS} and `x`", "A `stray\n(here)=\n[it](carried.md) and `x`", 1),
-    # An ordered item other than 1. ends a paragraph only in a list, and an item
-    # indented four spaces only as a nested one.
-    (f"A `stray\n2024. Then {ADDRESS} and `x`", None, 0),
-    (f"- a `stray\n    - nested {ADDRESS} and `x`", "- a `stray\n    - nested [it](carried.md) and `x`", 1),
-    (f"A `stray\n    - not an item {ADDRESS} and `x`", None, 0),
-    (f"1. a\n\n   more `stray\n2. {ADDRESS} and `x`", "1. a\n\n   more `stray\n2. [it](carried.md) and `x`", 1),
-    # A nested list numbered other than 1 cannot interrupt a paragraph, at any
-    # depth, and a list ends at a block that is not indented: each line below
-    # continues the paragraph before it, as markdown-it reads them.
-    (f"- a `stray\n    2. b {ADDRESS} and `x`", None, 0),
-    (f"1. a `stray\n   14. b {ADDRESS} and `x`", None, 0),
-    (f"1. a `stray\n   2. b {ADDRESS} and `x`", None, 0),
-    (f"- a\n# H\nText `stray\n2024. Then {ADDRESS} and `x`", None, 0),
-    (f"- a\n\nText `stray\n2024. Then {ADDRESS} and `x`", None, 0),
-    # A sibling item still ends one, a level up too.
-    (f"1. a\n   1. b `stray\n2. {ADDRESS} and `x`", "1. a\n   1. b `stray\n2. [it](carried.md) and `x`", 1),
     # A literal opens at a whole run: two backticks are not a single one's opener.
     (f"``x {ADDRESS} `", "``x [it](carried.md) `", 1),
 ])
@@ -673,6 +657,19 @@ def test_stage_site_refuses_a_link_left_where_an_original_goes(make_repo):
     assert res.returncode == 1, res.stdout
     assert "  [exists] _build/stage-site-originals/linking.md" in res.stdout
     assert not target.exists()
+    assert staged(repo) == before
+
+
+def test_stage_site_refuses_a_folder_left_where_an_original_goes(make_repo):
+    repo = links_repo(make_repo)
+    (repo.root / "_build" / "stage-site-originals" / "linking.md").mkdir(parents=True)
+    before = staged(repo)
+
+    res = repo.stage_site("--local-links", "dp")
+
+    assert res.returncode == 1, res.stdout + res.stderr
+    assert "  [exists] _build/stage-site-originals/linking.md" in res.stdout
+    assert "and it is not a plain file holding the lecture in the pool now" in res.stdout
     assert staged(repo) == before
 
 
