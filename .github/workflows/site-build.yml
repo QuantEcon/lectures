@@ -79,7 +79,9 @@ name: site-build
 #   5. stages the site into lectures/ (tools/stage-site): its own pages and
 #      files, and its _config.yml and _toc.yml, where `jb build lectures`
 #      finds them with no --config or --toc, and where build-lectures' check
-#      of the executed notebooks reads the configuration;
+#      of the executed notebooks reads the configuration; for a consumer
+#      site with site.yml's local_links, also its links to lectures it
+#      carries made links within it (--local-links; sites/README.md);
 #   6. builds HTML with QuantEcon/actions' build-lectures, `jb build lectures`,
 #      strict: `-n -W --keep-going`, so a warning, a cell that raises, an
 #      unresolved reference or a label two selected lectures both define
@@ -275,9 +277,11 @@ jobs:
 
       # The image's Python has PyYAML, tools/sync's one dependency, and git, so
       # the tools run with `python`, with no uv to install. tools/stage-site
-      # and tools/execution-report need the standard library alone. From the
-      # staging on, the tools run in a login shell, as build-lectures runs jb:
-      # on the GPU machine only a login shell has the environment's `python`.
+      # needs PyYAML for --local-links alone, which every leg's environment
+      # has, since Jupyter Book needs it too, and tools/execution-report the
+      # standard library alone. From the staging on, the tools run in a login
+      # shell, as build-lectures runs jb: on the GPU machine only a login shell
+      # has the environment's `python`.
       - name: Reconstruct the series' files at its pin
         if: ${{ matrix.site.environment == 'series' }}
         env:
@@ -434,13 +438,21 @@ jobs:
           echo "$line"
           printf '### Site %s\n\n%s\n\n' "\`$KEY\`" "$line" >> "$GITHUB_STEP_SUMMARY"
 
-      # Its pages, its files, its _config.yml and its _toc.yml, into lectures/.
+      # Its pages, its files, its _config.yml and its _toc.yml, into lectures/;
+      # with site.yml's local_links (a consumer site), its links to lectures it
+      # carries made links within it (tools/stage-site --local-links).
       - name: Stage the site
         id: stage
         env:
           KEY: ${{ matrix.site.key }}
+          LOCAL_LINKS: ${{ matrix.site.local_links }}
         shell: bash -l {0}
-        run: python tools/stage-site "$KEY"
+        run: |
+          if [ "$LOCAL_LINKS" = true ]; then
+            python tools/stage-site --local-links "$KEY"
+          else
+            python tools/stage-site "$KEY"
+          fi
 
       - name: Note the build's start
         id: start
