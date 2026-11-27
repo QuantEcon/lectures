@@ -492,6 +492,13 @@ ADDRESS = "[it](https://python.quantecon.org/carried.html)"
      2),
     # A line opening with inline code is not a fence, and the rest is prose.
     (f"```x``` then {LINK}", f"```x``` then {{doc}}`carried`", 1),
+    # An inline literal may run across a line break, as CommonMark reads one,
+    # but not across a blank line or out of a heading.
+    (f"Before `a literal that\n{ADDRESS} and {LINK}` crosses a line.", None, 0),
+    (f"``two\n{ADDRESS}``", None, 0),
+    (f"`x`\n{ADDRESS}", "`x`\n[it](carried.md)", 1),
+    (f"`unclosed\n\n{ADDRESS}`", "`unclosed\n\n[it](carried.md)`", 1),
+    (f"# A `heading\n{ADDRESS}`", "# A `heading\n[it](carried.md)`", 1),
 ])
 def test_rewrite_links_reads_prose_alone(text, expected, n):
     tool = stage_site_module()
@@ -554,6 +561,42 @@ def test_stage_site_clean_keeps_a_lecture_whose_original_is_gone_and_refuses_a_r
     assert "names lectures/solow.md, which is not inside _build/stage-site-originals/" in res.stderr
     assert staged(repo) == before  # nothing removed or put back
     assert record_path.exists()
+
+
+def test_stage_site_local_links_rewrites_only_a_file_directly_in_the_pool(make_repo):
+    repo = links_repo(make_repo)
+    outside = write(repo.root / "notes" / "outside.md", lecture_text("Outside", LINKING))
+    nested = write(repo.pool("sub/page.md"), lecture_text("Nested", LINKING))
+    (repo.pool("linked.md")).symlink_to(Path("..") / "notes" / "outside.md")
+    write(repo.root / "sites/dp/_toc.yml", "\n".join([
+        "format: jb-book", "root: intro", "chapters:", "- file: carried", "- file: linking",
+        "- file: ../notes/outside", "- file: sub/page", "- file: linked", "",
+    ]))
+    before = {p: p.read_bytes() for p in (outside, nested)}
+
+    res = repo.stage_site("--local-links", "dp")
+
+    assert res.returncode == 0, res.stdout + res.stderr
+    assert "stage-site dp: 4 link(s) in 1 lecture(s) rewritten to lectures within the site" in res.stdout
+    assert {p: p.read_bytes() for p in (outside, nested)} == before
+    record = json.loads((repo.root / "_build" / "stage-site.json").read_text())
+    assert [r["path"] for r in record["rewritten"]] == ["lectures/linking.md"]
+    assert repo.stage_site("--clean", "dp").returncode == 0
+
+
+def test_stage_site_clean_leaves_a_lecture_removed_since_staging_removed(make_repo):
+    repo = links_repo(make_repo)
+    assert repo.stage_site("--local-links", "dp").returncode == 0
+    repo.pool("linking.md").unlink()
+
+    res = repo.stage_site("--clean", "dp")
+
+    assert res.returncode == 0, res.stdout
+    assert ("kept lectures/linking.md as it is: it is no longer a file, so its original is left at "
+            "_build/stage-site-originals/linking.md") in res.stdout
+    assert not repo.pool("linking.md").exists()
+    assert (repo.root / "_build/stage-site-originals/linking.md").is_file()
+    assert not (repo.root / "_build" / "stage-site.json").exists()
 
 
 def test_site_yml_local_links_is_true_or_false_and_only_a_consumers(make_repo):

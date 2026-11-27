@@ -51,10 +51,12 @@ or ``%`` comments):
   (``[text](os_stochastic.md)``). An address with an anchor is left alone.
 
 A lecture is the site's when its ``_toc.yml`` lists it and it is a pool
-lecture, not a page of the site's own folder. Each rewritten lecture's
-original bytes are kept under ``_build/stage-site-originals/`` and named in
-the record, and ``--clean`` puts them back, the same way it removes a copy:
-only a file whose bytes are still the ones staging wrote. The site build
+lecture (a file directly in ``lectures/``), not a page of the site's own
+folder. Each rewritten lecture's original bytes are kept under
+``_build/stage-site-originals/`` and named in the record, and ``--clean``
+puts them back, the same way it removes a copy: only over a file whose bytes
+are still the ones staging wrote. A lecture removed since, or edited, is
+left as it is, with its original kept. The site build
 passes the option when the site's ``site.yml`` sets ``local_links: true``.
 
 Usage
@@ -99,8 +101,13 @@ OLD_ADDRESSES = ("https://python-intro.quantecon.org/",)
 # code or literal text, not prose.
 FENCE_RE = re.compile(r"^[ \t]*(`{3,}|~{3,})(.*)$")
 CODE_DIRECTIVES = ("{code-cell}", "{code-block}", "{code}", "{sourcecode}", "{literalinclude}")
-# On a prose line: a role's text ({doc}`...`), kept, or an inline literal, masked.
-BACKTICKS_RE = re.compile(r"(\{[\w:+-]+\})?(`+)(.*?)(?<!`)\2(?!`)")
+# In a paragraph: a role's text ({doc}`...`), kept, or an inline literal,
+# masked. Either may run across a line break.
+BACKTICKS_RE = re.compile(r"(\{[\w:+-]+\})?(`+)(.*?)(?<!`)\2(?!`)", re.DOTALL)
+# A paragraph ends at a blank line, a heading, or a block that is not prose.
+HEADING_RE = re.compile(r"^ {0,3}#{1,6}(\s|$)")
+# A pool lecture's name, as both link forms spell it.
+LECTURE_NAME_RE = re.compile(r"[\w-]+")
 DOC_LINK_RE = re.compile(r"\{doc\}`(?P<text>[^`<>]*<)?(?P<prefix>[\w.-]+):(?P<name>[\w-]+)(?P<close>>?)`")
 
 
@@ -136,7 +143,9 @@ def prose_mask(text: str) -> str:
     breaks kept, so a match in it is at the same place in ``text``: the bodies
     of code cells and literal fenced blocks (backtick or tilde, plain or with a
     language), ``%`` comment lines and inline literals. A directive's own body
-    (``{note}``) is prose, read again for the blocks inside it.
+    (``{note}``) is prose, read again for the blocks inside it. An inline
+    literal is read a paragraph at a time, as CommonMark reads one: it may run
+    across a line break, but not a blank line, a heading or a fenced block.
 
     It reads fences as tools/pool-check's ``prose()`` does, so the two tools
     agree on what is prose; like it, it reads a ``{math}`` body, a block
@@ -144,6 +153,7 @@ def prose_mask(text: str) -> str:
     has a link in one of those (2026-11-27)."""
     lines = text.split("\n")
     blank = lambda line: " " * len(line)
+    prose_rows = []
 
     def is_closing(line, fence):
         m = FENCE_RE.match(line)
@@ -157,7 +167,7 @@ def prose_mask(text: str) -> str:
                 if lines[i].lstrip().startswith("%"):
                     lines[i] = blank(lines[i])
                 else:
-                    lines[i] = BACKTICKS_RE.sub(lambda r: r.group(0) if r.group(1) else blank(r.group(0)), lines[i])
+                    prose_rows.append(i)
                 i += 1
                 continue
             end = next((j for j in range(i + 1, stop) if is_closing(lines[j], m.group(1))), stop)
@@ -173,6 +183,20 @@ def prose_mask(text: str) -> str:
             i = end + 1
 
     read(0, len(lines))
+    paragraphs = []
+    for i in prose_rows:
+        if not lines[i].strip():
+            continue
+        if paragraphs and paragraphs[-1][-1] == i - 1 and not HEADING_RE.match(lines[i]) \
+                and not HEADING_RE.match(lines[i - 1]):
+            paragraphs[-1].append(i)
+        else:
+            paragraphs.append([i])
+    keep_breaks = lambda r: r.group(0) if r.group(1) else re.sub(r"[^\n]", " ", r.group(0))
+    for rows in paragraphs:
+        masked = BACKTICKS_RE.sub(keep_breaks, "\n".join(lines[i] for i in rows)).split("\n")
+        for i, line in zip(rows, masked):
+            lines[i] = line
     return "\n".join(lines)
 
 
@@ -235,7 +259,12 @@ def local_link_plan(key: str, site: Path):
     hosts = sorted(h if h.endswith("/") else h + "/" for h in hosts if isinstance(h, str) and h.startswith("https://"))
     toc = yaml.safe_load((site / "_toc.yml").read_text(encoding="utf-8"))
     own = {p.stem for p in site.glob("*.md")}
-    carried = {f for f in toc_files(toc) if f not in own and (POOL_DIR / f"{f}.md").is_file()}
+    # Only a name of a file directly in the pool: an entry such as
+    # ../sites/dp/page, a subfolder's page or a link that leads out is not a
+    # pool lecture, so nothing outside lectures/ is ever rewritten.
+    pool = POOL_DIR.resolve()
+    carried = {f for f in toc_files(toc) if f not in own and LECTURE_NAME_RE.fullmatch(f)
+               and (POOL_DIR / f"{f}.md").is_file() and (POOL_DIR / f"{f}.md").resolve().parent == pool}
     plan = []
     for name in sorted(carried):
         path = POOL_DIR / f"{name}.md"
@@ -379,7 +408,10 @@ def clean(key: str) -> int:
         if not original.is_file():
             kept.append(f"kept {rel} as it is: its original, {item['original']}, is gone, so it cannot be put back")
             continue
-        if dst.is_file() and digest(dst) != item["sha256"]:
+        if not dst.is_file():
+            kept.append(f"kept {rel} as it is: it is no longer a file, so its original is left at {item['original']}")
+            continue
+        if digest(dst) != item["sha256"]:
             kept.append(f"kept {rel}: its bytes are not the ones staging wrote; its original is left at {item['original']}")
             continue
         shutil.copyfile(original, dst)
