@@ -68,7 +68,8 @@ Usage
 Exit status: 0 done, 1 refused (no such site, a destination exists, or a
 site is staged already, or another site is, or ``--local-links`` for a site
 that is not a consumer, or with a lecture's original left under
-``_build/stage-site-originals/``), 2 an error (among them a record naming a
+``_build/stage-site-originals/`` that differs from the lecture now, or with
+that folder a link or a file), 2 an error (among them a record naming a
 path outside the folder it belongs in, which ``--clean`` refuses before it
 touches anything). It never commits anything.
 """
@@ -105,15 +106,15 @@ CODE_DIRECTIVES = ("{code-cell}", "{code-block}", "{code}", "{sourcecode}", "{li
 # masked, each from a whole run of backticks to a run of the same length.
 # Either may run across a line break.
 BACKTICKS_RE = re.compile(r"(\{[\w:+-]+\})?(?<!`)(`+)(?!`)(.*?)(?<!`)\2(?!`)", re.DOTALL)
-# A line that starts a block of its own, so ends the paragraph before it: a
-# list item, which its next lines continue, or a line that is a block by
-# itself and ends the paragraph after it too: a heading, a target
-# ((name)=), a cell break (+++), a $$ line, a ::: fence, or a thematic break
-# or setext underline.
+# A line that is a block by itself, so ends the paragraph before it and the
+# one after it: a heading, a target ((name)=), a cell break (+++), a $$ line,
+# a ::: fence, or a thematic break or setext underline.
 BLOCK_START_RE = re.compile(
-    r"^ {0,3}(?:(?P<item>[-+*]\s|\d{1,9}[.)]\s)|#{1,6}(?:\s|$)|\([^()\s]+\)=\s*$|\+\+\+|\$\$|:{3,}"
-    r"|([-*_=])[ \t]*(?:\2[ \t]*){2,}$)"
+    r"^ {0,3}(?:#{1,6}(?:\s|$)|\([^()\s]+\)=\s*$|\+\+\+|\$\$|:{3,}|([-*_=])[ \t]*(?:\1[ \t]*){2,}$)"
 )
+# A list item's marker, which its next lines continue (see prose_mask for
+# when it ends the paragraph before it).
+ITEM_RE = re.compile(r"^(?P<indent> *)(?:[-+*]|(?P<number>\d{1,9})[.)])\s")
 DOC_LINK_RE = re.compile(r"\{doc\}`(?P<text>[^`<>]*<)?(?P<prefix>[\w.-]+):(?P<name>[\w-]+)(?P<close>>?)`")
 
 
@@ -151,14 +152,16 @@ def prose_mask(text: str) -> str:
     language), ``%`` comment lines and inline literals. A directive's own body
     (``{note}``) is prose, read again for the blocks inside it. An inline
     literal is read a paragraph at a time: it may run across a line break, but
-    not across a blank line, a fenced block or a line ``BLOCK_START_RE``
-    matches (a list item, a heading, a target and the like). That is near
-    CommonMark's reading, not the same: lines it would part (a blockquote's
-    start, table rows, HTML, a list item nested four spaces deep) are read
-    together, and a line such as ``2024. Then`` is parted, so a stray
-    backtick can pair with the wrong one, masking a link or leaving one inside
-    a literal to be rewritten. No pool lecture has a literal that holds a
-    link, as markdown-it reads them (2026-11-27).
+    not across a blank line, a fenced block, a line ``BLOCK_START_RE``
+    matches (a heading, a target and the like) or a list item. As CommonMark
+    has it, an item ends the paragraph before it when it is a bullet or ``1.``
+    or the paragraph is in a list, and an item indented four spaces or more
+    only in a list, as a nested one; ``2024. Then`` in a paragraph continues
+    it. That is near CommonMark's reading, not the same: lines it would part
+    (a blockquote's start, table rows, HTML) are read together, so a stray
+    backtick there can pair with the wrong one, masking a link or leaving one
+    inside a literal to be rewritten. No pool lecture has a literal that holds
+    a link, as markdown-it reads them (2026-11-27).
 
     It reads fences as tools/pool-check's ``prose()`` does, so the two tools
     agree on what is prose; like it, it reads a ``{math}`` body, a block
@@ -196,18 +199,36 @@ def prose_mask(text: str) -> str:
             i = end + 1
 
     read(0, len(lines))
-    def block(line):
-        m = BLOCK_START_RE.match(line)
-        return None if not m else "item" if m.group("item") else "line"
+    def block(line, in_list, adjacent):
+        """What ``line`` starts: ``"line"``, ``"item"`` or None, after a
+        paragraph's line when ``adjacent``, while a list is open when
+        ``in_list``."""
+        if BLOCK_START_RE.match(line):
+            return "line"
+        m = ITEM_RE.match(line)
+        if not m:
+            return None
+        if len(m.group("indent")) >= 4:
+            return "item" if in_list else None
+        if m.group("number") in (None, "1") or in_list or not adjacent:
+            return "item"
+        return None
 
-    paragraphs = []
+    paragraphs, in_list, previous = [], False, None
     for i in prose_rows:
         if not lines[i].strip():
             continue
-        if paragraphs and paragraphs[-1][-1] == i - 1 and block(lines[i]) is None and block(lines[i - 1]) != "line":
+        adjacent = bool(paragraphs) and paragraphs[-1][-1] == i - 1
+        kind = block(lines[i], in_list, adjacent)
+        if kind == "item":
+            in_list = True
+        elif not adjacent and not lines[i].startswith(" "):
+            in_list = False  # a paragraph that is not indented ends a list
+        if adjacent and kind is None and previous != "line":
             paragraphs[-1].append(i)
         else:
             paragraphs.append([i])
+        previous = kind
     keep_breaks = lambda r: r.group(0) if r.group(1) else re.sub(r"[^\n]", " ", r.group(0))
     for rows in paragraphs:
         masked = BACKTICKS_RE.sub(keep_breaks, "\n".join(lines[i] for i in rows)).split("\n")
@@ -312,7 +333,10 @@ def read_record():
 
 
 def inside(rel: str, folder: Path) -> Path:
-    """``ROOT / rel``, refused unless it lies inside ``folder``."""
+    """``ROOT / rel``, refused unless it lies inside ``folder``, which must not
+    itself be a link (its target would be what it confines to)."""
+    if folder.is_symlink():
+        raise ValueError(f"{shown(folder)} is a link, so what {shown(RECORD_PATH)} names cannot be confined to it")
     path = (ROOT / rel).resolve()
     if folder.resolve() not in path.parents:
         raise ValueError(f"{shown(RECORD_PATH)} names {rel}, which is not inside {shown(folder)}/")
@@ -348,12 +372,24 @@ def stage(key: str, site: Path, local_links: bool = False) -> int:
         if refusal:
             print(f"stage-site {key}: refused, nothing copied: {refusal}")
             return 1
-        left = [ORIGINALS_DIR / path.name for path, _, _ in plan if (ORIGINALS_DIR / path.name).exists()]
+        if plan and (ORIGINALS_DIR.is_symlink() or (ORIGINALS_DIR.exists() and not ORIGINALS_DIR.is_dir())):
+            print(f"stage-site {key}: refused, nothing copied: {shown(ORIGINALS_DIR)} is not a folder of its own "
+                  "(a link, or a file), so the originals could not be kept there; remove it first.")
+            return 1
+        # An original left by an earlier --clean, which kept the lecture, is
+        # replaced only when it holds what the pool lecture holds now, so
+        # nothing is lost; one that differs, or is a link, refuses.
+        left = []
+        for path, _, _ in plan:
+            kept = ORIGINALS_DIR / path.name
+            if kept.is_symlink() or (kept.exists() and not (kept.is_file() and kept.read_bytes() == path.read_bytes())):
+                left.append(kept)
         if left:
             for p in left:
                 print(f"  [exists] {shown(p)}")
             print(f"stage-site {key}: refused, nothing copied: a lecture's original is left from an earlier --clean, "
-                  "which kept the lecture; put it back or remove it first.")
+                  "which kept the lecture, and it differs from the lecture in the pool now; put it back or remove it "
+                  "first.")
             return 1
     dirs = []
     for _, dst in pairs:
