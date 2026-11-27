@@ -106,7 +106,8 @@ OLD_ADDRESSES = ("https://python-intro.quantecon.org/",)
 LITERAL_DIRECTIVES = ("code-cell", "code-block", "code", "sourcecode", "literalinclude", "math", "raw", "eval-rst",
                       "mermaid", "toctree", "jupyter-execute", "ipython", "doctest")
 # Jupyter Book 1.0.4's own extensions (its default_config.yml), which a
-# site's `parse: myst_enable_extensions` replaces when it names any.
+# site's `parse: myst_enable_extensions` replaces when it names any: an
+# empty list, like none, keeps these.
 DEFAULT_EXTENSIONS = ("colon_fence", "dollarmath", "linkify", "substitution", "tasklist")
 # A line ending, as markdown-it reads one.
 NEWLINE_RE = re.compile(r"\r\n?|\n")
@@ -253,9 +254,10 @@ class Reader:
 
 def reader_for(config):
     """A Reader with the MyST extensions a site's ``_config.yml`` enables, or
-    Jupyter Book's own when it names none."""
+    Jupyter Book's own when it names none (an empty list included, as
+    Jupyter Book 1.0.4 reads it)."""
     extensions = (config.get("parse") or {}).get("myst_enable_extensions")
-    if not isinstance(extensions, list):
+    if not (isinstance(extensions, list) and extensions):
         extensions = DEFAULT_EXTENSIONS
     return Reader(tuple(e for e in extensions if isinstance(e, str)))
 
@@ -263,8 +265,8 @@ def reader_for(config):
 def rewrite_links(text: str, carried, prefixes, hosts, reader=None):
     """``(text, n)``: ``text`` with its prose links to a lecture in ``carried``
     made links within the site, and how many it rewrote. Each edit lies within
-    one line the parser read, found there as written; the check below holds
-    once a line is placed, and keeps an edit from spanning lines."""
+    one line the parser read, found there as written (the two link forms
+    span no line break); the check below holds once that line is placed."""
     reader = reader or Reader()
     url_re = re.compile(r"\]\((?P<base>" + "|".join(re.escape(h) for h in hosts) + r")(?P<name>[\w-]+)\.html\)$") if hosts else None
     edits = {}

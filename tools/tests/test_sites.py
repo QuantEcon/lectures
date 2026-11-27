@@ -606,6 +606,11 @@ def test_rewrite_links_reads_prose_alone(text, expected, n):
     (f"`{ADDRESS}` ![x{ADDRESS}](f.png)", 0),
     (f"x\rt\n{ADDRESS}\n<div>{ADDRESS}\n</div>", 1),
     (f"x\r\nt\r\n{ADDRESS}\r\n", 1),
+    # A directive whose body is code, literal text or not MyST is not read.
+    *[(f"```{{{name}}}\n{ADDRESS}\n```", 0) for name in (
+        "code-cell", "code-block", "code", "sourcecode", "literalinclude", "math", "raw", "eval-rst", "mermaid",
+        "toctree", "jupyter-execute", "ipython", "doctest")],
+    (f"```{{note}}\n{ADDRESS}\n```", 1),
 ])
 def test_rewrite_links_makes_the_links_markdown_it_makes(text, n):
     tool = stage_site_module()
@@ -643,11 +648,17 @@ def test_reader_for_takes_a_sites_extensions_or_jupyter_books():
 
     def enabled(config):
         md = tool.reader_for(config).md
-        return {r.name for r in md.block.ruler.__rules__ if r.enabled} | {r.name for r in md.inline.ruler.__rules__ if r.enabled}
+        return {r.name for ruler in (md.core.ruler, md.block.ruler, md.inline.ruler)
+                for r in ruler.__rules__ if r.enabled}
 
-    assert {"colon_fence", "math_block", "linkify"} <= enabled({})  # Jupyter Book's own
-    assert "deflist" in enabled({"parse": {"myst_enable_extensions": ["deflist"]}})
-    assert "colon_fence" not in enabled({"parse": {"myst_enable_extensions": []}})
+    # Jupyter Book 1.0.4's own: colon_fence, dollarmath, linkify,
+    # substitution and tasklist, and not, say, deflist; an empty list keeps
+    # them, and a list that names any replaces them.
+    jupyter_books = {"colon_fence", "math_block", "linkify", "substitution_block", "github-tasklists"}
+    for config in ({}, {"parse": {}}, {"parse": {"myst_enable_extensions": []}}):
+        assert jupyter_books <= enabled(config) and "deflist" not in enabled(config), config
+    named = enabled({"parse": {"myst_enable_extensions": ["deflist"]}})
+    assert "deflist" in named and not (jupyter_books & named)
 
 
 def test_rewrite_links_needs_linkify_it_for_linkify_and_says_so(monkeypatch):
