@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.9"
-# dependencies = ["pyyaml", "myst-parser>=3,<5", "linkify-it-py"]
+# dependencies = ["pyyaml", "myst-parser==3.0.1", "linkify-it-py"]
 # ///
 """tools/stage-site — copy one site's own pages and files into the pool folder.
 
@@ -102,11 +102,14 @@ KEY_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]*")
 # --local-links. Addresses a lecture site had before, which still forward to
 # its current one: python-intro.quantecon.org was intermediate's.
 OLD_ADDRESSES = ("https://python-intro.quantecon.org/",)
-# Directives whose body is code or literal text, not prose, so not read.
-LITERAL_DIRECTIVES = ("code-cell", "code-block", "code", "sourcecode", "literalinclude", "math", "raw")
-# The extensions MyST enables when a site's _config.yml names none.
-DEFAULT_EXTENSIONS = ("amsmath", "colon_fence", "deflist", "dollarmath", "html_admonition", "html_image", "linkify",
-                      "replacements", "smartquotes", "substitution")
+# Directives whose body is code, literal text or not MyST, so not read.
+LITERAL_DIRECTIVES = ("code-cell", "code-block", "code", "sourcecode", "literalinclude", "math", "raw", "eval-rst",
+                      "mermaid", "toctree", "jupyter-execute", "ipython", "doctest")
+# Jupyter Book 1.0.4's own extensions (its default_config.yml), which a
+# site's `parse: myst_enable_extensions` replaces when it names any.
+DEFAULT_EXTENSIONS = ("colon_fence", "dollarmath", "linkify", "substitution", "tasklist")
+# A line ending, as markdown-it reads one.
+NEWLINE_RE = re.compile(r"\r\n?|\n")
 DOC_LINK_RE = re.compile(r"\{doc\}`(?P<text>[^`<>]*<)?(?P<prefix>[\w.-]+):(?P<name>[\w-]+)(?P<close>>?)`")
 
 
@@ -151,17 +154,25 @@ class Reader:
         except ImportError:
             raise ValueError("--local-links reads pages with MyST's parser (myst-parser), which this Python does not "
                              "have") from None
+        if "linkify" in extensions:
+            try:
+                import linkify_it  # noqa: F401
+            except ImportError:
+                raise ValueError("--local-links reads pages with MyST's linkify extension, which needs linkify-it-py, "
+                                 "and this Python does not have it") from None
         self.md = create_md_parser(MdParserConfig(enable_extensions=set(extensions)), RendererHTML)
-        self.found = []
+        self.found, self.reading = [], None
         for rule in [r for r in self.md.inline.ruler.__rules__ if r.name in self.RULES]:
             self.md.inline.ruler.at(rule.name, self._recording(rule.name, rule.fn))
 
     def _recording(self, name, fn):
         def rule(state, silent):
-            start, before = state.pos, len(state.tokens)
+            start = state.pos
             ok = fn(state, silent)
-            if ok and not silent:
-                self.found.append((name, start, state.pos, state.tokens[before:]))
+            # Only a span of the text being read: an image's alt text, say, is
+            # parsed again in a state of its own, whose offsets are not its.
+            if ok and not silent and state.src is self.reading:
+                self.found.append((name, start, state.pos))
             return ok
         return rule
 
@@ -172,10 +183,14 @@ class Reader:
         heading or a table cell, without the prefixes its lines carry, such
         as a list's indent), and ``place(i)`` the position in ``text`` of
         ``source[i]``."""
-        lines = text.split("\n")
-        line_start = [0]
-        for line in lines:
-            line_start.append(line_start[-1] + len(line) + 1)
+        # Lines as markdown-it splits them: at \r\n, \r or \n.
+        lines, line_start, at = [], [], 0
+        for m in NEWLINE_RE.finditer(text):
+            lines.append(text[at:m.start()])
+            line_start.append(at)
+            at = m.end()
+        lines.append(text[at:])
+        line_start.append(at)
         out = []
         self._read(text, [(i, 0) for i in range(len(lines))], lines, line_start, out)
         return out
@@ -189,14 +204,21 @@ class Reader:
                 name = token.info.strip()
                 if not (name.startswith("{") and "}" in name) or name[1:name.index("}")] in LITERAL_DIRECTIVES:
                     continue  # a literal block, or a directive whose body is not prose
-                inner = self._place(token.content.split("\n")[:-1], where[token.map[0] + 1:token.map[1]], lines, taken)
+                rows = where[token.map[0] + 1:token.map[1]]
+                inner = self._place(token.content.split("\n")[:-1], rows, lines, taken)
                 if inner is not None:
                     self._read(token.content, inner, lines, line_start, out)
             elif token.type == "inline" and token.map:
                 content_lines = token.content.split("\n")
-                placed = self._place(content_lines, where[token.map[0]:token.map[1]], lines, taken)
+                rows = where[token.map[0]:token.map[1]]
+                placed = self._place(content_lines, rows, lines, taken)
                 if placed is None:
-                    continue  # a line not found as written: its links are left alone
+                    # A line not found as written (a table cell whose \| the
+                    # parser unescaped, say): its links are left alone, and so
+                    # is the rest of its rows, since where it ends is unknown.
+                    for row, _ in rows:
+                        taken[row] = len(lines[row])
+                    continue
                 offsets = [0]
                 for cl in content_lines:
                     offsets.append(offsets[-1] + len(cl) + 1)
@@ -206,9 +228,10 @@ class Reader:
                     row, col = placed[k]
                     return line_start[row] + col + (i - offsets[k])
 
-                self.found = []
+                self.found, self.reading = [], token.content
                 self.md.inline.parse(token.content, self.md, env, [])
-                out.extend((kind, token.content, start, end, place) for kind, start, end, _ in self.found)
+                self.reading = None
+                out.extend((kind, token.content, start, end, place) for kind, start, end in self.found)
 
     @staticmethod
     def _place(content_lines, where, lines, taken):
@@ -229,15 +252,19 @@ class Reader:
 
 
 def reader_for(config):
-    """A Reader with the MyST extensions a site's ``_config.yml`` enables."""
-    extensions = ((config.get("parse") or {}).get("myst_enable_extensions")) or DEFAULT_EXTENSIONS
+    """A Reader with the MyST extensions a site's ``_config.yml`` enables, or
+    Jupyter Book's own when it names none."""
+    extensions = (config.get("parse") or {}).get("myst_enable_extensions")
+    if not isinstance(extensions, list):
+        extensions = DEFAULT_EXTENSIONS
     return Reader(tuple(e for e in extensions if isinstance(e, str)))
 
 
 def rewrite_links(text: str, carried, prefixes, hosts, reader=None):
     """``(text, n)``: ``text`` with its prose links to a lecture in ``carried``
-    made links within the site, and how many it rewrote. An edit is made only
-    where ``text`` holds, at the place found, what the parser read there."""
+    made links within the site, and how many it rewrote. Each edit lies within
+    one line the parser read, found there as written; the check below holds
+    once a line is placed, and keeps an edit from spanning lines."""
     reader = reader or Reader()
     url_re = re.compile(r"\]\((?P<base>" + "|".join(re.escape(h) for h in hosts) + r")(?P<name>[\w-]+)\.html\)$") if hosts else None
     edits = {}

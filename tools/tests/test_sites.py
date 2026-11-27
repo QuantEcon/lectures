@@ -599,6 +599,13 @@ def test_rewrite_links_reads_prose_alone(text, expected, n):
     (f"- a list item with a link\n  that runs {ADDRESS} on", 1),
     (f"> quoted {ADDRESS}\n> more", 1),
     (f"1. a\n   ```{{tip}}\n   {ADDRESS}\n   ```", 1),
+    # From the review of QuantEcon/lectures#109: a link in an image's alt
+    # text, which the parser reads in a state of its own, does not stand for
+    # one at that place; a page with a lone \r, which markdown-it reads as a
+    # line break; and the same with \r\n.
+    (f"`{ADDRESS}` ![x{ADDRESS}](f.png)", 0),
+    (f"x\rt\n{ADDRESS}\n<div>{ADDRESS}\n</div>", 1),
+    (f"x\r\nt\r\n{ADDRESS}\r\n", 1),
 ])
 def test_rewrite_links_makes_the_links_markdown_it_makes(text, n):
     tool = stage_site_module()
@@ -608,6 +615,47 @@ def test_rewrite_links_makes_the_links_markdown_it_makes(text, n):
     assert count == n
     assert new.count("[it](carried.md)") == n
     assert new.count(ADDRESS) == text.count(ADDRESS) - n
+
+
+@pytest.mark.parametrize("end", ["\r", "\r\n"])
+def test_rewrite_links_reads_lines_as_markdown_it_ends_them(end):
+    tool = stage_site_module()
+    text = f"x{end}t\n{ADDRESS}\n<div>{ADDRESS}\n</div>"
+
+    # The link in the paragraph is rewritten; the one in raw HTML is not.
+    assert tool.rewrite_links(text, {"carried"}, set(), HOSTS) == (
+        f"x{end}t\n[it](carried.md)\n<div>{ADDRESS}\n</div>", 1)
+
+
+def test_rewrite_links_leaves_a_table_row_alone_after_a_cell_it_cannot_place():
+    tool = stage_site_module()
+    # markdown-it unescapes the \| in the first cell, so that cell's text is
+    # not in the line as written. Rather than look for the next cell inside
+    # it, the rest of the row is left alone: the literal's address, and the
+    # real link after it too.
+    text = f"| a | b |\n|---|---|\n| `a\\|{ADDRESS}` | {ADDRESS} |"
+
+    assert tool.rewrite_links(text, {"carried"}, set(), HOSTS) == (text, 0)
+
+
+def test_reader_for_takes_a_sites_extensions_or_jupyter_books():
+    tool = stage_site_module()
+
+    def enabled(config):
+        md = tool.reader_for(config).md
+        return {r.name for r in md.block.ruler.__rules__ if r.enabled} | {r.name for r in md.inline.ruler.__rules__ if r.enabled}
+
+    assert {"colon_fence", "math_block", "linkify"} <= enabled({})  # Jupyter Book's own
+    assert "deflist" in enabled({"parse": {"myst_enable_extensions": ["deflist"]}})
+    assert "colon_fence" not in enabled({"parse": {"myst_enable_extensions": []}})
+
+
+def test_rewrite_links_needs_linkify_it_for_linkify_and_says_so(monkeypatch):
+    tool = stage_site_module()
+    monkeypatch.setitem(sys.modules, "linkify_it", None)
+
+    with pytest.raises(ValueError, match="needs linkify-it-py"):
+        tool.Reader(("linkify",))
 
 
 def test_rewrite_links_needs_myst_parser_and_says_so(monkeypatch):
