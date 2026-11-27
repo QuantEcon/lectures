@@ -171,9 +171,10 @@ name: site-build
 # request touches lectures/, so it is built like any other (its run waits for
 # a maintainer's approval, as that workflow notes), and so is its merge.
 #
-# WHAT IT DOES NOT DO (yet): publish; post a preview (QuantEcon/actions#336); build on mystmd
-# (QuantEcon/actions#337); build only the sites whose toc lists a changed
-# file; share one execution cache between the sites of one environment.
+# WHAT IT DOES NOT DO (yet): publish; post a preview (QuantEcon/actions#336);
+# build on mystmd (QuantEcon/actions#337); build only the sites whose toc
+# lists a changed file; share one execution cache between the sites of one
+# environment.
 
 on:
   push:
