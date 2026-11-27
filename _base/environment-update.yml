@@ -4,10 +4,10 @@
 # environment.yml names), with QuantEcon/actions' setup-environment
 # (`environment-update:`), which runs `conda env update` on the environment
 # the build runs in. The site-build workflow builds with it every site whose
-# site.yml sets `environment: base`: intro, advanced, programming and
-# intermediate so far (QuantEcon/lectures#84, #86, #87 and the pull request
-# that brought intermediate through); dp moves after its first shadow
-# comparison (QuantEcon/project-monorepo#26, QuantEcon/project-monorepo#80).
+# site.yml sets `environment: base`, every site but dp: intro, advanced,
+# programming, intermediate and jax (QuantEcon/lectures#84, #86, #87, #99 and
+# #105); dp moves after its first shadow comparison
+# (QuantEcon/project-monorepo#26, QuantEcon/project-monorepo#80).
 # Each such site's execution cache is keyed on this file's entries, not on
 # its comments or blank lines: a change to an entry executes every page of
 # those sites again, and a change to a comment executes none.

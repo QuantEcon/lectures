@@ -46,7 +46,7 @@ The repository is organised around three layers.
 | --- | --- | --- |
 | `mirror/<key>/` | A machine-reconstructed, verbatim copy of each live series' allowlisted paths, pinned to an exact commit. Never hand-edited, never committed. | Reconstructed on demand; **gitignored**. |
 | `lectures/` | The curated **pool** — every canonical lecture, held exactly once. | 335 lectures and their assets, each recorded in [`sync/ledger.yml`](sync/ledger.yml). |
-| `sites/` | One folder per published site, each a thin **configuration** that selects and orders lectures from the pool. | One per series, six in all, with the rules in [`sites/README.md`](sites/README.md); [`site-build.yml`](.github/workflows/site-build.yml) builds `dp`, `intro`, `advanced`, `programming` and `intermediate` from them, and `jax` follows. |
+| `sites/` | One folder per published site, each a thin **configuration** that selects and orders lectures from the pool. | One per series, six in all, with the rules in [`sites/README.md`](sites/README.md); [`site-build.yml`](.github/workflows/site-build.yml) builds all six from them. |
 
 ### Why we commit only SHAs, not the mirror
 
@@ -91,7 +91,7 @@ The repository is organised around three layers.
     ├── sync.yml         # daily job that refreshes the pinned SHAs (pin-only)
     ├── drift-check.yml  # runs after sync: drift issues, refresh PR (pool and bibliography), red on a pool edit or a refused refresh; the assets report
     ├── pool-check.yml   # runs tools/pool-check and the _shared/ index check on pull requests that touch the pool or the sites
-    ├── site-build.yml   # builds the sites it names (five today) from the pool, strict, HTML; keeps the HTML and the execution report; publishes nothing
+    ├── site-build.yml   # builds the sites it names (all six) from the pool, strict, HTML; keeps the HTML and the execution report; publishes nothing
     └── tests.yml        # runs tools/tests on pull requests
 ```
 
@@ -206,7 +206,7 @@ Each published site is a folder in [`sites/`](sites/README.md): its series' `_co
 | `tools/stage-site dp` | Copy dp's pages, `_static/` files, `_config.yml` and `_toc.yml` into `lectures/`, recording what it copied in `_build/stage-site.json`. It refuses, copying nothing, if any destination already exists, or if a site is staged already. |
 | `tools/stage-site --clean dp` | Remove them again: only the files the record lists, each while its bytes are still the ones copied, then the record. |
 
-[`site-build.yml`](.github/workflows/site-build.yml) builds the sites it names, today `dp`, `intro`, `advanced`, `programming` and `intermediate`, on every push to `main` and pull request that touches the pool, the sites, the tools a build runs or the environment list in `_base/`, on demand and twice a week. Each site is a leg of one matrix whose runner, container and time limit [`tools/site-matrix`](tools/site-matrix) reads from `site.yml`. A leg builds in the site's environment: dp in its series' own image, with the site's `extra_packages` (jax) installed; intro and advanced in the full image with the one package list, `_base/environment-update.yml`, applied; programming and intermediate on a RunsOn GPU machine with the same base and list, and `jax[cuda13]` (see [`_base/README.md`](_base/README.md)). It stages the site, builds its HTML strictly (`-n -W --keep-going`) with `QuantEcon/actions`' `build-lectures`, restoring and, on `main`, saving the site's own execution cache; builds the notebooks and the PDF the site publishes, strictly too, from the cache the HTML build filled; and keeps the HTML, with those in it, and the execution report as artefacts. It publishes nothing. A pull request only restores the cache, so until `main` has saved one, every build executes every page.
+[`site-build.yml`](.github/workflows/site-build.yml) builds the sites it names, today all six, on every push to `main` and pull request that touches the pool, the sites, the tools a build runs or the environment list in `_base/`, on demand and twice a week. Each site is a leg of one matrix whose runner, container and time limit [`tools/site-matrix`](tools/site-matrix) reads from `site.yml`. A leg builds in the site's environment: dp in its series' own image, with the site's `extra_packages` (jax) installed; intro and advanced in the full image with the one package list, `_base/environment-update.yml`, applied; programming, intermediate and jax on a RunsOn GPU machine with the same base and list, and `jax[cuda13]` (see [`_base/README.md`](_base/README.md)). It stages the site, builds its HTML strictly (`-n -W --keep-going`) with `QuantEcon/actions`' `build-lectures`, restoring and, on `main`, saving the site's own execution cache; builds the notebooks and the PDF the site publishes, strictly too, from the cache the HTML build filled; and keeps the HTML, with those in it, and the execution report as artefacts. It publishes nothing. A pull request only restores the cache, so until `main` has saved one, every build executes every page.
 
 | Command | What it does |
 | --- | --- |
