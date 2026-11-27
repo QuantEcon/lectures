@@ -13,7 +13,11 @@ name: publish
 # is a test double, never the live series: dp's is QuantEcon/test-lecture-dp,
 # for the publishing rehearsal (QuantEcon/project-monorepo#27). A site with no
 # entry is refused before anything is built. Nothing here runs on its own: a
-# person dispatches it.
+# person dispatches it. A test double is sent the site as its cutover will
+# publish it, built from the site's own _config.yml, so its pages keep the live
+# site's addresses: their canonical links (html.baseurl), their Download
+# Notebook links (download_nb_path) and their links to the site itself. The
+# rehearsal checks the release, the deploy and the rollback, not those links.
 #
 # THE TAG is `publish-<YYYY-MM-DD>`, the day in Sydney, as the series' own
 # publish tags are named; a second publish that day takes `b`, then `c` and
@@ -41,6 +45,13 @@ on:
 
 permissions:
   contents: read
+
+# bash, as `shell: bash` runs it, -eo pipefail: a failed command in a pipeline
+# (the tag lookup's `gh api`) fails its step. A step without `shell` would get
+# `bash -e`, with no pipefail.
+defaults:
+  run:
+    shell: bash
 
 concurrency:
   group: publish-${{ inputs.site }}
