@@ -93,19 +93,29 @@ name: site-build
 #      executed or taken from the cache, with status, seconds, kernel and
 #      which of the two; it runs after a failed build too;
 #   8. for a site whose site.yml publishes notebooks, builds them with the
-#      jupyter builder, strict, from the cache step 6 filled, and copies
-#      them into _build/html/_notebooks/, which was made before step 6 so
+#      jupyter builder, strict, reusing step 6's Sphinx environment (it
+#      re-reads no page, so executes none), and copies them into
+#      _build/html/_notebooks/, which was made before step 6 so
 #      the theme shows each page's "Download Notebook" button (the series
 #      build the notebooks first; the order here keeps the HTML build the
 #      one that executes, which step 7 counts);
-#   9. keeps the HTML (html-<key>, green builds only, 7 days) and the report
+#   9. for a site whose site.yml publishes a pdf, installs ImageMagick and
+#      builds it the same way, with the pdflatex builder, strict, reusing the
+#      same environment, and copies it into _build/html/_pdf/, also made
+#      before step 6, so the theme shows the "Book (PDF)" link; then checks
+#      the PDF the pages link to is there;
+#   10. keeps the HTML (html-<key>, green builds only, 7 days) and the report
 #      with the environment record (execution-status-<key>) as artefacts. A
 #      failed build also uploads build-lectures' failure reports
 #      (execution-reports-<key>): each failed page's traceback, from
 #      _build/html/reports. It does not hold the site's execution cache,
 #      which build-lectures looks for at _build/.jupyter_cache, not at the
 #      site's path;
-#   10. saves the execution cache (below), and unstages the site.
+#   11. saves the execution cache (below) when the HTML build succeeded, even
+#      if a later step failed: the cache is the HTML build's alone, so a
+#      failed notebooks or PDF build (a LaTeX error, an apt mirror down while
+#      ImageMagick installs) does not throw a cold build's execution away;
+#      and unstages the site.
 #
 # THE EXECUTION CACHE is actions/cache, one per site, at the path every
 # site's _config.yml names, _build/jupyter_cache/<key> (pool-check rule 7).
@@ -169,10 +179,10 @@ name: site-build
 # request touches lectures/, so it is built like any other (its run waits for
 # a maintainer's approval, as that workflow notes), and so is its merge.
 #
-# WHAT IT DOES NOT DO (yet): publish; build the PDF (HTML and the notebooks
-# for now); post a preview (QuantEcon/actions#336); build on mystmd
-# (QuantEcon/actions#337); build only the sites whose toc lists a changed
-# file; share one execution cache between the sites of one environment.
+# WHAT IT DOES NOT DO (yet): publish; post a preview (QuantEcon/actions#336);
+# build on mystmd (QuantEcon/actions#337); build only the sites whose toc
+# lists a changed file; share one execution cache between the sites of one
+# environment.
 
 on:
   push:
@@ -458,16 +468,23 @@ jobs:
         id: start
         run: echo "since=$(date +%s)" >> "$GITHUB_OUTPUT"
 
-      # A site that publishes notebooks (site.yml's publishes) gets the theme's
-      # "Download Notebook" button, which quantecon-book-theme shows on a page
-      # when _build/html/_notebooks/ is a folder as it renders it. The series
-      # build the notebooks first and copy them in; here the folder is made
-      # first, the HTML is built, and the notebooks are built and copied in
-      # after (below). So the HTML build stays the one that executes the
-      # pages, which the execution report counts and the cache save needs.
-      - name: Make room for the site's notebooks
-        if: ${{ contains(matrix.site.publishes, 'notebooks') }}
-        run: mkdir -p _build/html/_notebooks
+      # A site that publishes notebooks or a PDF (site.yml's publishes) gets
+      # the theme's "Download Notebook" button and its "Book (PDF)" link,
+      # which quantecon-book-theme shows on a page when _build/html/_notebooks/
+      # or _build/html/_pdf/ is a folder as it renders it. The series build
+      # the PDF and the notebooks first and copy them in; here the folders are
+      # made first, the HTML is built, and the notebooks and the PDF are built
+      # and copied in after (below). So the HTML build stays the one that
+      # executes the pages, which the execution report counts and the cache
+      # save needs.
+      - name: Make room for the site's downloads
+        if: ${{ contains(matrix.site.publishes, 'notebooks') || contains(matrix.site.publishes, 'pdf') }}
+        env:
+          NOTEBOOKS: ${{ contains(matrix.site.publishes, 'notebooks') }}
+          PDF: ${{ contains(matrix.site.publishes, 'pdf') }}
+        run: |
+          if [ "$NOTEBOOKS" = true ]; then mkdir -p _build/html/_notebooks; fi
+          if [ "$PDF" = true ]; then mkdir -p _build/html/_pdf; fi
 
       # With the site staged, lectures/ holds its _config.yml and _toc.yml, so
       # jb needs no --config or --toc. extra-args replaces build-lectures'
@@ -504,7 +521,8 @@ jobs:
           if-no-files-found: warn
 
       # After the execution report, which reads the environment this build
-      # rewrites. Every page comes from the cache the HTML build just filled.
+      # rewrites. It reuses the HTML build's Sphinx environment ("0 added, 0
+      # changed, 0 removed"), so it re-reads and executes no page.
       - name: Build the site's notebooks (strict)
         id: notebooks
         if: ${{ contains(matrix.site.publishes, 'notebooks') }}
@@ -534,6 +552,70 @@ jobs:
           fi
           echo "$n notebooks copied into _build/html/_notebooks/"
 
+      # The PDF, as the series build theirs (pdflatex builder, -n -W), reusing
+      # the HTML build's Sphinx environment, so it re-reads and executes no
+      # page. LaTeX comes
+      # with the full image and with the GPU machine image, as the GPU
+      # series' own PDF builds use it.
+      # Jupyter Book's PDF build turns on sphinx.ext.imgconverter, which runs
+      # ImageMagick's `convert` on an image LaTeX can't take, an SVG or a GIF:
+      # today the remote SVG logo that MyST's html_image makes an image of on
+      # three of jax's pages, without which the strict build fails on "Unable
+      # to run the image conversion command". Neither the full image nor the
+      # GPU machine image has it, so every leg that builds a PDF installs it,
+      # as lecture-jax's workflows do: as root in a container, with sudo on
+      # the GPU machine.
+      - name: Install ImageMagick for the PDF
+        if: ${{ contains(matrix.site.publishes, 'pdf') }}
+        run: |
+          if ! command -v convert >/dev/null; then
+            sudo=""
+            if [ "$(id -u)" -ne 0 ]; then sudo=sudo; fi
+            $sudo apt-get -o DPkg::Lock::Timeout=600 update
+            $sudo apt-get -o DPkg::Lock::Timeout=600 install -y imagemagick
+          fi
+          convert -version | sed -n 1p
+
+      - name: Build the site's PDF (strict)
+        id: pdf
+        if: ${{ contains(matrix.site.publishes, 'pdf') }}
+        uses: quantecon/actions/build-lectures@v0
+        with:
+          builder: pdflatex
+          source-dir: lectures
+          extra-args: -W --keep-going
+          upload-failure-reports: true
+          failure-artifact-name: execution-reports-${{ matrix.site.key }}-pdf
+
+      # As the series copy theirs (cp _build/latex/*.pdf _build/html/_pdf).
+      # The theme links each page to /_pdf/<latex targetname>.pdf, so every
+      # such link the pages carry is checked against the files copied. The
+      # link is from the domain's root: right for the five PDF sites, which
+      # are served at their domain's root, but a PDF site served under a path
+      # (as dp is, which publishes none) would pass this check and 404.
+      - name: Copy the PDF into the site
+        if: ${{ steps.pdf.outcome == 'success' }}
+        run: |
+          shopt -s nullglob
+          pdfs=(_build/latex/*.pdf)
+          if [ "${#pdfs[@]}" -eq 0 ]; then
+            echo "::error::the pdflatex build wrote no PDF under _build/latex"
+            exit 1
+          fi
+          cp "${pdfs[@]}" _build/html/_pdf/
+          links=$({ grep -rhoE 'href="/_pdf/[^"]+\.pdf"' --include='*.html' _build/html || true; } | sed -e 's#^href="/##' -e 's#"$##' | sort -u)
+          if [ -z "$links" ]; then
+            echo "::error::no page links to a PDF under /_pdf/, so the theme did not see _build/html/_pdf/"
+            exit 1
+          fi
+          while IFS= read -r link; do
+            if [ ! -f "_build/html/$link" ]; then
+              echo "::error::the pages link to /$link, which the build did not make (it made: ${pdfs[*]})"
+              exit 1
+            fi
+          done <<< "$links"
+          echo "${#pdfs[@]} PDF(s) copied into _build/html/_pdf/; the pages link to /$(paste -sd ' ' - <<< "$links")"
+
       - name: Keep the site's HTML
         uses: actions/upload-artifact@v4
         with:
@@ -542,7 +624,7 @@ jobs:
           retention-days: 7
 
       - name: Save the execution cache
-        if: success() && github.ref == 'refs/heads/main' && steps.report.outputs.executed != '0'
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && github.ref == 'refs/heads/main' && steps.report.outputs.executed != '0' }}
         uses: actions/cache/save@v4
         with:
           path: ${{ steps.site.outputs.cache-path }}
