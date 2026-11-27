@@ -246,10 +246,10 @@ The move is planned in ten stages: reorganise first on today's toolchain (Jupyte
 6. **The order of cutovers:** `dp` (a publishing-only move, since it owns no lectures), programming, a go/no-go review, then intro, intermediate, advanced and JAX.
 7. **A relay** that keeps the translated editions fed from here.
 8. **Page history**, carried across at each cutover.
-9. **mystmd builds alongside**, publishing nothing: since 2026-11-27, after the cutovers, as the second phase's first step.
+9. **mystmd, after the cutovers**: every site built on mystmd, publishing nothing, as the second phase's first step (2026-11-27; it was "mystmd builds alongside", from stage 3).
 10. **One engine switch** for all series and editions together, after full testing: the end of the second phase.
 
-As of 2026-11-27, stage 3 is under way. Every site builds from the pool in CI on Jupyter Book 1, with its notebooks and PDF, and the publishing pathway comes next.
+As of 2026-11-27, stage 3, the publishing pathway, is under way. Every site builds from the pool in CI on Jupyter Book 1, with its notebooks and, for the five that publish one, its PDF. Publishing through a release in each series' repository, and its rehearsal on the test double, come next.
 
 ## Licence
 
