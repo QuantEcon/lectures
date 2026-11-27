@@ -502,6 +502,8 @@ ADDRESS = "[it](https://python.quantecon.org/carried.html)"
     # Nor out of a list item into the next, or past a target line.
     (f"- a `stray\n- {ADDRESS} and `x`", "- a `stray\n- [it](carried.md) and `x`", 1),
     (f"1. a `stray\n   still the item `\n2. {ADDRESS}", f"1. a `stray\n   still the item `\n2. [it](carried.md)", 1),
+    # An item's indented next lines continue it, literal and all.
+    (f"- a `literal\n  {ADDRESS}` here", None, 0),
     (f"A `stray\n(here)=\n{ADDRESS} and `x`", "A `stray\n(here)=\n[it](carried.md) and `x`", 1),
     # A literal opens at a whole run: two backticks are not a single one's opener.
     (f"``x {ADDRESS} `", "``x [it](carried.md) `", 1),
@@ -616,17 +618,18 @@ def test_stage_site_clean_never_writes_through_a_link_left_in_a_lectures_place(m
     repo = links_repo(make_repo)
     assert repo.stage_site("--local-links", "dp").returncode == 0
     # A link that leads out of the pool is refused before anything is touched;
-    # this one stays inside it, to another lecture.
-    target = repo.pool("solow.md")
+    # this one stays inside it, to a file holding the bytes staging wrote, so
+    # only the link check stops the original being written through it.
+    target = write(repo.pool("staged-copy.md"), repo.pool("linking.md").read_bytes())
     before = target.read_bytes()
     repo.pool("linking.md").unlink()
-    repo.pool("linking.md").symlink_to("solow.md")
+    repo.pool("linking.md").symlink_to("staged-copy.md")
 
     res = repo.stage_site("--clean", "dp")
 
+    assert target.read_bytes() == before
     assert res.returncode == 0, res.stdout
     assert "kept lectures/linking.md as it is: it is no longer a plain file" in res.stdout
-    assert target.read_bytes() == before
     assert (repo.root / "_build/stage-site-originals/linking.md").is_file()
 
 

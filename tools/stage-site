@@ -152,10 +152,13 @@ def prose_mask(text: str) -> str:
     (``{note}``) is prose, read again for the blocks inside it. An inline
     literal is read a paragraph at a time: it may run across a line break, but
     not across a blank line, a fenced block or a line ``BLOCK_START_RE``
-    matches (a list item, a heading, a target and the like). Lines CommonMark
-    would also part, a blockquote's start, table rows or HTML, are read
-    together, which can only mask more: a link there is at worst left as it
-    is, linking out, as every link was before ``--local-links``.
+    matches (a list item, a heading, a target and the like). That is near
+    CommonMark's reading, not the same: lines it would part (a blockquote's
+    start, table rows, HTML, a list item nested four spaces deep) are read
+    together, and a line such as ``2024. Then`` is parted, so a stray
+    backtick can pair with the wrong one, masking a link or leaving one inside
+    a literal to be rewritten. No pool lecture has a literal that holds a
+    link, as markdown-it reads them (2026-11-27).
 
     It reads fences as tools/pool-check's ``prose()`` does, so the two tools
     agree on what is prose; like it, it reads a ``{math}`` body, a block
