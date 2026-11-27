@@ -68,10 +68,14 @@ too, so a site's folder stays true to the pool it is built from:
   inventories in sorted name order, the last one winning, so a label that two
   mapped sites define sends the link to whichever name sorts last, whatever
   the lecture meant. A prefixed link (``{ref}`intermediate:lln_mr```) names
-  its site and is not counted; a mapped site outside the pool (a retired
-  site) is not read. Labels are targets (``(name)=``, ``:name:``) and a
-  directive's ``:label:`` (a proof's or an exercise's), compared without
-  case, as Sphinx does.
+  its site and is not counted. A mapped name is read as the pool site whose
+  ``site.yml`` ``url`` its address is (intro's ``pyprog`` is programming);
+  one outside the pool (a retired site) is not read. Labels are what a
+  ``{ref}`` reaches: targets (``(name)=``, ``:name:``) and an exercise's or a
+  solution's ``:label:`` (sphinx-exercise's), compared without case, as
+  Sphinx does. A ``{math}`` block's ``:label:`` is an equation's (``{eq}``)
+  and a ``{prf:...}`` directive's is sphinx-proof's (``{prf:ref}``), and
+  ``{ref}`` reaches neither (QuantEcon/lecture-python-intro#883).
 * ``site-yml``      — ``site.yml`` has the fields the build reads, each with
   a valid value (``SITE_FIELDS``), and no other field but the optional ones
   (``SITE_OPTIONAL_FIELDS``: ``extra_packages``, pip requirements the build
@@ -183,6 +187,11 @@ EQUATION_RES = (
     re.compile(r"^[ \t]*:label:[ \t]*(\S+)[ \t]*\r?$", re.M),
     re.compile(r"\$\$[ \t]*\(([^()\s]+)\)[ \t]*\r?$", re.M),
 )
+# ref-target: the directives whose ``:label:`` a ``{ref}`` reaches
+# (sphinx-exercise's), a directive's opening fence, and its option lines.
+REF_LABEL_DIRECTIVES = ("exercise", "exercise-start", "solution", "solution-start")
+DIRECTIVE_RE = re.compile(r"^[ \t]*(?:`{3,}|~{3,}|:{3,})\{([\w:-]+)\}")
+OPTION_RE = re.compile(r"^[ \t]*:[\w-]+:")
 
 # A site's folder: the files the build reads, beside its pages and _static/.
 SITE_FILES = ("_config.yml", "_toc.yml", "site.yml")
@@ -726,23 +735,40 @@ def check_sites(sites: Path, pool: Path, lectures, series_keys, consumers):
 
 
 def site_texts(sites: Path, pool: Path, key: str, files):
-    """``{where: prose}`` for each page a site's ``_toc.yml`` lists, read from the
-    site's folder or the pool; a page that is in neither is the ``site-toc``
-    rule's, and left out."""
+    """``{where: (text, prose)}`` for each page a site's ``_toc.yml`` lists,
+    read from the site's folder or the pool; a page that is in neither is the
+    ``site-toc`` rule's, and one that is not UTF-8 text another rule's, and
+    each is left out."""
     texts = {}
     for name in dict.fromkeys(files):
         for where, path in ((f"sites/{key}/{name}.md", sites / key / f"{name}.md"), (f"lectures/{name}.md", pool / f"{name}.md")):
             if path.is_file():
-                texts[where] = prose(path.read_text(encoding="utf-8"))
+                try:
+                    text = path.read_text(encoding="utf-8")
+                except UnicodeDecodeError:
+                    break
+                texts[where] = (text, prose(text))
                 break
     return texts
 
 
-def defined_labels(text: str):
-    """The labels a page defines that a ``{ref}`` reaches, lower-cased."""
+def defined_labels(text: str, prose_text: str):
+    """The labels a page defines that a ``{ref}`` reaches, lower-cased:
+    targets, and the ``:label:`` of a directive in ``REF_LABEL_DIRECTIVES``.
+    ``prose_text`` is ``prose(text)``, line for line, so a line in a code
+    block is not read; the directive is read from ``text``, whose fences
+    ``prose()`` blanks."""
     labels = set()
-    for pattern in (*TARGET_RES, EQUATION_RES[0]):
-        labels |= {m.group(1).lower() for m in pattern.finditer(text)}
+    for pattern in TARGET_RES:
+        labels |= {m.group(1).lower() for m in pattern.finditer(prose_text)}
+    lines = text.split("\n")
+    for m in EQUATION_RES[0].finditer(prose_text):
+        i = prose_text.count("\n", 0, m.start()) - 1
+        while i >= 0 and OPTION_RE.match(lines[i]):
+            i -= 1
+        directive = DIRECTIVE_RE.match(lines[i]) if i >= 0 else None
+        if directive and directive.group(1) in REF_LABEL_DIRECTIVES:
+            labels.add(m.group(1).lower())
     return labels
 
 
@@ -751,25 +777,39 @@ def check_ref_targets(sites: Path, pool: Path):
     pool's mapped sites define (``ref-target``), as ``(tag, message)``."""
     import yaml
 
-    texts, labels, mappings = {}, {}, {}
+    texts, labels, mappings, addresses = {}, {}, {}, {}
     if not sites.is_dir():
         return []
+    unreadable = (OSError, UnicodeDecodeError, yaml.YAMLError, KeyError, TypeError, AttributeError)
+    for entry in sorted(p for p in sites.iterdir() if p.is_dir() and not p.name.startswith(".")):
+        key = entry.name
+        try:
+            url = yaml.safe_load((entry / "site.yml").read_text(encoding="utf-8"))["url"]
+        except unreadable:
+            continue  # the site rules report a folder they cannot read
+        if isinstance(url, str):
+            addresses[url.rstrip("/") + "/"] = key
     for entry in sorted(p for p in sites.iterdir() if p.is_dir() and not p.name.startswith(".")):
         key = entry.name
         try:
             toc = yaml.safe_load((entry / "_toc.yml").read_text(encoding="utf-8"))
             config = yaml.safe_load((entry / "_config.yml").read_text(encoding="utf-8"))
             mapping = config["sphinx"]["config"].get("intersphinx_mapping") or {}
-        except (OSError, yaml.YAMLError, KeyError, TypeError, AttributeError):
+        except unreadable:
             continue  # the site rules report a folder they cannot read
         if not isinstance(mapping, dict):
             continue
         texts[key] = site_texts(sites, pool, key, toc_entries(toc)[0])
-        labels[key] = set().union(*map(defined_labels, texts[key].values()))
-        mappings[key] = [k for k in mapping if isinstance(k, str)]
+        labels[key] = set().union(*(defined_labels(*pair) for pair in texts[key].values()))
+        # {name: the pool site its address is, or None}, in the mapping's order.
+        mappings[key] = {}
+        for name, value in mapping.items():
+            if isinstance(name, str):
+                address = value[0] if isinstance(value, (list, tuple)) and value else value
+                mappings[key][name] = addresses.get(address.rstrip("/") + "/") if isinstance(address, str) else None
     problems, seen = [], set()
     for key, pages in texts.items():
-        for where, text in pages.items():
+        for where, (_, text) in pages.items():
             for m in REF_RE.finditer(text):
                 titled = DOC_TITLED_RE.match(m.group(2))
                 target = (titled.group(1) if titled else m.group(2)).strip()
@@ -779,14 +819,17 @@ def check_ref_targets(sites: Path, pool: Path):
                 label = target.lower()
                 if label in labels[key] or (key, where, label) in seen:
                     continue
-                on = sorted(k for k in mappings[key] if k != key and label in labels.get(k, ()))
+                on = sorted(name for name, site in mappings[key].items()
+                            if site not in (None, key) and label in labels.get(site, ()))
                 if len(on) > 1:
                     seen.add((key, where, label))
+                    shown = [name if mappings[key][name] == name else f"{name} (sites/{mappings[key][name]})"
+                             for name in on]
                     problems.append((
                         "ref-target",
                         f"sites/{key}: {where} links to {{ref}}`{label}`, which no page of the site defines and "
-                        f"{len(on)} of the sites it maps do ({', '.join(on)}): intersphinx takes the name that sorts "
-                        f"last, `{on[-1]}`, whichever the lecture meant; name the site with a prefix "
+                        f"{len(on)} of the sites it maps do ({', '.join(shown)}): intersphinx takes the name that "
+                        f"sorts last, `{on[-1]}`, whichever the lecture meant; name the site with a prefix "
                         f"({{ref}}`<site>:{label}`) or rename one of the labels",
                     ))
     return problems

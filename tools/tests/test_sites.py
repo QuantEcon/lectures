@@ -287,6 +287,62 @@ def test_a_ref_with_one_target_is_clean(make_repo, link, intro_label, dp_label):
     assert res.returncode == 0, res.stdout
 
 
+def block(directive, label, body="A statement."):
+    return f"```{{{directive}}}\n:label: {label}\n{body}\n```"
+
+
+@pytest.mark.parametrize("intro_label, dp_label", [
+    # The site's own equation or proof named lln_mr is no {ref} target, so it
+    # does not settle the link.
+    ("(lln_mr)=", block("math", "lln_mr", "x = 1")),
+    ("(lln_mr)=", block("prf:theorem", "lln_mr")),
+    # An exercise's label is one, on a mapped site as a target is.
+    (block("exercise", "lln_mr"), None),
+    (block("exercise-start", "lln_mr"), None),
+])
+def test_only_a_label_a_ref_reaches_counts(make_repo, intro_label, dp_label):
+    repo = ref_repo(make_repo, "{ref}`lln_mr`", intro_label=intro_label, dp_label=dp_label)
+
+    res = repo.pool_check()
+
+    assert res.returncode == 1, res.stdout
+    assert [p.split(":")[0] for p in problems(res)] == ["[ref-target] sites/dp"]
+
+
+@pytest.mark.parametrize("intro_label", [block("math", "lln_mr", "x = 1"), block("prf:theorem", "lln_mr")])
+def test_a_mapped_sites_equation_or_proof_label_is_no_second_target(make_repo, intro_label):
+    repo = ref_repo(make_repo, "{ref}`lln_mr`", intro_label=intro_label)
+
+    res = repo.pool_check()
+
+    assert res.returncode == 0, res.stdout
+
+
+def test_a_mapped_name_is_read_as_the_pool_site_at_its_address(make_repo):
+    repo = ref_repo(make_repo, "{ref}`lln_mr`")
+    write(repo.root / "sites/dp/_config.yml", config("dp", mapping={"intro": [URL, None], "pyint": [INT, None]}))
+
+    res = repo.pool_check()
+
+    assert problems(res) == [
+        "[ref-target] sites/dp: lectures/perm.md links to {ref}`lln_mr`, which no page of the site defines and "
+        "2 of the sites it maps do (intro, pyint (sites/intermediate)): intersphinx takes the name that sorts last, "
+        "`pyint`, whichever the lecture meant; name the site with a prefix ({ref}`<site>:lln_mr`) or rename one of "
+        "the labels",
+    ]
+
+
+def test_a_toc_that_is_not_utf8_is_a_finding_not_an_internal_error(make_repo):
+    repo = ref_repo(make_repo, "{ref}`lln_mr`")
+    write(repo.root / "sites/dp/_toc.yml", b"root: intro\n\xff\n")
+
+    res = repo.pool_check()
+
+    assert res.returncode == 1, res.stdout + res.stderr
+    assert "internal error" not in res.stderr
+    assert any(p.startswith("[site-layout] sites/dp/_toc.yml could not be read as YAML") for p in problems(res))
+
+
 def test_the_branding_a_config_names_is_in_the_site(make_repo):
     repo = pool_repo(make_repo)
     site = make_site(repo)
