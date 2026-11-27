@@ -499,6 +499,12 @@ ADDRESS = "[it](https://python.quantecon.org/carried.html)"
     (f"`x`\n{ADDRESS}", "`x`\n[it](carried.md)", 1),
     (f"`unclosed\n\n{ADDRESS}`", "`unclosed\n\n[it](carried.md)`", 1),
     (f"# A `heading\n{ADDRESS}`", "# A `heading\n[it](carried.md)`", 1),
+    # Nor out of a list item into the next, or past a target line.
+    (f"- a `stray\n- {ADDRESS} and `x`", "- a `stray\n- [it](carried.md) and `x`", 1),
+    (f"1. a `stray\n   still the item `\n2. {ADDRESS}", f"1. a `stray\n   still the item `\n2. [it](carried.md)", 1),
+    (f"A `stray\n(here)=\n{ADDRESS} and `x`", "A `stray\n(here)=\n[it](carried.md) and `x`", 1),
+    # A literal opens at a whole run: two backticks are not a single one's opener.
+    (f"``x {ADDRESS} `", "``x [it](carried.md) `", 1),
 ])
 def test_rewrite_links_reads_prose_alone(text, expected, n):
     tool = stage_site_module()
@@ -568,9 +574,13 @@ def test_stage_site_local_links_rewrites_only_a_file_directly_in_the_pool(make_r
     outside = write(repo.root / "notes" / "outside.md", lecture_text("Outside", LINKING))
     nested = write(repo.pool("sub/page.md"), lecture_text("Nested", LINKING))
     (repo.pool("linked.md")).symlink_to(Path("..") / "notes" / "outside.md")
+    # Two more names for linking.md: a link to it in the pool, and a case
+    # variant, which a disk that ignores case (macOS's) finds.
+    (repo.pool("alias.md")).symlink_to("linking.md")
+    original = repo.pool("linking.md").read_bytes()
     write(repo.root / "sites/dp/_toc.yml", "\n".join([
         "format: jb-book", "root: intro", "chapters:", "- file: carried", "- file: linking",
-        "- file: ../notes/outside", "- file: sub/page", "- file: linked", "",
+        "- file: ../notes/outside", "- file: sub/page", "- file: linked", "- file: alias", "- file: LINKING", "",
     ]))
     before = {p: p.read_bytes() for p in (outside, nested)}
 
@@ -581,7 +591,10 @@ def test_stage_site_local_links_rewrites_only_a_file_directly_in_the_pool(make_r
     assert {p: p.read_bytes() for p in (outside, nested)} == before
     record = json.loads((repo.root / "_build" / "stage-site.json").read_text())
     assert [r["path"] for r in record["rewritten"]] == ["lectures/linking.md"]
-    assert repo.stage_site("--clean", "dp").returncode == 0
+    res = repo.stage_site("--clean", "dp")
+    assert res.returncode == 0
+    assert "1 lecture(s) put back" in res.stdout
+    assert repo.pool("linking.md").read_bytes() == original
 
 
 def test_stage_site_clean_leaves_a_lecture_removed_since_staging_removed(make_repo):
@@ -592,11 +605,29 @@ def test_stage_site_clean_leaves_a_lecture_removed_since_staging_removed(make_re
     res = repo.stage_site("--clean", "dp")
 
     assert res.returncode == 0, res.stdout
-    assert ("kept lectures/linking.md as it is: it is no longer a file, so its original is left at "
+    assert ("kept lectures/linking.md as it is: it is no longer a plain file, so its original is left at "
             "_build/stage-site-originals/linking.md") in res.stdout
     assert not repo.pool("linking.md").exists()
     assert (repo.root / "_build/stage-site-originals/linking.md").is_file()
     assert not (repo.root / "_build" / "stage-site.json").exists()
+
+
+def test_stage_site_clean_never_writes_through_a_link_left_in_a_lectures_place(make_repo):
+    repo = links_repo(make_repo)
+    assert repo.stage_site("--local-links", "dp").returncode == 0
+    # A link that leads out of the pool is refused before anything is touched;
+    # this one stays inside it, to another lecture.
+    target = repo.pool("solow.md")
+    before = target.read_bytes()
+    repo.pool("linking.md").unlink()
+    repo.pool("linking.md").symlink_to("solow.md")
+
+    res = repo.stage_site("--clean", "dp")
+
+    assert res.returncode == 0, res.stdout
+    assert "kept lectures/linking.md as it is: it is no longer a plain file" in res.stdout
+    assert target.read_bytes() == before
+    assert (repo.root / "_build/stage-site-originals/linking.md").is_file()
 
 
 def test_site_yml_local_links_is_true_or_false_and_only_a_consumers(make_repo):

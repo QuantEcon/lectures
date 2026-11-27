@@ -102,12 +102,18 @@ OLD_ADDRESSES = ("https://python-intro.quantecon.org/",)
 FENCE_RE = re.compile(r"^[ \t]*(`{3,}|~{3,})(.*)$")
 CODE_DIRECTIVES = ("{code-cell}", "{code-block}", "{code}", "{sourcecode}", "{literalinclude}")
 # In a paragraph: a role's text ({doc}`...`), kept, or an inline literal,
-# masked. Either may run across a line break.
-BACKTICKS_RE = re.compile(r"(\{[\w:+-]+\})?(`+)(.*?)(?<!`)\2(?!`)", re.DOTALL)
-# A paragraph ends at a blank line, a heading, or a block that is not prose.
-HEADING_RE = re.compile(r"^ {0,3}#{1,6}(\s|$)")
-# A pool lecture's name, as both link forms spell it.
-LECTURE_NAME_RE = re.compile(r"[\w-]+")
+# masked, each from a whole run of backticks to a run of the same length.
+# Either may run across a line break.
+BACKTICKS_RE = re.compile(r"(\{[\w:+-]+\})?(?<!`)(`+)(?!`)(.*?)(?<!`)\2(?!`)", re.DOTALL)
+# A line that starts a block of its own, so ends the paragraph before it: a
+# list item, which its next lines continue, or a line that is a block by
+# itself and ends the paragraph after it too: a heading, a target
+# ((name)=), a cell break (+++), a $$ line, a ::: fence, or a thematic break
+# or setext underline.
+BLOCK_START_RE = re.compile(
+    r"^ {0,3}(?:(?P<item>[-+*]\s|\d{1,9}[.)]\s)|#{1,6}(?:\s|$)|\([^()\s]+\)=\s*$|\+\+\+|\$\$|:{3,}"
+    r"|([-*_=])[ \t]*(?:\2[ \t]*){2,}$)"
+)
 DOC_LINK_RE = re.compile(r"\{doc\}`(?P<text>[^`<>]*<)?(?P<prefix>[\w.-]+):(?P<name>[\w-]+)(?P<close>>?)`")
 
 
@@ -144,8 +150,12 @@ def prose_mask(text: str) -> str:
     of code cells and literal fenced blocks (backtick or tilde, plain or with a
     language), ``%`` comment lines and inline literals. A directive's own body
     (``{note}``) is prose, read again for the blocks inside it. An inline
-    literal is read a paragraph at a time, as CommonMark reads one: it may run
-    across a line break, but not a blank line, a heading or a fenced block.
+    literal is read a paragraph at a time: it may run across a line break, but
+    not across a blank line, a fenced block or a line ``BLOCK_START_RE``
+    matches (a list item, a heading, a target and the like). Lines CommonMark
+    would also part, a blockquote's start, table rows or HTML, are read
+    together, which can only mask more: a link there is at worst left as it
+    is, linking out, as every link was before ``--local-links``.
 
     It reads fences as tools/pool-check's ``prose()`` does, so the two tools
     agree on what is prose; like it, it reads a ``{math}`` body, a block
@@ -183,12 +193,15 @@ def prose_mask(text: str) -> str:
             i = end + 1
 
     read(0, len(lines))
+    def block(line):
+        m = BLOCK_START_RE.match(line)
+        return None if not m else "item" if m.group("item") else "line"
+
     paragraphs = []
     for i in prose_rows:
         if not lines[i].strip():
             continue
-        if paragraphs and paragraphs[-1][-1] == i - 1 and not HEADING_RE.match(lines[i]) \
-                and not HEADING_RE.match(lines[i - 1]):
+        if paragraphs and paragraphs[-1][-1] == i - 1 and block(lines[i]) is None and block(lines[i - 1]) != "line":
             paragraphs[-1].append(i)
         else:
             paragraphs.append([i])
@@ -259,12 +272,13 @@ def local_link_plan(key: str, site: Path):
     hosts = sorted(h if h.endswith("/") else h + "/" for h in hosts if isinstance(h, str) and h.startswith("https://"))
     toc = yaml.safe_load((site / "_toc.yml").read_text(encoding="utf-8"))
     own = {p.stem for p in site.glob("*.md")}
-    # Only a name of a file directly in the pool: an entry such as
-    # ../sites/dp/page, a subfolder's page or a link that leads out is not a
-    # pool lecture, so nothing outside lectures/ is ever rewritten.
-    pool = POOL_DIR.resolve()
-    carried = {f for f in toc_files(toc) if f not in own and LECTURE_NAME_RE.fullmatch(f)
-               and (POOL_DIR / f"{f}.md").is_file() and (POOL_DIR / f"{f}.md").resolve().parent == pool}
+    # Only a name in the pool's own listing, spelled as it is there, of a file
+    # that is not a link: an entry such as ../sites/dp/page, a subfolder's
+    # page, a link that leads out, or a second name for a lecture (a link to
+    # it, or a case variant on a disk that ignores case) is not a pool
+    # lecture, so nothing outside lectures/ is rewritten, and no lecture twice.
+    lectures = {p.stem for p in POOL_DIR.iterdir() if p.suffix == ".md" and p.is_file() and not p.is_symlink()}
+    carried = {f for f in toc_files(toc) if f not in own and f in lectures}
     plan = []
     for name in sorted(carried):
         path = POOL_DIR / f"{name}.md"
@@ -408,8 +422,9 @@ def clean(key: str) -> int:
         if not original.is_file():
             kept.append(f"kept {rel} as it is: its original, {item['original']}, is gone, so it cannot be put back")
             continue
-        if not dst.is_file():
-            kept.append(f"kept {rel} as it is: it is no longer a file, so its original is left at {item['original']}")
+        if dst.is_symlink() or not dst.is_file():
+            kept.append(f"kept {rel} as it is: it is no longer a plain file, so its original is left at "
+                        f"{item['original']}")
             continue
         if digest(dst) != item["sha256"]:
             kept.append(f"kept {rel}: its bytes are not the ones staging wrote; its original is left at {item['original']}")
