@@ -22,10 +22,13 @@ order given, or an empty line when none is. Each path is placed by the first rul
   when the ledger records no lecture for it;
 * ``sites/<key>/...``: site ``<key>``; another file under ``sites/``
   (``sites/README.md``) reaches none;
+* ``tools/sync`` and ``sync/state.yml`` (``SERIES_INPUTS``): the sites
+  whose ``site.yml`` sets ``environment: series`` (the default), here or
+  at the base, since only those run tools/sync; today, dp alone;
 * any other path under ``lectures/`` (the bibliography among them, which
-  every site cites), and every other input of the build (``BUILD_INPUTS``,
-  the paths of site-build.yml's filter outside the pool and the sites):
-  every site;
+  every site cites), and every other input of the build (``BUILD_INPUTS``:
+  with ``SERIES_INPUTS``, the paths of site-build.yml's filter outside the
+  pool and the sites): every site;
 * any other path (documentation, the tests, another workflow): none.
 
 So a path under ``lectures/`` that cannot be placed builds every site:
@@ -60,17 +63,18 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 LEDGER = "sync/ledger.yml"
-# site-build.yml's path filter, outside lectures/ and sites/: a change to
-# any of these can change every site's build. Keep the two lists in step
-# (tools/tests checks they are).
+# site-build.yml's path filter, outside lectures/ and sites/, is these two
+# lists together. Keep them in step (tools/tests checks they are). A change
+# to a build input can change every site's build; a change to a series
+# input only the build of a site in the series environment, since only that
+# runs tools/sync, which alone reads sync/state.yml.
+SERIES_INPUTS = ("tools/sync", "sync/state.yml")
 BUILD_INPUTS = (
-    "tools/sync",
     "tools/stage-site",
     "tools/site-matrix",
     "tools/execution-report",
     "tools/affected-sites",
     "sync/manifest.yml",
-    "sync/state.yml",
     "_base/**",
     ".github/workflows/site-build.yml",
 )
@@ -112,17 +116,23 @@ def is_lecture(slug: str, base: str | None) -> bool:
 
 
 def readings(keys, base):
-    """``(lists, users)``: each site's listed pages, and each shared asset's
-    lectures, from the working tree and, with ``base``, that commit too."""
+    """``(lists, users, series)``: each site's listed pages, each shared
+    asset's lectures, and the sites in the series environment, from the
+    working tree and, with ``base``, that commit too. A site with no
+    ``site.yml`` in either counts as series, the default."""
     import yaml
 
     lists = {key: set() for key in keys}
     users: dict[str, set[str]] = {}
+    environments: dict[str, set[str]] = {key: set() for key in keys}
     for at in (None, base) if base else (None,):
         for key in keys:
             text = read(f"sites/{key}/_toc.yml", at)
             if text is not None:
                 lists[key] |= toc_files(yaml.safe_load(text))
+            text = read(f"sites/{key}/site.yml", at)
+            if text is not None:
+                environments[key].add((yaml.safe_load(text) or {}).get("environment", "series"))
         text = read(LEDGER, at)
         ledger = (yaml.safe_load(text) if text else None) or {}
         for name, entry in ledger.items():
@@ -131,10 +141,11 @@ def readings(keys, base):
             slug = name.removeprefix("lectures/").removesuffix(".md")
             for asset in entry.get("assets") or []:
                 users.setdefault(asset, set()).add(slug)
-    return lists, users
+    series = {key for key, found in environments.items() if not found or "series" in found}
+    return lists, users, series
 
 
-def affected(paths, keys, lists, users, base=None) -> list[str]:
+def affected(paths, keys, lists, users, series, base=None) -> list[str]:
     reached = set()
     every = set(keys)
 
@@ -157,6 +168,8 @@ def affected(paths, keys, lists, users, base=None) -> list[str]:
         elif parts[0] == "sites":
             if len(parts) > 2 and parts[1] in every:
                 reached.add(parts[1])
+        elif path in SERIES_INPUTS:
+            reached |= series
         elif any(fnmatch.fnmatch(path, pattern) for pattern in BUILD_INPUTS):
             reached |= every
     return [key for key in keys if key in reached]
@@ -182,11 +195,11 @@ def main(argv=None):
     import yaml
 
     try:
-        lists, users = readings(args.keys, args.base)
+        lists, users, series = readings(args.keys, args.base)
     except yaml.YAMLError as exc:
-        sys.stderr.write(f"error: a contents list or the ledger cannot be parsed: {exc}\n")
+        sys.stderr.write(f"error: a contents list, a site.yml or the ledger cannot be parsed: {exc}\n")
         return 2
-    print(" ".join(affected(paths, args.keys, lists, users, args.base)))
+    print(" ".join(affected(paths, args.keys, lists, users, series, args.base)))
     return 0
 
 

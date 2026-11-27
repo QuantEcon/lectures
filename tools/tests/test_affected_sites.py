@@ -28,13 +28,17 @@ def repo(make_repo):
     """Three sites: dp lists `shared` and `dp_only`; intro lists `shared` and
     `intro_only`; intermediate lists `int_only` in a part, with `int_nested`
     a section under it. The ledger records one `_shared` asset used by
-    `dp_only` and `int_only`."""
+    `dp_only` and `int_only`. dp builds in the series environment (its
+    site.yml leaves it to the default), the others in base."""
     r = make_repo(["intro", "intermediate", "dp"])
     write(r.root / "sites/dp/_toc.yml", toc("intro", "shared", "dp_only"))
     write(r.root / "sites/intro/_toc.yml", toc("intro", "shared", "intro_only"))
     write(r.root / "sites/intermediate/_toc.yml",
           "format: jb-book\nroot: intro\nparts:\n- caption: One\n  chapters:\n  - file: int_only\n"
           "    sections:\n    - file: int_nested\n")
+    write(r.root / "sites/dp/site.yml", "runner: ubuntu-latest\n")
+    write(r.root / "sites/intro/site.yml", "runner: ubuntu-latest\nenvironment: base\n")
+    write(r.root / "sites/intermediate/site.yml", "runner: gpu\nenvironment: base\n")
     for slug in ("intro", "shared", "dp_only", "intro_only", "int_only", "int_nested"):
         write(r.root / f"lectures/{slug}.md", f"# {slug}\n")
     write(r.root / "sync/ledger.yml", yaml.safe_dump({
@@ -105,7 +109,10 @@ def history(repo):
     (["tools/stage-site"], KEYS),
     (["_base/environment-update.yml"], KEYS),
     ([".github/workflows/site-build.yml"], KEYS),
-    (["sync/state.yml"], KEYS),
+    (["sync/manifest.yml"], KEYS),
+    # tools/sync and the pins it reads: the sites in the series environment.
+    (["sync/state.yml"], ["dp"]),
+    (["tools/sync"], ["dp"]),
     # Anything else: none.
     (["README.md", "tools/tests/test_sites.py", ".github/workflows/tests.yml", "sync/ledger.yml"], []),
     ([], []),
@@ -136,6 +143,20 @@ def test_a_shared_asset_dropped_from_the_ledger_still_builds_the_sites_of_its_ol
 
     assert sites(repo, "lectures/_static/_shared/two/fig.png") == ["intermediate"]
     assert sites(repo, "lectures/_static/_shared/two/fig.png", base=base) == ["dp", "intermediate"]
+
+
+def test_a_pin_refresh_still_builds_a_site_the_change_moves_out_of_the_series_environment(history):
+    repo, base = history
+    write(repo.root / "sites/dp/site.yml", "runner: ubuntu-latest\nenvironment: base\n")
+
+    assert sites(repo, "sync/state.yml") == []
+    assert sites(repo, "sync/state.yml", base=base) == ["dp"]
+
+
+def test_a_site_with_no_site_yml_counts_as_series(repo):
+    (repo.root / "sites/intro/site.yml").unlink()
+
+    assert sites(repo, "sync/state.yml") == ["dp", "intro"]
 
 
 def test_a_renamed_lecture_builds_the_sites_that_list_its_old_name(history):
@@ -205,7 +226,7 @@ def test_build_inputs_are_the_workflows_path_filter_outside_the_pool_and_the_sit
     on = workflow().get("on", workflow().get(True))
     for event in ("push", "pull_request"):
         paths = [p for p in on[event]["paths"] if not p.startswith(("lectures/", "sites/"))]
-        assert sorted(paths) == sorted(tool.BUILD_INPUTS), event
+        assert sorted(paths) == sorted(tool.BUILD_INPUTS + tool.SERIES_INPUTS), event
 
 
 def test_the_workflow_lists_renamed_paths_by_both_names_and_separates_them_with_nul():
@@ -221,9 +242,20 @@ def test_the_workflow_builds_every_site_for_a_change_to_the_rule_itself():
     assert "grep -qzxF -e tools/affected-sites -e .github/workflows/site-build.yml" in run
 
 
-def test_a_push_is_compared_with_the_last_push_build_on_main_that_succeeded():
-    run = choose_step()["run"]
+def test_a_push_is_compared_with_the_last_build_on_main_that_succeeded():
+    steps = workflow()["jobs"]["sites"]["steps"]
+    last = next(s for s in steps if s.get("id") == "last")
 
-    assert "branch=main&event=push&status=success&per_page=1" in run
+    assert last["if"] == "${{ github.event_name == 'push' }}"
+    assert "branch=main&status=success" in last["run"]
+    assert 'select(.event == "push" or .event == "schedule" or .event == "workflow_dispatch")' in last["run"]
+    assert steps.index(last) < steps.index(choose_step())
+    assert choose_step()["env"]["LAST_GOOD"] == "${{ steps.last.outputs.sha }}"
     assert "github.event.before" not in str(choose_step())
     assert workflow()["jobs"]["sites"]["permissions"] == {"contents": "read", "actions": "read"}
+
+
+def test_only_the_query_step_holds_the_token():
+    for step in workflow()["jobs"]["sites"]["steps"]:
+        if "GH_TOKEN" in (step.get("env") or {}):
+            assert step.get("id") == "last", step.get("name")
