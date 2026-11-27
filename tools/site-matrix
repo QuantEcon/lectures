@@ -40,8 +40,8 @@ order named, each with the job settings its ``sites/<key>/site.yml`` decides.
   ``cell_timeout`` in whole minutes, the longest a single cell may run, plus
   ``BUILD_ALLOWANCE`` minutes for the rest of a build from an empty cache. dp's
   own weekly build from an empty cache took 22 to 41 minutes in
-  October-November 2026, and intermediate's, the longest, 128 to 139 minutes
-  in November 2026.
+  October-November 2026, jax's 20 to 23, and intermediate's, the longest, 128
+  to 139 minutes in November 2026.
 * ``extra_packages``: the pip requirements ``site.yml`` lists for the leg to
   install before the build (``[]`` without the field), and
   ``packages_hash``, the first 16 hex digits of the SHA-256 of them, one per
@@ -80,7 +80,7 @@ SITES_DIR = ROOT / "sites"
 KEY_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]*")
 # Runner class -> (its leg, RunsOn's machine spec), for the classes with a leg.
 # The GPU machine image is QuantEcon's quantecon_ubuntu2404, by the AMI ID the
-# GPU series give it in their own .github/runs-on.yml (read 2026-11-22):
+# GPU series give it in their own .github/runs-on.yml (last read 2026-11-27):
 # RunsOn reads that file from a repository's default branch, and
 # QuantEcon/lectures has none. When the series move to a new machine image,
 # this follows, and the sites' execution caches start again.
