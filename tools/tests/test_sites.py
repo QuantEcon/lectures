@@ -245,6 +245,119 @@ def test_the_cross_reference_rules_hold_in_every_site(make_repo):
     ]
 
 
+INT = "https://python.quantecon.org/"
+
+
+def ref_repo(make_repo, link, intro_label="(lln_mr)=", dp_label=None):
+    """intro and intermediate each publish a lecture; dp, a consumer, maps
+    both and carries a third that links to a label with ``link``."""
+    repo = pool_repo(make_repo, series=("intro", "intermediate", "dp"), consumers=("dp",))
+    write(repo.pool("lln_a.md"), lecture_text("LLN, intro", intro_label + "\n## The law"))
+    write(repo.pool("lln_b.md"), lecture_text("LLN, intermediate", "(lln_mr)=\n## The law"))
+    body = (dp_label + "\n## Here\n\n" if dp_label else "") + f"See {link}."
+    write(repo.pool("perm.md"), lecture_text("Permanent income", body))
+    make_site(repo, key="intro", toc=("intro", "lln_a"))
+    make_site(repo, key="intermediate", toc=("intro", "lln_b"),
+              cfg=config("intermediate", url=INT), meta=site_yml(url=INT))
+    make_site(repo, key="dp", toc=("intro", "perm"),
+              cfg=config("dp", mapping={"intro": [URL, None], "intermediate": [INT, None]}))
+    return repo
+
+
+def test_a_ref_that_leaves_its_site_for_a_label_two_mapped_sites_define_is_reported(make_repo):
+    repo = ref_repo(make_repo, "{ref}`our discussion <lln_mr>`")
+
+    res = repo.pool_check()
+
+    assert res.returncode == 1
+    assert problems(res) == [
+        "[ref-target] sites/dp: lectures/perm.md links to {ref}`lln_mr`, which no page of the site defines and "
+        "2 of the sites it maps do (intermediate, intro): intersphinx takes the name that sorts last, `intro`, "
+        "whichever the lecture meant; name the site with a prefix ({ref}`<site>:lln_mr`) or rename one of the labels",
+    ]
+
+
+@pytest.mark.parametrize("link, intro_label, dp_label", [
+    ("{ref}`lln_mr`", "(lln_mr_intro)=", None),                 # one mapped site defines it
+    ("{ref}`see <intermediate:lln_mr>`", "(lln_mr)=", None),   # a prefix names the site
+    ("{ref}`LLN_MR`", "(lln_mr)=", "(lln_mr)="),               # the site defines it, in any case
+    ("`{ref}`lln_mr``", "(lln_mr)=", None),                    # an inline literal is not a link
+])
+def test_a_ref_with_one_target_is_clean(make_repo, link, intro_label, dp_label):
+    repo = ref_repo(make_repo, link, intro_label=intro_label, dp_label=dp_label)
+
+    res = repo.pool_check()
+
+    assert res.returncode == 0, res.stdout
+
+
+def block(directive, label, body="A statement."):
+    return f"```{{{directive}}}\n:label: {label}\n{body}\n```"
+
+
+@pytest.mark.parametrize("intro_label, dp_label", [
+    # The site's own equation or proof named lln_mr is no {ref} target, so it
+    # does not settle the link.
+    ("(lln_mr)=", block("math", "lln_mr", "x = 1")),
+    ("(lln_mr)=", block("prf:theorem", "lln_mr")),
+    # An exercise's label is one, on a mapped site as a target is.
+    (block("exercise", "lln_mr"), None),
+    (block("exercise-start", "lln_mr"), None),
+])
+def test_only_a_label_a_ref_reaches_counts(make_repo, intro_label, dp_label):
+    repo = ref_repo(make_repo, "{ref}`lln_mr`", intro_label=intro_label, dp_label=dp_label)
+
+    res = repo.pool_check()
+
+    assert res.returncode == 1, res.stdout
+    assert [p.split(":")[0] for p in problems(res)] == ["[ref-target] sites/dp"]
+
+
+@pytest.mark.parametrize("intro_label", [block("math", "lln_mr", "x = 1"), block("prf:theorem", "lln_mr")])
+def test_a_mapped_sites_equation_or_proof_label_is_no_second_target(make_repo, intro_label):
+    repo = ref_repo(make_repo, "{ref}`lln_mr`", intro_label=intro_label)
+
+    res = repo.pool_check()
+
+    assert res.returncode == 0, res.stdout
+
+
+def test_a_mapped_name_is_read_as_the_pool_site_at_its_address(make_repo):
+    repo = ref_repo(make_repo, "{ref}`lln_mr`")
+    write(repo.root / "sites/dp/_config.yml", config("dp", mapping={"intro": [URL, None], "pyint": [INT, None]}))
+
+    res = repo.pool_check()
+
+    assert problems(res) == [
+        "[ref-target] sites/dp: lectures/perm.md links to {ref}`lln_mr`, which no page of the site defines and "
+        "2 of the sites it maps do (intro, pyint (sites/intermediate)): intersphinx takes the name that sorts last, "
+        "`pyint`, whichever the lecture meant; name the site with a prefix ({ref}`<site>:lln_mr`) or rename one of "
+        "the labels",
+    ]
+
+
+def test_a_toc_that_is_not_utf8_is_a_finding_not_an_internal_error(make_repo):
+    repo = ref_repo(make_repo, "{ref}`lln_mr`")
+    write(repo.root / "sites/dp/_toc.yml", b"root: intro\n\xff\n")
+
+    res = repo.pool_check()
+
+    assert res.returncode == 1, res.stdout + res.stderr
+    assert "internal error" not in res.stderr
+    assert any(p.startswith("[site-layout] sites/dp/_toc.yml could not be read as YAML") for p in problems(res))
+
+
+def test_a_sites_own_page_that_is_not_utf8_is_a_finding(make_repo):
+    repo = ref_repo(make_repo, "{ref}`lln_mr`")
+    write(repo.root / "sites/dp/intro.md", b"# dp\n\xff\n")
+
+    res = repo.pool_check()
+
+    assert res.returncode == 1, res.stdout + res.stderr
+    assert any(p.startswith("[site-layout] sites/dp/intro.md is not UTF-8 text") for p in problems(res)), res.stdout
+    assert any(p.startswith("[ref-target] sites/dp: lectures/perm.md") for p in problems(res))
+
+
 def test_the_branding_a_config_names_is_in_the_site(make_repo):
     repo = pool_repo(make_repo)
     site = make_site(repo)
