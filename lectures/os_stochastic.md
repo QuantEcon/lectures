@@ -857,3 +857,7 @@ plt.show()
 ```{solution-end}
 ```
 
+
+```{code-cell} ipython3
+raise ValueError("planted to test that site-build builds only the sites a change reaches (QuantEcon/lectures#111); never merged")
+```
