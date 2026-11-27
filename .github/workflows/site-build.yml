@@ -15,8 +15,11 @@ name: site-build
 # those its change reaches (tools/affected-sites, from the changed paths: a
 # lecture builds the sites that list it, a site's own file that site, and any
 # other input of the build every site; the owner's choice of 2026-11-27 for
-# main); the schedule and a manual run build them all, and when a change
-# reaches none the build job is skipped. The first job reads each named site's
+# main). A pull request is compared with its base, and a push with the last
+# push build on main that succeeded, so a run cancelled or failed leaves
+# nothing unbuilt (the first job's step says how). The schedule and a manual
+# run build them all, and when a change reaches none the build job is
+# skipped. The first job reads each named site's
 # sites/<key>/site.yml (tools/site-matrix) and hands the matrix to the second:
 # the runner class gives runs-on, the environment (below) the container and
 # the file the cache key hashes, the job's time limit is site.yml's
@@ -25,9 +28,7 @@ name: site-build
 # what the leg installs. The ubuntu-latest class builds in a container, the
 # GPU class (g4dn.2xlarge) on a RunsOn machine with no container (THE GPU LEG,
 # below). `fail-fast: false`, so one site's failure never stops another's
-# build. Every push or pull request that touches lectures/ or sites/ builds
-# every named site, whatever it changed: no site is skipped yet because its
-# toc does not reach the change.
+# build.
 #
 # THE ENVIRONMENT is site.yml's optional `environment` (sites/README.md):
 #   series (the default; dp): ghcr.io/quantecon/quantecon-build:latest, the
@@ -234,7 +235,9 @@ permissions:
 # either case GitHub keeps at most one run waiting per group, and a newer run
 # cancels the one waiting, whatever cancel-in-progress says: of three quick
 # pushes to main, the first builds, the second is cancelled while it waits,
-# and the third builds when the first has finished.
+# and the third builds when the first has finished. The third takes in the
+# second's change, since a push is compared with the last push build that
+# succeeded, not with the commit before it.
 concurrency:
   group: site-build-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -253,6 +256,10 @@ jobs:
   sites:
     name: matrix
     runs-on: ubuntu-latest
+    # actions: read lets a push find the last push build that succeeded.
+    permissions:
+      contents: read
+      actions: read
     outputs:
       matrix: ${{ steps.matrix.outputs.matrix }}
       any: ${{ steps.matrix.outputs.any }}
@@ -265,30 +272,52 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v6
 
-      # A pull request is compared with its base, a push with the commit
-      # before it; the schedule and a manual run take every site. The base is
-      # fetched alone: a diff of two commits needs their trees, not history.
+      # A pull request is compared with its base. A push is compared with the
+      # head of the last push build on main that succeeded, not the commit
+      # before it: a run cancelled while it waits (above) or by hand, or one
+      # that failed, leaves its change unbuilt, and the next push takes it
+      # in. The schedule and a manual run take every site, and so does a base
+      # that cannot be found or fetched. The diff is of two trees, so only
+      # the base is fetched, with no history. --no-renames lists a renamed
+      # file's old path as well as its new one, and -z keeps a name git
+      # would otherwise quote. A change to the rule itself (the tool or this
+      # workflow) builds every site without asking the tool.
       - name: Choose the sites the change reaches
         id: affected
         env:
           EVENT: ${{ github.event_name }}
           PR_BASE: ${{ github.event.pull_request.base.sha }}
-          BEFORE: ${{ github.event.before }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           read -ra all <<< "$SITES"
+          keys="${all[*]}"
+          base=""
           case "$EVENT" in
-            pull_request) base=$PR_BASE ;;
-            push) base=$BEFORE ;;
-            *) base="" ;;
+            pull_request)
+              base=$PR_BASE
+              why="every site: the pull request has no base" ;;
+            push)
+              runs="repos/$GITHUB_REPOSITORY/actions/workflows/site-build.yml/runs"
+              base=$(gh api "$runs?branch=main&event=push&status=success&per_page=1" \
+                --jq '.workflow_runs[0].head_sha // empty') || base=""
+              why="every site: no push build on main that succeeded can be read" ;;
+            *)
+              why="every site ($EVENT)" ;;
           esac
-          if [ -z "$base" ] || [ "$base" = 0000000000000000000000000000000000000000 ]; then
-            keys="${all[*]}"
-            why="every site ($EVENT)"
-          else
-            git fetch --no-tags --depth=1 origin "$base"
-            changed=$(git diff --name-only "$base" HEAD)
-            keys=$(uv run --script tools/affected-sites --base "$base" "${all[@]}" <<< "$changed")
-            why="the sites the change reaches, from $(wc -l <<< "$changed" | tr -d ' ') changed path(s) against ${base:0:7}"
+          if [ -n "$base" ]; then
+            if ! git fetch --no-tags --depth=1 origin "$base"; then
+              why="every site: the base ${base:0:7} cannot be fetched"
+            else
+              changed="$RUNNER_TEMP/changed-paths"
+              git diff --no-renames --name-only -z "$base" HEAD > "$changed"
+              n=$(tr -cd '\0' < "$changed" | wc -c | tr -d ' ')
+              if grep -qzxF -e tools/affected-sites -e .github/workflows/site-build.yml "$changed"; then
+                why="every site: the change, $n path(s) against ${base:0:7}, touches the rule itself"
+              else
+                keys=$(uv run --script tools/affected-sites -z --base "$base" "${all[@]}" < "$changed")
+                why="the sites the change reaches, from $n changed path(s) against ${base:0:7}"
+              fi
+            fi
           fi
           echo "keys=$keys" >> "$GITHUB_OUTPUT"
           {

@@ -6,13 +6,17 @@
 """tools/affected-sites — the sites a change can affect, so the site build
 builds only those (QuantEcon/project-monorepo#77).
 
-Reads the changed paths, one per line on stdin, as ``git diff --name-only``
-prints them, and prints the keys of the sites to build: those of the keys
-given that a changed path reaches, space-separated, in the order given, or
-an empty line when none is. Each path is placed by the first rule it meets:
+Reads the changed paths on stdin, one per line, or NUL-separated with
+``-z`` as ``git diff --no-renames --name-only -z`` prints them (a rename
+must show its old path as well as its new, and a NUL list keeps a name git
+would quote as written), and prints the keys of the sites to build: those
+of the keys given that a changed path reaches, space-separated, in the
+order given, or an empty line when none is. Each path is placed by the first rule it meets:
 
 * ``lectures/<slug>.md`` and ``lectures/_static/<slug>/...``: every site
-  whose ``_toc.yml`` lists ``<slug>``;
+  whose ``_toc.yml`` lists ``<slug>``; a ``_static/<dir>/`` that is no pool
+  lecture's folder (no ``lectures/<dir>.md``, here or at the base) reaches
+  every site;
 * ``lectures/_static/_shared/...``: every site that lists a lecture the
   ledger (``sync/ledger.yml``) records as using the asset, or every site
   when the ledger records no lecture for it;
@@ -24,10 +28,13 @@ an empty line when none is. Each path is placed by the first rule it meets:
   every site;
 * any other path (documentation, the tests, another workflow): none.
 
-So a path that cannot be placed builds every site: the rule errs towards
-building more. Links between sites do not widen the set: intersphinx
-resolves a link to another site against that site's published inventory,
-not against this build.
+So a path under ``lectures/`` that cannot be placed builds every site:
+the rule errs towards building more. A path outside the pool and the sites
+that is no build input reaches none. Links between sites do not widen the
+set: intersphinx resolves a link to another site against that site's
+published inventory, not against this build. The workflow does not ask
+this tool about a change to the tool itself or to the workflow: it builds
+every site, so a broken rule cannot skip its own build.
 
 With ``--base <commit>``, the contents lists and the ledger are read at
 that commit too, and a site is reached if either reading reaches it: a
@@ -36,10 +43,11 @@ the sites that listed it, so their strict builds catch a link left to it.
 
 Usage
 -----
-    git diff --name-only BASE HEAD | tools/affected-sites --base BASE dp intro advanced programming intermediate jax
+    git diff --no-renames --name-only -z BASE HEAD | tools/affected-sites -z --base BASE dp intro advanced programming intermediate jax
 
 Exit status: 0 (the keys printed, perhaps none), 2 an error (a key with no
-site folder, or a file that cannot be read).
+site folder, a ``--base`` that is no commit here, or a file that cannot be
+read or parsed).
 """
 
 from __future__ import annotations
@@ -98,6 +106,11 @@ def toc_files(toc) -> set[str]:
     return {f[:-3] if f.endswith(".md") else f for f in files}
 
 
+def is_lecture(slug: str, base: str | None) -> bool:
+    """Whether ``lectures/<slug>.md`` is a pool lecture here or at ``base``."""
+    return (ROOT / "lectures" / f"{slug}.md").is_file() or (base is not None and read(f"lectures/{slug}.md", base) is not None)
+
+
 def readings(keys, base):
     """``(lists, users)``: each site's listed pages, and each shared asset's
     lectures, from the working tree and, with ``base``, that commit too."""
@@ -121,7 +134,7 @@ def readings(keys, base):
     return lists, users
 
 
-def affected(paths, keys, lists, users) -> list[str]:
+def affected(paths, keys, lists, users, base=None) -> list[str]:
     reached = set()
     every = set(keys)
 
@@ -138,7 +151,7 @@ def affected(paths, keys, lists, users) -> list[str]:
                 lectures = users.get(rel)
                 reached |= listing(*lectures) if lectures else every
             elif parts[1] == "_static" and len(parts) > 3:
-                reached |= listing(parts[2])
+                reached |= listing(parts[2]) if is_lecture(parts[2], base) else every
             else:
                 reached |= every
         elif parts[0] == "sites":
@@ -153,14 +166,27 @@ def main(argv=None):
     parser = argparse.ArgumentParser(prog="tools/affected-sites", description=__doc__.split("\n\n")[0])
     parser.add_argument("keys", nargs="+", help="the sites the build may build, in order")
     parser.add_argument("--base", help="also read the contents lists and the ledger at this commit")
+    parser.add_argument("-z", action="store_true", help="the paths on stdin are NUL-separated")
     args = parser.parse_args(argv)
     missing = [key for key in args.keys if not (ROOT / "sites" / key / "_toc.yml").is_file()]
     if missing:
         sys.stderr.write(f"error: no sites/<key>/_toc.yml for {', '.join(missing)}\n")
         return 2
-    paths = [line.strip() for line in sys.stdin if line.strip()]
-    lists, users = readings(args.keys, args.base)
-    print(" ".join(affected(paths, args.keys, lists, users)))
+    if args.base is not None:
+        r = subprocess.run(["git", "-C", str(ROOT), "cat-file", "-e", f"{args.base}^{{commit}}"], capture_output=True)
+        if r.returncode != 0:
+            sys.stderr.write(f"error: --base {args.base} is no commit in this repository\n")
+            return 2
+    text = sys.stdin.read()
+    paths = [p for p in (text.split("\0") if args.z else text.splitlines()) if p.strip()]
+    import yaml
+
+    try:
+        lists, users = readings(args.keys, args.base)
+    except yaml.YAMLError as exc:
+        sys.stderr.write(f"error: a contents list or the ledger cannot be parsed: {exc}\n")
+        return 2
+    print(" ".join(affected(paths, args.keys, lists, users, args.base)))
     return 0
 
 
