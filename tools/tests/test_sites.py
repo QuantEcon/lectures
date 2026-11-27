@@ -343,6 +343,17 @@ def test_a_toc_that_is_not_utf8_is_a_finding_not_an_internal_error(make_repo):
     assert any(p.startswith("[site-layout] sites/dp/_toc.yml could not be read as YAML") for p in problems(res))
 
 
+def test_a_sites_own_page_that_is_not_utf8_is_a_finding(make_repo):
+    repo = ref_repo(make_repo, "{ref}`lln_mr`")
+    write(repo.root / "sites/dp/intro.md", b"# dp\n\xff\n")
+
+    res = repo.pool_check()
+
+    assert res.returncode == 1, res.stdout + res.stderr
+    assert any(p.startswith("[site-layout] sites/dp/intro.md is not UTF-8 text") for p in problems(res)), res.stdout
+    assert any(p.startswith("[ref-target] sites/dp: lectures/perm.md") for p in problems(res))
+
+
 def test_the_branding_a_config_names_is_in_the_site(make_repo):
     repo = pool_repo(make_repo)
     site = make_site(repo)
