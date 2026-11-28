@@ -12,7 +12,20 @@ name: site-build
 # WHICH SITES: the ones named in SITES below, today every folder in sites/:
 # `dp`, `intro`, `advanced`, `programming`, `intermediate` and `jax`. A site
 # joins SITES when it is brought through, so a pull request is never held up
-# by a site that has not been. The first job reads each named site's
+# by a site that has not been. A pull request or a push to main builds only
+# those its change reaches (tools/affected-sites, from the changed paths: a
+# lecture builds the sites that list it, a site's own file that site, and any
+# other input of the build every site; the owner's choice of 2026-11-27 for
+# main). A pull request is compared with its base, and a push with the last
+# build on main that succeeded, so a run cancelled or failed leaves nothing
+# unbuilt (the first job's steps say how). The schedule and a manual run
+# build them all, and when a change reaches none the build job is skipped.
+# While a site stays red on main no build there succeeds, so each push
+# builds all that has changed since the last green one: mend a red site
+# first. To re-run an older push build, re-run its failed jobs, which keeps
+# its matrix: re-running all its jobs after a later build has gone green
+# compares it with that build, and may build none of its own change. The
+# first job reads each named site's
 # sites/<key>/site.yml (tools/site-matrix) and hands the matrix to the second:
 # the runner class gives runs-on, the environment (below) the container and
 # the file the cache key hashes, the job's time limit is site.yml's
@@ -21,9 +34,7 @@ name: site-build
 # what the leg installs. The ubuntu-latest class builds in a container, the
 # GPU class (g4dn.2xlarge) on a RunsOn machine with no container (THE GPU LEG,
 # below). `fail-fast: false`, so one site's failure never stops another's
-# build. Every push or pull request that touches lectures/ or sites/ builds
-# every named site, whatever it changed: no site is skipped yet because its
-# toc does not reach the change.
+# build.
 #
 # THE ENVIRONMENT is site.yml's optional `environment` (sites/README.md):
 #   series (the default; dp): ghcr.io/quantecon/quantecon-build:latest, the
@@ -94,19 +105,30 @@ name: site-build
 #      executed or taken from the cache, with status, seconds, kernel and
 #      which of the two; it runs after a failed build too;
 #   8. for a site whose site.yml publishes notebooks, builds them with the
-#      jupyter builder, strict, from the cache step 6 filled, and copies
-#      them into _build/html/_notebooks/, which was made before step 6 so
+#      jupyter builder, strict, reusing step 6's Sphinx environment (it
+#      re-reads no page, so executes none), and copies them into
+#      _build/html/_notebooks/, which was made before step 6 so
 #      the theme shows each page's "Download Notebook" button (the series
 #      build the notebooks first; the order here keeps the HTML build the
 #      one that executes, which step 7 counts);
-#   9. keeps the HTML (html-<key>, green builds only, 7 days) and the report
+#   9. for a site whose site.yml publishes a pdf, installs ImageMagick and
+#      builds it the same way, with the pdflatex builder, strict, reusing the
+#      same environment, and copies it into _build/html/_pdf/, also made
+#      before step 6, so the theme shows the "Book (PDF)" link; then checks
+#      the PDF the pages link to is there;
+#   10. keeps the HTML (html-<key>, green builds only, 7 days) and the report
 #      with the environment record (execution-status-<key>) as artefacts. A
 #      failed build also uploads build-lectures' failure reports
 #      (execution-reports-<key>): each failed page's traceback, from
 #      _build/html/reports. It does not hold the site's execution cache,
 #      which build-lectures looks for at _build/.jupyter_cache, not at the
 #      site's path;
-#   10. saves the execution cache (below), and unstages the site.
+#   11. saves the execution cache (below) when the HTML build and the
+#      report (which counts what it executed) succeeded, even if a later step
+#      failed or the job was cancelled or timed out: the cache is the HTML
+#      build's alone, so a failed notebooks or PDF build (a LaTeX error, an
+#      apt mirror down while ImageMagick installs) does not throw a cold
+#      build's execution away; and unstages the site.
 #
 # THE EXECUTION CACHE is actions/cache, one per site, at the path every
 # site's _config.yml names, _build/jupyter_cache/<key> (pool-check rule 7).
@@ -142,14 +164,16 @@ name: site-build
 #   executed again only when its own code changes (jupyter-cache matches a
 #   page by its code cells) or the key does.
 # Pull requests only restore. A save happens on main alone (a push, a manual
-# run or the schedule), after a green build that executed at least one page;
-# a build that took every page from the cache has nothing new to save.
+# run or the schedule), after an HTML build that succeeded and executed at
+# least one page, and its execution report, whatever a later step did (step
+# 11); a build that took every page from the cache has nothing new to save.
 #
 # COLD BUILDS: until a run on main has saved a cache under the current key,
 # every build of a site executes every page (dp: about 50 pages, 20 to 40
 # minutes on ubuntu-latest). So every pull request before this workflow's
-# first green run on main builds cold, every time it runs, and so does every
-# build after the key changes, until main saves again.
+# first run on main whose HTML build and report succeed builds cold, every
+# time it runs, and so does every build after the key changes, until main
+# saves again.
 #
 # SHOWING THE CACHE RESTORE (QuantEcon/project-monorepo#25 asks for it):
 # a pull request never saves, so its own runs cannot show one. It is shown
@@ -170,11 +194,11 @@ name: site-build
 # request touches lectures/, so it is built like any other (its run waits for
 # a maintainer's approval, as that workflow notes), and so is its merge.
 #
-# WHAT IT DOES NOT DO (yet): publish (publish.yml does, with it); build the
-# PDF (HTML and the notebooks for now); post a preview
-# (QuantEcon/actions#336); build on mystmd (QuantEcon/actions#337); build
-# only the sites whose toc lists a changed file; share one execution cache
-# between the sites of one environment.
+# WHAT IT DOES NOT DO (yet): publish (publish.yml does, with it); post a
+# preview (QuantEcon/actions#336). Later, in the second phase, after the
+# cutovers (2026-11-27): build on mystmd (QuantEcon/actions#337), and share
+# one execution cache between the sites of one environment (each site keeps
+# its own until then).
 
 on:
   push:
@@ -186,6 +210,7 @@ on:
       - 'tools/stage-site'
       - 'tools/site-matrix'
       - 'tools/execution-report'
+      - 'tools/affected-sites'
       - 'sync/manifest.yml'
       - 'sync/state.yml'
       - '_base/**'
@@ -199,6 +224,7 @@ on:
       - 'tools/stage-site'
       - 'tools/site-matrix'
       - 'tools/execution-report'
+      - 'tools/affected-sites'
       - 'sync/manifest.yml'
       - 'sync/state.yml'
       - '_base/**'
@@ -224,9 +250,11 @@ permissions:
 # either case GitHub keeps at most one run waiting per group, and a newer run
 # cancels the one waiting, whatever cancel-in-progress says: of three quick
 # pushes to main, the first builds, the second is cancelled while it waits,
-# and the third builds when the first has finished.
-# A call from publish.yml has a group of its own, named for its sites, so it
-# neither waits on nor displaces a push's build of main.
+# and the third builds when the first has finished. The third takes in the
+# second's change, since a push is compared with the last build that
+# succeeded, not with the commit before it. A call from publish.yml has a
+# group of its own, named for its sites, so it neither waits on nor
+# displaces a push's build of main.
 concurrency:
   group: site-build-${{ github.ref }}${{ inputs.sites && format('-publish-{0}', inputs.sites) || '' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -245,8 +273,13 @@ jobs:
   sites:
     name: matrix
     runs-on: ubuntu-latest
+    # actions: read lets a push find the last build on main that succeeded.
+    permissions:
+      contents: read
+      actions: read
     outputs:
       matrix: ${{ steps.matrix.outputs.matrix }}
+      any: ${{ steps.matrix.outputs.any }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -256,21 +289,107 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v6
 
+      # A push is compared with the head of the last build on main that
+      # succeeded, not the commit before it: a run cancelled while it waits
+      # (above) or by hand, or one that failed, leaves its change unbuilt,
+      # and the next push takes it in. A green push, scheduled or manual
+      # build leaves every site built green at its head or unchanged since an
+      # earlier green build, so its head is a sound base. A pull request's
+      # run never is, though a fork's branch may be called main. This step
+      # alone holds the token, and runs no code from the change.
+      - name: Find the last build on main that succeeded
+        id: last
+        if: ${{ github.event_name == 'push' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          runs="repos/$GITHUB_REPOSITORY/actions/workflows/site-build.yml/runs"
+          sha=$(gh api "$runs?branch=main&status=success&per_page=50" --jq \
+            '[.workflow_runs[] | select(.event == "push" or .event == "schedule" or .event == "workflow_dispatch")][0].head_sha // empty') || sha=""
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "${sha:-none can be read}"
+
+      # A call from publish.yml builds the sites it names, whatever changed
+      # (its event is the caller's). Otherwise a pull request is compared with
+      # its base, a push with the build found above. The schedule and a
+      # manual run take every site, and so does a base that cannot be found or
+      # fetched. The diff is of two trees, so only
+      # the base is fetched, with no history. --no-renames lists a renamed
+      # file's old path as well as its new one, and -z keeps a name git
+      # would otherwise quote. A change to the rule itself (the tool or this
+      # workflow) builds every site without asking the tool.
+      - name: Choose the sites the change reaches
+        id: affected
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          LAST_GOOD: ${{ steps.last.outputs.sha }}
+          CALLED_SITES: ${{ inputs.sites }}
+        run: |
+          read -ra all <<< "$SITES"
+          keys="${all[*]}"
+          base=""
+          if [ -n "$CALLED_SITES" ]; then
+            EVENT=workflow_call
+            keys=$CALLED_SITES
+          fi
+          case "$EVENT" in
+            workflow_call)
+              why="the sites publish.yml names" ;;
+            pull_request)
+              base=$PR_BASE
+              why="every site: the pull request has no base" ;;
+            push)
+              base=$LAST_GOOD
+              why="every site: no build on main that succeeded can be read" ;;
+            *)
+              why="every site ($EVENT)" ;;
+          esac
+          if [ -n "$base" ]; then
+            if ! git fetch --no-tags --depth=1 origin "$base"; then
+              why="every site: the base ${base:0:7} cannot be fetched"
+            else
+              changed="$RUNNER_TEMP/changed-paths"
+              git diff --no-renames --name-only -z "$base" HEAD > "$changed"
+              n=$(tr -cd '\0' < "$changed" | wc -c | tr -d ' ')
+              if grep -qzxF -e tools/affected-sites -e .github/workflows/site-build.yml "$changed"; then
+                why="every site: the change, $n path(s) against ${base:0:7}, touches the rule itself"
+              else
+                keys=$(uv run --script tools/affected-sites -z --base "$base" "${all[@]}" < "$changed")
+                why="the sites the change reaches, from $n changed path(s) against ${base:0:7}"
+              fi
+            fi
+          fi
+          echo "keys=$keys" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Sites built"
+            echo ""
+            echo "${keys:-none}: $why."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "${keys:-none}: $why"
+
       - name: Read each site's site.yml
         id: matrix
         env:
-          CALLED_SITES: ${{ inputs.sites }}
+          KEYS: ${{ steps.affected.outputs.keys }}
         run: |
-          # A call from publish.yml names its sites; every other run builds SITES.
-          read -ra keys <<< "${CALLED_SITES:-$SITES}"
+          read -ra keys <<< "$KEYS"
+          if [ "${#keys[@]}" -eq 0 ]; then
+            echo "any=false" >> "$GITHUB_OUTPUT"
+            echo "matrix=[]" >> "$GITHUB_OUTPUT"
+            echo "No site is affected, so none is built."
+            exit 0
+          fi
           # The run's ID goes into a GPU site's RunsOn label.
           matrix=$(uv run --script tools/site-matrix --run-id "$GITHUB_RUN_ID" "${keys[@]}")
+          echo "any=true" >> "$GITHUB_OUTPUT"
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
           echo "$matrix"
 
   build:
     name: ${{ matrix.site.key }}
     needs: sites
+    if: ${{ needs.sites.outputs.any == 'true' }}
     strategy:
       fail-fast: false
       matrix:
@@ -292,11 +411,12 @@ jobs:
 
       # The image's Python has PyYAML, tools/sync's one dependency, and git, so
       # the tools run with `python`, with no uv to install. tools/stage-site
-      # needs PyYAML for --local-links alone, which every leg's environment
-      # has, since Jupyter Book needs it too, and tools/execution-report the
-      # standard library alone. From the staging on, the tools run in a login
-      # shell, as build-lectures runs jb: on the GPU machine only a login shell
-      # has the environment's `python`.
+      # needs PyYAML and myst-parser (with linkify-it-py) for --local-links
+      # alone, which every leg's environment has, since Jupyter Book needs
+      # them too, and tools/execution-report the standard library alone. From
+      # the staging on, the tools run in a login shell, as build-lectures runs
+      # jb: on the GPU machine only a login shell has the environment's
+      # `python`.
       - name: Reconstruct the series' files at its pin
         if: ${{ matrix.site.environment == 'series' }}
         env:
@@ -473,16 +593,23 @@ jobs:
         id: start
         run: echo "since=$(date +%s)" >> "$GITHUB_OUTPUT"
 
-      # A site that publishes notebooks (site.yml's publishes) gets the theme's
-      # "Download Notebook" button, which quantecon-book-theme shows on a page
-      # when _build/html/_notebooks/ is a folder as it renders it. The series
-      # build the notebooks first and copy them in; here the folder is made
-      # first, the HTML is built, and the notebooks are built and copied in
-      # after (below). So the HTML build stays the one that executes the
-      # pages, which the execution report counts and the cache save needs.
-      - name: Make room for the site's notebooks
-        if: ${{ contains(matrix.site.publishes, 'notebooks') }}
-        run: mkdir -p _build/html/_notebooks
+      # A site that publishes notebooks or a PDF (site.yml's publishes) gets
+      # the theme's "Download Notebook" button and its "Book (PDF)" link,
+      # which quantecon-book-theme shows on a page when _build/html/_notebooks/
+      # or _build/html/_pdf/ is a folder as it renders it. The series build
+      # the PDF and the notebooks first and copy them in; here the folders are
+      # made first, the HTML is built, and the notebooks and the PDF are built
+      # and copied in after (below). So the HTML build stays the one that
+      # executes the pages, which the execution report counts and the cache
+      # save needs.
+      - name: Make room for the site's downloads
+        if: ${{ contains(matrix.site.publishes, 'notebooks') || contains(matrix.site.publishes, 'pdf') }}
+        env:
+          NOTEBOOKS: ${{ contains(matrix.site.publishes, 'notebooks') }}
+          PDF: ${{ contains(matrix.site.publishes, 'pdf') }}
+        run: |
+          if [ "$NOTEBOOKS" = true ]; then mkdir -p _build/html/_notebooks; fi
+          if [ "$PDF" = true ]; then mkdir -p _build/html/_pdf; fi
 
       # With the site staged, lectures/ holds its _config.yml and _toc.yml, so
       # jb needs no --config or --toc. extra-args replaces build-lectures'
@@ -519,7 +646,8 @@ jobs:
           if-no-files-found: warn
 
       # After the execution report, which reads the environment this build
-      # rewrites. Every page comes from the cache the HTML build just filled.
+      # rewrites. It reuses the HTML build's Sphinx environment ("0 added, 0
+      # changed, 0 removed"), so it re-reads and executes no page.
       - name: Build the site's notebooks (strict)
         id: notebooks
         if: ${{ contains(matrix.site.publishes, 'notebooks') }}
@@ -549,6 +677,70 @@ jobs:
           fi
           echo "$n notebooks copied into _build/html/_notebooks/"
 
+      # The PDF, as the series build theirs (pdflatex builder, -n -W), reusing
+      # the HTML build's Sphinx environment, so it re-reads and executes no
+      # page. LaTeX comes with the full image and with the GPU machine image,
+      # as the GPU series' own PDF builds use it.
+      # Jupyter Book's PDF build turns on sphinx.ext.imgconverter, which runs
+      # ImageMagick's `convert` on an image LaTeX can't take, an SVG or a GIF:
+      # today the remote SVG logo that MyST's html_image makes an image of on
+      # three of jax's pages, without which the strict build fails on "Unable
+      # to run the image conversion command". Neither the full image nor the
+      # GPU machine image has it, so every leg that builds a PDF installs it,
+      # as lecture-jax's workflows do: as root in a container, with sudo on
+      # the GPU machine.
+      - name: Install ImageMagick for the PDF
+        if: ${{ contains(matrix.site.publishes, 'pdf') }}
+        run: |
+          if ! command -v convert >/dev/null; then
+            sudo=""
+            if [ "$(id -u)" -ne 0 ]; then sudo=sudo; fi
+            $sudo apt-get -o DPkg::Lock::Timeout=600 update
+            $sudo apt-get -o DPkg::Lock::Timeout=600 install -y imagemagick
+          fi
+          convert -version | sed -n 1p
+
+      - name: Build the site's PDF (strict)
+        id: pdf
+        if: ${{ contains(matrix.site.publishes, 'pdf') }}
+        uses: quantecon/actions/build-lectures@v0
+        with:
+          builder: pdflatex
+          source-dir: lectures
+          extra-args: -W --keep-going
+          upload-failure-reports: true
+          failure-artifact-name: execution-reports-${{ matrix.site.key }}-pdf
+
+      # As the series copy theirs (cp _build/latex/*.pdf _build/html/_pdf).
+      # The theme links each page to /_pdf/<latex targetname>.pdf, so every
+      # such link the pages carry is checked against the files copied. The
+      # link is from the domain's root: right for the five PDF sites, which
+      # are served at their domain's root, but a PDF site served under a path
+      # (as dp is, which publishes none) would pass this check and 404.
+      - name: Copy the PDF into the site
+        if: ${{ steps.pdf.outcome == 'success' }}
+        run: |
+          shopt -s nullglob
+          pdfs=(_build/latex/*.pdf)
+          if [ "${#pdfs[@]}" -eq 0 ]; then
+            echo "::error::the pdflatex build wrote no PDF under _build/latex"
+            exit 1
+          fi
+          cp "${pdfs[@]}" _build/html/_pdf/
+          # grep finding nothing (1) is checked below; a real error (2) fails here.
+          links=$({ grep -rhoE 'href="/_pdf/[^"]+\.pdf"' --include='*.html' _build/html || [ $? -eq 1 ]; } | sed -e 's#^href="/##' -e 's#"$##' | sort -u)
+          if [ -z "$links" ]; then
+            echo "::error::no page links to a PDF under /_pdf/, so the theme did not see _build/html/_pdf/"
+            exit 1
+          fi
+          while IFS= read -r link; do
+            if [ ! -f "_build/html/$link" ]; then
+              echo "::error::the pages link to /$link, which the build did not make (it made: ${pdfs[*]})"
+              exit 1
+            fi
+          done <<< "$links"
+          echo "${#pdfs[@]} PDF(s) copied into _build/html/_pdf/; the pages link to /$(paste -sd ' ' - <<< "$links")"
+
       - name: Keep the site's HTML
         uses: actions/upload-artifact@v4
         with:
@@ -557,7 +749,7 @@ jobs:
           retention-days: 7
 
       - name: Save the execution cache
-        if: success() && github.ref == 'refs/heads/main' && steps.report.outputs.executed != '0'
+        if: ${{ always() && steps.build.outcome == 'success' && steps.report.outcome == 'success' && github.ref == 'refs/heads/main' && steps.report.outputs.executed != '0' }}
         uses: actions/cache/save@v4
         with:
           path: ${{ steps.site.outputs.cache-path }}

@@ -96,9 +96,12 @@ jobs:
     uses: ./.github/workflows/site-build.yml
     with:
       sites: ${{ inputs.site }}
+    # A called workflow's jobs get no more than this: site-build's first job
+    # asks for actions: read, to find a push's base.
     permissions:
       contents: read
       packages: read
+      actions: read
 
   release:
     needs: [target, build]

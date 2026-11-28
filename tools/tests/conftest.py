@@ -45,7 +45,7 @@ class ScratchRepo:
         self.root = root
         self.order = list(series)
         (root / "tools").mkdir(parents=True)
-        for name in ("promote", "drift-check", "bib-merge", "pool-check", "assets-report", "stage-site"):
+        for name in ("promote", "drift-check", "bib-merge", "pool-check", "assets-report", "stage-site", "affected-sites"):
             shutil.copy(TOOLS_DIR / name, root / "tools" / name)
         (root / "sync").mkdir()
         (root / "lectures").mkdir()
@@ -106,11 +106,12 @@ class ScratchRepo:
         (self.root / "sync" / "bib.yml").write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True), encoding="utf-8")
 
     # -- running ----------------------------------------------------------- #
-    def run(self, tool, *args, env=None):
+    def run(self, tool, *args, env=None, input=None):
         return subprocess.run(
             [sys.executable, str(self.root / "tools" / tool), *args],
             capture_output=True,
             text=True,
+            input=input,
             cwd=str(self.root),
             env=None if env is None else {**os.environ, **env},
         )

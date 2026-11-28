@@ -4,6 +4,7 @@ drift-check's ``site-stale`` (QuantEcon/project-monorepo#21)."""
 import importlib.machinery
 import importlib.util
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -244,6 +245,119 @@ def test_the_cross_reference_rules_hold_in_every_site(make_repo):
     ]
 
 
+INT = "https://python.quantecon.org/"
+
+
+def ref_repo(make_repo, link, intro_label="(lln_mr)=", dp_label=None):
+    """intro and intermediate each publish a lecture; dp, a consumer, maps
+    both and carries a third that links to a label with ``link``."""
+    repo = pool_repo(make_repo, series=("intro", "intermediate", "dp"), consumers=("dp",))
+    write(repo.pool("lln_a.md"), lecture_text("LLN, intro", intro_label + "\n## The law"))
+    write(repo.pool("lln_b.md"), lecture_text("LLN, intermediate", "(lln_mr)=\n## The law"))
+    body = (dp_label + "\n## Here\n\n" if dp_label else "") + f"See {link}."
+    write(repo.pool("perm.md"), lecture_text("Permanent income", body))
+    make_site(repo, key="intro", toc=("intro", "lln_a"))
+    make_site(repo, key="intermediate", toc=("intro", "lln_b"),
+              cfg=config("intermediate", url=INT), meta=site_yml(url=INT))
+    make_site(repo, key="dp", toc=("intro", "perm"),
+              cfg=config("dp", mapping={"intro": [URL, None], "intermediate": [INT, None]}))
+    return repo
+
+
+def test_a_ref_that_leaves_its_site_for_a_label_two_mapped_sites_define_is_reported(make_repo):
+    repo = ref_repo(make_repo, "{ref}`our discussion <lln_mr>`")
+
+    res = repo.pool_check()
+
+    assert res.returncode == 1
+    assert problems(res) == [
+        "[ref-target] sites/dp: lectures/perm.md links to {ref}`lln_mr`, which no page of the site defines and "
+        "2 of the sites it maps do (intermediate, intro): intersphinx takes the name that sorts last, `intro`, "
+        "whichever the lecture meant; name the site with a prefix ({ref}`<site>:lln_mr`) or rename one of the labels",
+    ]
+
+
+@pytest.mark.parametrize("link, intro_label, dp_label", [
+    ("{ref}`lln_mr`", "(lln_mr_intro)=", None),                 # one mapped site defines it
+    ("{ref}`see <intermediate:lln_mr>`", "(lln_mr)=", None),   # a prefix names the site
+    ("{ref}`LLN_MR`", "(lln_mr)=", "(lln_mr)="),               # the site defines it, in any case
+    ("`{ref}`lln_mr``", "(lln_mr)=", None),                    # an inline literal is not a link
+])
+def test_a_ref_with_one_target_is_clean(make_repo, link, intro_label, dp_label):
+    repo = ref_repo(make_repo, link, intro_label=intro_label, dp_label=dp_label)
+
+    res = repo.pool_check()
+
+    assert res.returncode == 0, res.stdout
+
+
+def block(directive, label, body="A statement."):
+    return f"```{{{directive}}}\n:label: {label}\n{body}\n```"
+
+
+@pytest.mark.parametrize("intro_label, dp_label", [
+    # The site's own equation or proof named lln_mr is no {ref} target, so it
+    # does not settle the link.
+    ("(lln_mr)=", block("math", "lln_mr", "x = 1")),
+    ("(lln_mr)=", block("prf:theorem", "lln_mr")),
+    # An exercise's label is one, on a mapped site as a target is.
+    (block("exercise", "lln_mr"), None),
+    (block("exercise-start", "lln_mr"), None),
+])
+def test_only_a_label_a_ref_reaches_counts(make_repo, intro_label, dp_label):
+    repo = ref_repo(make_repo, "{ref}`lln_mr`", intro_label=intro_label, dp_label=dp_label)
+
+    res = repo.pool_check()
+
+    assert res.returncode == 1, res.stdout
+    assert [p.split(":")[0] for p in problems(res)] == ["[ref-target] sites/dp"]
+
+
+@pytest.mark.parametrize("intro_label", [block("math", "lln_mr", "x = 1"), block("prf:theorem", "lln_mr")])
+def test_a_mapped_sites_equation_or_proof_label_is_no_second_target(make_repo, intro_label):
+    repo = ref_repo(make_repo, "{ref}`lln_mr`", intro_label=intro_label)
+
+    res = repo.pool_check()
+
+    assert res.returncode == 0, res.stdout
+
+
+def test_a_mapped_name_is_read_as_the_pool_site_at_its_address(make_repo):
+    repo = ref_repo(make_repo, "{ref}`lln_mr`")
+    write(repo.root / "sites/dp/_config.yml", config("dp", mapping={"intro": [URL, None], "pyint": [INT, None]}))
+
+    res = repo.pool_check()
+
+    assert problems(res) == [
+        "[ref-target] sites/dp: lectures/perm.md links to {ref}`lln_mr`, which no page of the site defines and "
+        "2 of the sites it maps do (intro, pyint (sites/intermediate)): intersphinx takes the name that sorts last, "
+        "`pyint`, whichever the lecture meant; name the site with a prefix ({ref}`<site>:lln_mr`) or rename one of "
+        "the labels",
+    ]
+
+
+def test_a_toc_that_is_not_utf8_is_a_finding_not_an_internal_error(make_repo):
+    repo = ref_repo(make_repo, "{ref}`lln_mr`")
+    write(repo.root / "sites/dp/_toc.yml", b"root: intro\n\xff\n")
+
+    res = repo.pool_check()
+
+    assert res.returncode == 1, res.stdout + res.stderr
+    assert "internal error" not in res.stderr
+    assert any(p.startswith("[site-layout] sites/dp/_toc.yml could not be read as YAML") for p in problems(res))
+
+
+def test_a_sites_own_page_that_is_not_utf8_is_a_finding(make_repo):
+    repo = ref_repo(make_repo, "{ref}`lln_mr`")
+    write(repo.root / "sites/dp/intro.md", b"# dp\n\xff\n")
+
+    res = repo.pool_check()
+
+    assert res.returncode == 1, res.stdout + res.stderr
+    assert any(p.startswith("[site-layout] sites/dp/intro.md is not UTF-8 text") for p in problems(res)), res.stdout
+    assert any(p.startswith("[ref-target] sites/dp: lectures/perm.md") for p in problems(res))
+
+
 def test_the_branding_a_config_names_is_in_the_site(make_repo):
     repo = pool_repo(make_repo)
     site = make_site(repo)
@@ -454,13 +568,24 @@ def test_stage_site_local_links_is_for_a_consumer_and_leaves_a_lecture_edited_af
     assert ("kept lectures/linking.md: its bytes are not the ones staging wrote; its original is left at "
             "_build/stage-site-originals/linking.md") in res.stdout
     assert repo.pool("linking.md").read_text() == "edited after staging\n"
-    # Staging the lecture again would replace that original, so it refuses.
-    write(repo.pool("linking.md"), lecture_text("Linking", LINKING))
+    # Staging the lecture again would replace that original, which holds what
+    # the pool's lecture no longer does, so it refuses.
+    write(repo.pool("linking.md"), "edited after staging, with a link to [it](https://python.quantecon.org/carried.html)\n")
     res = repo.stage_site("--local-links", "dp")
     assert res.returncode == 1
     assert "  [exists] _build/stage-site-originals/linking.md" in res.stdout
-    assert "refused, nothing copied: a lecture's original is left from an earlier --clean" in res.stdout
+    assert ("refused, nothing copied: a lecture's original is left from an earlier --clean, which kept the lecture, "
+            "and it is not a plain file holding the lecture in the pool now") in res.stdout
     assert not (repo.root / "_build" / "stage-site.json").exists()
+    # Once the lecture is put back as it was, the original left holds nothing
+    # the pool lacks, and staging goes ahead.
+    original = lecture_text("Linking", LINKING).encode()
+    write(repo.pool("linking.md"), original)
+    assert repo.stage_site("--local-links", "dp").returncode == 0
+    res = repo.stage_site("--clean", "dp")
+    assert res.returncode == 0 and "1 lecture(s) put back" in res.stdout
+    assert repo.pool("linking.md").read_bytes() == original
+    assert not (repo.root / "_build" / "stage-site-originals").exists()
 
 
 def stage_site_module():
@@ -512,6 +637,158 @@ def test_rewrite_links_reads_prose_alone(text, expected, n):
     tool = stage_site_module()
 
     assert tool.rewrite_links(text, {"carried"}, {"intermediate"}, HOSTS) == (text if expected is None else expected, n)
+
+
+# Each case's count is markdown-it's (CommonMark with MyST's block plugin):
+# how many of its links to carried.html it renders as links (2026-11-27,
+# from the reviews of QuantEcon/lectures#108). The rewrite must make exactly
+# those, and leave the rest, inside a literal, as they are.
+@pytest.mark.parametrize("text, n", [
+    (f'- a `stray\n    2. b {ADDRESS} and `x`', 0),
+    (f'1. a `stray\n   14. b {ADDRESS} and `x`', 0),
+    (f'- a\n\n# H\nText `stray\n2024. Then {ADDRESS} and `x`', 0),
+    (f'- a\n# H\nText `stray\n2024. Then {ADDRESS} and `x`', 0),
+    (f'- a\n\nText `stray\n2024. Then {ADDRESS} and `x`', 0),
+    (f'A `stray\n2024. Then {ADDRESS} and `x`', 0),
+    (f'- a `stray\n    - nested {ADDRESS} and `x`', 1),
+    (f'A `stray\n    - not an item {ADDRESS} and `x`', 0),
+    (f'1. a\n\n   more `stray\n2. {ADDRESS} and `x`', 1),
+    (f'1. a `stray\n   still the item `\n2. {ADDRESS}', 1),
+    (f'- a `stray\n- {ADDRESS} and `x`', 1),
+    (f'- a `literal\n  {ADDRESS}` here', 0),
+    (f'Before `a literal that\n{ADDRESS}` crosses a line.', 0),
+    (f'`x`\n{ADDRESS}', 1),
+    (f'`unclosed\n\n{ADDRESS}`', 1),
+    (f'# A `heading\n{ADDRESS}`', 1),
+    (f'A `stray\n(here)=\n{ADDRESS} and `x`', 1),
+    (f'1. a\n   1. b `stray\n2. {ADDRESS} and `x`', 1),
+    (f'- a\n  - b `stray\n- {ADDRESS} and `x`', 1),
+    (f'2. a `stray\n3. {ADDRESS} and `x`', 1),
+    (f'1. a `stray\n   2. b {ADDRESS} and `x`', 0),
+    (f'Text `stray\n2. b {ADDRESS} and `x`', 0),
+    (f'Text `stray\n1) b {ADDRESS} and `x`', 1),
+    (f'Text `stray\n2) b {ADDRESS} and `x`', 0),
+    (f'1. a `stray\n2) b {ADDRESS} and `x`', 1),
+    (f'1. a `stray\n   2) b {ADDRESS} and `x`', 0),
+    (f'1. a `stray\n   1) b {ADDRESS} and `x`', 1),
+    (f'- a `stray\n* b {ADDRESS} and `x`', 1),
+    (f'- a `stray\n  + b {ADDRESS} and `x`', 1),
+    (f'* a `stray\n - b {ADDRESS} and `x`', 1),
+    (f'- a `stray\nlazy {ADDRESS} and `x`', 0),
+    (f'- a `stray\nlazy\n2. b {ADDRESS} and `x`', 1),
+    (f'- a\n\n      code `stray\n- b {ADDRESS} and `x`', 1),
+    (f'- a `stray\n      2. b {ADDRESS} and `x`', 0),
+    (f'- a `stray\n      1. b {ADDRESS} and `x`', 0),
+    (f'- a `stray\n      - b {ADDRESS} and `x`', 0),
+    (f'1. a `stray\n\n2. b {ADDRESS} and `x`', 1),
+    (f'1. a\n\n   b `stray\n   2. c {ADDRESS} and `x`', 0),
+    (f'1. a\n   1. b\n      1. c `stray\n      2. d {ADDRESS} and `x`', 1),
+    (f'1. a\n   1. b\n      1. c `stray\n   2. d {ADDRESS} and `x`', 1),
+    (f'1. a\n   1. b\n      1. c `stray\n         2. d {ADDRESS} and `x`', 0),
+    (f'1. a\n   1. b\n      1. c `stray\n        2. d {ADDRESS} and `x`', 1),
+    (f'1. a\n   ```python\n   x = `1\n   ```\n   2. b {ADDRESS} and `x`', 1),
+    (f'1. a\n   ```python\n   x = 1\n   ```\n   c `stray\n   2. b {ADDRESS} and `x`', 0),
+    (f'1. a `stray\n 2. b {ADDRESS} and `x`', 1),
+    (f'1. a `stray\n  2. b {ADDRESS} and `x`', 1),
+    (f'- a `stray\n 2. b {ADDRESS} and `x`', 1),
+    (f'10. a `stray\n   2. b {ADDRESS} and `x`', 1),
+    (f'1.   a `stray\n   2. b {ADDRESS} and `x`', 1),
+    (f'1. a\n   - b\n\n   para `stray\n   2. c {ADDRESS} and `x`', 0),
+    (f'1. a\n   - b `stray\n   2. c {ADDRESS} and `x`', 1),
+    (f'- a\n  # H\ntext `stray\n2. b {ADDRESS} and `x`', 0),
+    (f'- a\n\n  Text `stray\n2. b {ADDRESS} and `x`', 1),
+    (f'- a\n***\nText `stray\n2. b {ADDRESS} and `x`', 0),
+    (f'- a\n(t)=\nText `stray\n2. b {ADDRESS} and `x`', 0),
+    (f'- a\n% c\nText `stray\n2. b {ADDRESS} and `x`', 0),
+    (f'- a\n+++\nText `stray\n2. b {ADDRESS} and `x`', 0),
+    (f'1. a\n\n  Text `stray\n  2. b {ADDRESS} and `x`', 0),
+    (f'1. a\n   - b `stray\n2. c {ADDRESS} and `x`', 1),
+    (f'Text `stray\n- \n{ADDRESS} and `x`', 1),
+    (f'Text `stray\n    1. b {ADDRESS} and `x`', 0),
+    (f'> - a `stray\n>   2. b {ADDRESS} and `x`', 0),
+    # A table's cells, a list item's next line, a blockquote, and a directive
+    # inside a list.
+    (f"| a | b |\n|---|---|\n| {ADDRESS} | {ADDRESS} |", 2),
+    (f"- a list item with a link\n  that runs {ADDRESS} on", 1),
+    (f"> quoted {ADDRESS}\n> more", 1),
+    (f"1. a\n   ```{{tip}}\n   {ADDRESS}\n   ```", 1),
+    # From the review of QuantEcon/lectures#109: a link in an image's alt
+    # text, which the parser reads in a state of its own, does not stand for
+    # one at that place; a page with a lone \r, which markdown-it reads as a
+    # line break; and the same with \r\n.
+    (f"`{ADDRESS}` ![x{ADDRESS}](f.png)", 0),
+    (f"x\rt\n{ADDRESS}\n<div>{ADDRESS}\n</div>", 1),
+    (f"x\r\nt\r\n{ADDRESS}\r\n", 1),
+    # A directive whose body is code, literal text or not MyST is not read.
+    *[(f"```{{{name}}}\n{ADDRESS}\n```", 0) for name in (
+        "code-cell", "code-block", "code", "sourcecode", "literalinclude", "math", "raw", "eval-rst", "mermaid",
+        "toctree", "jupyter-execute", "ipython", "doctest")],
+    (f"```{{note}}\n{ADDRESS}\n```", 1),
+])
+def test_rewrite_links_makes_the_links_markdown_it_makes(text, n):
+    tool = stage_site_module()
+
+    new, count = tool.rewrite_links(text, {"carried"}, set(), HOSTS)
+
+    assert count == n
+    assert new.count("[it](carried.md)") == n
+    assert new.count(ADDRESS) == text.count(ADDRESS) - n
+
+
+@pytest.mark.parametrize("end", ["\r", "\r\n"])
+def test_rewrite_links_reads_lines_as_markdown_it_ends_them(end):
+    tool = stage_site_module()
+    text = f"x{end}t\n{ADDRESS}\n<div>{ADDRESS}\n</div>"
+
+    # The link in the paragraph is rewritten; the one in raw HTML is not.
+    assert tool.rewrite_links(text, {"carried"}, set(), HOSTS) == (
+        f"x{end}t\n[it](carried.md)\n<div>{ADDRESS}\n</div>", 1)
+
+
+def test_rewrite_links_leaves_a_table_row_alone_after_a_cell_it_cannot_place():
+    tool = stage_site_module()
+    # markdown-it unescapes the \| in the first cell, so that cell's text is
+    # not in the line as written. Rather than look for the next cell inside
+    # it, the rest of the row is left alone: the literal's address, and the
+    # real link after it too.
+    text = f"| a | b |\n|---|---|\n| `a\\|{ADDRESS}` | {ADDRESS} |"
+
+    assert tool.rewrite_links(text, {"carried"}, set(), HOSTS) == (text, 0)
+
+
+def test_reader_for_takes_a_sites_extensions_or_jupyter_books():
+    tool = stage_site_module()
+
+    def enabled(config):
+        md = tool.reader_for(config).md
+        return {r.name for ruler in (md.core.ruler, md.block.ruler, md.inline.ruler)
+                for r in ruler.__rules__ if r.enabled}
+
+    # Jupyter Book 1.0.4's own: colon_fence, dollarmath, linkify,
+    # substitution and tasklist, and not, say, deflist; an empty list keeps
+    # them, and a list that names any replaces them.
+    jupyter_books = {"colon_fence", "math_block", "linkify", "substitution_block", "github-tasklists"}
+    for config in ({}, {"parse": {}}, {"parse": {"myst_enable_extensions": []}}):
+        assert jupyter_books <= enabled(config) and "deflist" not in enabled(config), config
+    named = enabled({"parse": {"myst_enable_extensions": ["deflist"]}})
+    assert "deflist" in named and not (jupyter_books & named)
+
+
+def test_rewrite_links_needs_linkify_it_for_linkify_and_says_so(monkeypatch):
+    tool = stage_site_module()
+    monkeypatch.setitem(sys.modules, "linkify_it", None)
+
+    with pytest.raises(ValueError, match="needs linkify-it-py"):
+        tool.Reader(("linkify",))
+
+
+def test_rewrite_links_needs_myst_parser_and_says_so(monkeypatch):
+    tool = stage_site_module()
+    for name in ("myst_parser", "myst_parser.config.main", "myst_parser.parsers.mdit"):
+        monkeypatch.setitem(sys.modules, name, None)  # as if not installed, though imported before
+
+    with pytest.raises(ValueError, match="reads pages with MyST's parser"):
+        tool.rewrite_links(ADDRESS, {"carried"}, set(), HOSTS)
 
 
 def test_stage_site_local_links_reads_a_nested_toc_and_the_sites_own_address_and_leaves_its_own_pages(make_repo):
@@ -631,6 +908,77 @@ def test_stage_site_clean_never_writes_through_a_link_left_in_a_lectures_place(m
     assert res.returncode == 0, res.stdout
     assert "kept lectures/linking.md as it is: it is no longer a plain file" in res.stdout
     assert (repo.root / "_build/stage-site-originals/linking.md").is_file()
+
+
+def test_stage_site_refuses_a_link_left_where_an_original_goes(make_repo):
+    repo = links_repo(make_repo)
+    target = repo.root / "notes" / "would-be-written.md"
+    originals = repo.root / "_build" / "stage-site-originals"
+    originals.mkdir(parents=True)
+    (originals / "linking.md").symlink_to(target)  # dangling: .exists() is False
+    before = staged(repo)
+
+    res = repo.stage_site("--local-links", "dp")
+
+    assert res.returncode == 1, res.stdout
+    assert "  [exists] _build/stage-site-originals/linking.md" in res.stdout
+    assert not target.exists()
+    assert staged(repo) == before
+
+
+def test_stage_site_refuses_a_folder_left_where_an_original_goes(make_repo):
+    repo = links_repo(make_repo)
+    (repo.root / "_build" / "stage-site-originals" / "linking.md").mkdir(parents=True)
+    before = staged(repo)
+
+    res = repo.stage_site("--local-links", "dp")
+
+    assert res.returncode == 1, res.stdout + res.stderr
+    assert "  [exists] _build/stage-site-originals/linking.md" in res.stdout
+    assert "and it is not a plain file holding the lecture in the pool now" in res.stdout
+    assert staged(repo) == before
+
+
+def test_stage_site_refuses_an_originals_folder_that_is_a_file(make_repo):
+    repo = links_repo(make_repo)
+    write(repo.root / "_build" / "stage-site-originals", "a file where the folder goes\n")
+    before = staged(repo)
+
+    res = repo.stage_site("--local-links", "dp")
+
+    assert res.returncode == 1, res.stdout + res.stderr
+    assert "_build/stage-site-originals is not a folder of its own (a link, or a file)" in res.stdout
+    assert staged(repo) == before
+    assert not (repo.root / "_build" / "stage-site.json").exists()
+
+
+def test_stage_site_refuses_an_originals_folder_that_is_a_link(make_repo):
+    repo = links_repo(make_repo)
+    elsewhere = repo.root / "notes" / "elsewhere"
+    elsewhere.mkdir(parents=True)
+    (repo.root / "_build").mkdir()
+    (repo.root / "_build" / "stage-site-originals").symlink_to(elsewhere)
+    before = staged(repo)
+
+    res = repo.stage_site("--local-links", "dp")
+
+    assert res.returncode == 1, res.stdout
+    assert "_build/stage-site-originals is not a folder of its own (a link, or a file)" in res.stdout
+    assert staged(repo) == before and not any(elsewhere.iterdir())
+
+    # A link put there after staging: --clean refuses before it touches anything.
+    (repo.root / "_build" / "stage-site-originals").unlink()
+    assert repo.stage_site("--local-links", "dp").returncode == 0
+    originals = repo.root / "_build" / "stage-site-originals"
+    originals.rename(elsewhere / "kept")
+    originals.symlink_to(elsewhere / "kept")
+    rewritten = staged(repo)
+
+    res = repo.stage_site("--clean", "dp")
+
+    assert res.returncode == 2
+    assert "_build/stage-site-originals is a link, so what _build/stage-site.json names cannot be confined to it" in res.stderr
+    assert staged(repo) == rewritten
 
 
 def test_site_yml_local_links_is_true_or_false_and_only_a_consumers(make_repo):
