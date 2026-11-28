@@ -208,7 +208,9 @@ name: site-build
 # reaches. A site whose build failed keeps no HTML and gets no preview. The
 # preview carries the HTML and the notebooks, not the PDF: Cloudflare takes
 # no file over 25 MiB, and intermediate's PDF is 68 MiB. So a preview's
-# "Book (PDF)" link answers 404; the strict PDF build is the pull request's
+# "Book (PDF)" link answers 404, with a page the job writes to say why (and
+# so does any address the preview lacks: with no 404.html, Cloudflare would
+# answer every one with the home page); the strict PDF build is the pull request's
 # check, and the html-<key> artefact holds the PDF (the owner's choice of
 # 2026-11-28: the builds stay, the PDF stays out of the preview). A pull
 # request from a fork, or by Dependabot, gets no secrets, so no preview, and
@@ -827,11 +829,24 @@ jobs:
 
       # Cloudflare Pages takes no file over 25 MiB, and the PDFs are up to
       # 68 MiB, so the preview leaves _pdf/ out (PREVIEWS, above). Any other
-      # file that large is named here, before the deploy.
+      # file that large is named here, before the deploy. A site with no
+      # 404.html at its root is served as a single-page app, every unknown
+      # address answering 200 with the root page, so a link the preview
+      # cannot follow would land on the home page; the build makes none, so
+      # this writes one, and such a link answers 404.
       - name: Leave the PDF out
         if: ${{ steps.html.outputs.found == 'true' }}
         run: |
           rm -rf _build/html/_pdf
+          if [ ! -e _build/html/404.html ]; then
+            cat > _build/html/404.html <<'HTML'
+          <!DOCTYPE html>
+          <html lang="en"><head><meta charset="utf-8"><title>Not in this preview</title></head>
+          <body><h1>Not in this preview</h1>
+          <p>This pull request's preview has no page or file at this address. A preview leaves out the site's PDF, so the "Book (PDF)" link ends here: the PDF is in the build's <code>html-&lt;site&gt;</code> artefact. See CONTRIBUTING.md in QuantEcon/lectures.</p>
+          </body></html>
+          HTML
+          fi
           big=$(find _build/html -type f -size +25M | sed 's#^_build/html/##' | paste -sd ' ' -)
           if [ -n "$big" ]; then
             echo "::error::Cloudflare Pages takes no file over 25 MiB, and the preview holds: $big"

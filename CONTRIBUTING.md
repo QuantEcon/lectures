@@ -18,6 +18,7 @@ Each site the pull request builds gets a preview on Cloudflare Pages, at `https:
 
 - **HTML and notebooks, no PDF.** Cloudflare takes no file over 25 MiB, and the PDFs are up to 68 MiB, so a preview leaves the PDF out, and its "Book (PDF)" link answers 404. The PDF is still built, strictly, as the pull request's check: to read it, download the run's `html-<site>` artefact (kept for 7 days), which has it under `_pdf/`.
 - **After every site's build.** The previews start when every site the pull request builds has finished, so a change that reaches intermediate waits for intermediate's build.
+- **Addresses.** Cloudflare drops `.html` from a page's address, so `…/mccall_model.html` opens as `…/mccall_model`. An address the preview has no file for answers 404, with a page that says so.
 - **A site whose build failed gets no preview.** If an earlier push deployed one, its comment and address still show that push.
 - **Links to another site** go to that site's live pages, as they do on the published sites, not to another preview.
 - **A pull request from a fork** runs only once a maintainer approves its run, and gets no preview: a fork's run gets no secrets. A pull request opened by Dependabot gets none either.

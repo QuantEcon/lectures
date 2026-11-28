@@ -101,6 +101,25 @@ def test_the_pdf_is_left_out_and_the_rest_is_kept(tmp_path):
     assert "The preview holds" in res.stdout
 
 
+def test_the_preview_gets_a_404_page_so_a_missing_address_is_no_home_page(tmp_path):
+    res = run_drop(tmp_path, {"index.html": 100, "_pdf/book.pdf": 1000})
+    page = (tmp_path / "_build/html/404.html").read_text(encoding="utf-8")
+
+    assert res.returncode == 0, res.stdout + res.stderr
+    assert page.startswith("<!DOCTYPE html>\n")
+    assert "<title>Not in this preview</title>" in page
+    assert page.rstrip().endswith("</html>")
+
+
+def test_a_404_page_the_site_has_is_kept(tmp_path):
+    (tmp_path / "_build/html").mkdir(parents=True)
+    (tmp_path / "_build/html/404.html").write_text("the site's own", encoding="utf-8")
+    res = run_drop(tmp_path, {"index.html": 100})
+
+    assert res.returncode == 0, res.stdout + res.stderr
+    assert (tmp_path / "_build/html/404.html").read_text(encoding="utf-8") == "the site's own"
+
+
 def test_any_other_file_over_25_mib_fails_before_the_deploy(tmp_path):
     res = run_drop(tmp_path, {"index.html": 100, "_images/huge.gif": (25 << 20) + 1, "_static/ok.js": 25 << 20})
 
