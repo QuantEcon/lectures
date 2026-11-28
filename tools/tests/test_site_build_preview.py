@@ -55,7 +55,7 @@ def test_the_build_can_neither_comment_nor_read_a_secret():
 def test_each_site_previews_to_its_own_project_in_a_comment_of_its_own():
     w = deploy()["with"]
 
-    assert deploy()["uses"].startswith("quantecon/actions/preview-cloudflare@")
+    assert deploy()["uses"] == "quantecon/actions/preview-cloudflare@v0"
     assert w["project-name"] == "qe-preview-${{ matrix.site.key }}"
     assert w["comment-key"] == "${{ matrix.site.key }}"
     assert w["toc-file"] == "sites/${{ matrix.site.key }}/_toc.yml"

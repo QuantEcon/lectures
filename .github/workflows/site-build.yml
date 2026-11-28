@@ -854,13 +854,12 @@ jobs:
           fi
           echo "The preview holds $(find _build/html -type f | wc -l) files, $(du -sh _build/html | cut -f1)."
 
-      # comment-key and toc-file are on QuantEcon/actions' main and not yet in
-      # a release (QuantEcon/actions#336), so this names main's commit until
-      # v0 carries them.
+      # comment-key and toc-file, one comment per site, are in v0 from
+      # v0.22.0 (QuantEcon/actions#336).
       - name: Deploy the preview
         id: preview
         if: ${{ steps.html.outputs.found == 'true' }}
-        uses: quantecon/actions/preview-cloudflare@bb4ef180b429d318894b375cff186c6a80fcb281
+        uses: quantecon/actions/preview-cloudflare@v0
         with:
           cloudflare-api-token: ${{ secrets.CLOUDFLARE_PAGES_TOKEN }}
           cloudflare-account-id: ${{ secrets.CLOUDFLARE_QE_ACCOUNT_ID }}
