@@ -3,7 +3,8 @@ name: site-build
 # Build the published sites from the pool, one leg per site, on Jupyter Book 1
 # (QuantEcon/project-monorepo#77; dp first, QuantEcon/project-monorepo#25).
 # Nothing here publishes: the build is checked, and its HTML and execution
-# report are kept as artefacts. Publishing is its own item
+# report are kept as artefacts; on a pull request each site built is also
+# deployed as a preview (PREVIEWS, below). Publishing is its own item
 # (QuantEcon/project-monorepo#78, rehearsed in QuantEcon/project-monorepo#27),
 # and each series keeps building and publishing from its own repository until
 # its cutover.
@@ -193,7 +194,35 @@ name: site-build
 # request touches lectures/, so it is built like any other (its run waits for
 # a maintainer's approval, as that workflow notes), and so is its merge.
 #
-# WHAT IT DOES NOT DO (yet): publish; post a preview (QuantEcon/actions#336).
+# PREVIEWS (QuantEcon/project-monorepo#79): on a pull request, the third job
+# deploys each site whose build kept its HTML to the site's own Cloudflare
+# Pages project, qe-preview-<key>, at
+# https://pr-<number>.qe-preview-<key>.pages.dev, with QuantEcon/actions'
+# preview-cloudflare. The action comments on the pull request with the
+# address and links to the changed pages the site's _toc.yml names, one
+# comment per site (its comment-key and toc-file inputs). It is a job of its
+# own, as the action's chapter advises: the build runs the lectures' code and
+# holds no secret, and the job that holds the Cloudflare token runs none.
+# GitHub has no needs: for one leg of a matrix, so it starts when every leg
+# has finished, and a site's preview waits for the slowest site the change
+# reaches. A site whose build failed keeps no HTML and gets no preview. The
+# preview carries the HTML and the notebooks, not the PDF: Cloudflare takes
+# no file over 25 MiB, and intermediate's PDF is 68 MiB. So a preview's
+# "Book (PDF)" link answers 404, with a page the job writes to say why (and
+# so does any address the preview lacks: with no 404.html, Cloudflare would
+# answer every one with the home page); the strict PDF build is the pull request's
+# check, and the html-<key> artefact holds the PDF (the owner's choice of
+# 2026-11-28: the builds stay, the PDF stays out of the preview). A pull
+# request from a fork, or by Dependabot, gets no secrets, so no preview, and
+# the action says so in a notice. The token and the account's ID are the
+# organisation's secrets CLOUDFLARE_PAGES_TOKEN and CLOUDFLARE_QE_ACCOUNT_ID,
+# and the six projects were made on 2026-11-28, with no Git provider, so
+# Cloudflare neither builds nor comments: a site added to SITES needs its
+# project made first, with `wrangler pages project create qe-preview-<key>
+# --production-branch main` (an AI agent running wrangler 4.130 or later
+# adds --force, or wrangler makes a Workers project instead).
+#
+# WHAT IT DOES NOT DO (yet): publish.
 # Later, in the second phase, after the cutovers (2026-11-27): build on
 # mystmd (QuantEcon/actions#337), and share one execution cache between the
 # sites of one environment (each site keeps its own until then).
@@ -740,3 +769,102 @@ jobs:
           KEY: ${{ matrix.site.key }}
         shell: bash -l {0}
         run: python tools/stage-site --clean "$KEY"
+
+  # PREVIEWS (above): a pull request's sites, each from its build's HTML.
+  # After every leg, green or not (!cancelled()), so that one site's failure
+  # does not stop another's preview; each leg checks its own site's HTML.
+  preview:
+    name: preview ${{ matrix.site.key }}
+    needs: [sites, build]
+    if: ${{ !cancelled() && github.event_name == 'pull_request' && needs.sites.outputs.any == 'true' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        site: ${{ fromJSON(needs.sites.outputs.matrix) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # actions: read finds the site's HTML among the run's artefacts;
+    # pull-requests: write posts the preview's comment.
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: write
+    steps:
+      # The build keeps html-<key> only when every step before it succeeded.
+      - name: Find the site's HTML
+        id: html
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KEY: ${{ matrix.site.key }}
+        run: |
+          n=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts?name=html-$KEY" --jq '.total_count')
+          if [ "$n" -gt 0 ]; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No preview of $KEY: its build kept no HTML, so it failed or was cancelled."
+          fi
+
+      # For toc-file and the changed pages: the pull request's merge commit.
+      # A public repository's history is fetched with no credentials.
+      - name: Checkout
+        if: ${{ steps.html.outputs.found == 'true' }}
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      # The wrangler preview-cloudflare pins needs Node 22.12 or later.
+      - name: Set up Node
+        if: ${{ steps.html.outputs.found == 'true' }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Download the site's HTML
+        if: ${{ steps.html.outputs.found == 'true' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: html-${{ matrix.site.key }}
+          path: _build/html
+
+      # Cloudflare Pages takes no file over 25 MiB, and the PDFs are up to
+      # 68 MiB, so the preview leaves _pdf/ out (PREVIEWS, above). Any other
+      # file that large is named here, before the deploy. A site with no
+      # 404.html at its root is served as a single-page app, every unknown
+      # address answering 200 with the root page, so a link the preview
+      # cannot follow would land on the home page; the build makes none, so
+      # this writes one, and such a link answers 404.
+      - name: Leave the PDF out
+        if: ${{ steps.html.outputs.found == 'true' }}
+        run: |
+          rm -rf _build/html/_pdf
+          if [ ! -e _build/html/404.html ]; then
+            cat > _build/html/404.html <<'HTML'
+          <!DOCTYPE html>
+          <html lang="en"><head><meta charset="utf-8"><title>Not in this preview</title></head>
+          <body><h1>Not in this preview</h1>
+          <p>This pull request's preview has no page or file at this address. A preview leaves out the site's PDF, so the "Book (PDF)" link ends here: the PDF is in the build's <code>html-&lt;site&gt;</code> artefact. See CONTRIBUTING.md in QuantEcon/lectures.</p>
+          </body></html>
+          HTML
+          fi
+          big=$(find _build/html -type f -size +25M | sed 's#^_build/html/##' | paste -sd ' ' -)
+          if [ -n "$big" ]; then
+            echo "::error::Cloudflare Pages takes no file over 25 MiB, and the preview holds: $big"
+            exit 1
+          fi
+          echo "The preview holds $(find _build/html -type f | wc -l) files, $(du -sh _build/html | cut -f1)."
+
+      # comment-key and toc-file, one comment per site, are in v0 from
+      # v0.22.0 (QuantEcon/actions#336).
+      - name: Deploy the preview
+        id: preview
+        if: ${{ steps.html.outputs.found == 'true' }}
+        uses: quantecon/actions/preview-cloudflare@v0
+        with:
+          cloudflare-api-token: ${{ secrets.CLOUDFLARE_PAGES_TOKEN }}
+          cloudflare-account-id: ${{ secrets.CLOUDFLARE_QE_ACCOUNT_ID }}
+          project-name: qe-preview-${{ matrix.site.key }}
+          build-dir: _build/html
+          lectures-dir: lectures
+          toc-file: sites/${{ matrix.site.key }}/_toc.yml
+          comment-key: ${{ matrix.site.key }}
