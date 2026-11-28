@@ -259,3 +259,16 @@ def test_only_the_query_step_holds_the_token():
     for step in workflow()["jobs"]["sites"]["steps"]:
         if "GH_TOKEN" in (step.get("env") or {}):
             assert step.get("id") == "last", step.get("name")
+
+
+def test_a_call_from_publish_builds_the_sites_it_names_and_grants_what_the_called_jobs_ask():
+    step = choose_step()
+    assert step["env"]["CALLED_SITES"] == "${{ inputs.sites }}"
+    assert "keys=$CALLED_SITES" in step["run"]
+    # A called workflow's jobs get no more than the calling job grants, and
+    # GitHub refuses the call if one asks for more.
+    publish = yaml.safe_load((ROOT / ".github/workflows/publish.yml").read_text(encoding="utf-8"))
+    granted = publish["jobs"]["build"]["permissions"]
+    for name, job in workflow()["jobs"].items():
+        for scope, level in (job.get("permissions") or {}).items():
+            assert granted.get(scope) in (level, "write"), (name, scope)

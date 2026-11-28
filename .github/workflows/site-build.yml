@@ -3,9 +3,10 @@ name: site-build
 # Build the published sites from the pool, one leg per site, on Jupyter Book 1
 # (QuantEcon/project-monorepo#77; dp first, QuantEcon/project-monorepo#25).
 # Nothing here publishes: the build is checked, and its HTML and execution
-# report are kept as artefacts. Publishing is its own item
-# (QuantEcon/project-monorepo#78, rehearsed in QuantEcon/project-monorepo#27),
-# and each series keeps building and publishing from its own repository until
+# report are kept as artefacts. publish.yml calls this workflow for the site
+# it publishes and releases that HTML in the site's repository
+# (QuantEcon/project-monorepo#78, rehearsed in QuantEcon/project-monorepo#27);
+# each series keeps building and publishing from its own repository until
 # its cutover.
 #
 # WHICH SITES: the ones named in SITES below, today every folder in sites/:
@@ -193,10 +194,11 @@ name: site-build
 # request touches lectures/, so it is built like any other (its run waits for
 # a maintainer's approval, as that workflow notes), and so is its merge.
 #
-# WHAT IT DOES NOT DO (yet): publish; post a preview (QuantEcon/actions#336).
-# Later, in the second phase, after the cutovers (2026-11-27): build on
-# mystmd (QuantEcon/actions#337), and share one execution cache between the
-# sites of one environment (each site keeps its own until then).
+# WHAT IT DOES NOT DO (yet): publish (publish.yml does, with it); post a
+# preview (QuantEcon/actions#336). Later, in the second phase, after the
+# cutovers (2026-11-27): build on mystmd (QuantEcon/actions#337), and share
+# one execution cache between the sites of one environment (each site keeps
+# its own until then).
 
 on:
   push:
@@ -230,6 +232,14 @@ on:
   workflow_dispatch:
   schedule:
     - cron: '17 5 * * 1,4'
+  # publish.yml builds the site it publishes with this workflow, named in
+  # `sites` (QuantEcon/project-monorepo#78).
+  workflow_call:
+    inputs:
+      sites:
+        description: The sites to build, by folder under sites/, separated by spaces
+        type: string
+        required: true
 
 permissions:
   contents: read
@@ -242,9 +252,11 @@ permissions:
 # pushes to main, the first builds, the second is cancelled while it waits,
 # and the third builds when the first has finished. The third takes in the
 # second's change, since a push is compared with the last build that
-# succeeded, not with the commit before it.
+# succeeded, not with the commit before it. A call from publish.yml has a
+# group of its own, named for its sites, so it neither waits on nor
+# displaces a push's build of main.
 concurrency:
-  group: site-build-${{ github.ref }}
+  group: site-build-${{ github.ref }}${{ inputs.sites && format('-publish-{0}', inputs.sites) || '' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
@@ -297,9 +309,11 @@ jobs:
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
           echo "${sha:-none can be read}"
 
-      # A pull request is compared with its base, a push with the build found
-      # above. The schedule and a manual run take every site, and so does a
-      # base that cannot be found or fetched. The diff is of two trees, so only
+      # A call from publish.yml builds the sites it names, whatever changed
+      # (its event is the caller's). Otherwise a pull request is compared with
+      # its base, a push with the build found above. The schedule and a
+      # manual run take every site, and so does a base that cannot be found or
+      # fetched. The diff is of two trees, so only
       # the base is fetched, with no history. --no-renames lists a renamed
       # file's old path as well as its new one, and -z keeps a name git
       # would otherwise quote. A change to the rule itself (the tool or this
@@ -310,11 +324,18 @@ jobs:
           EVENT: ${{ github.event_name }}
           PR_BASE: ${{ github.event.pull_request.base.sha }}
           LAST_GOOD: ${{ steps.last.outputs.sha }}
+          CALLED_SITES: ${{ inputs.sites }}
         run: |
           read -ra all <<< "$SITES"
           keys="${all[*]}"
           base=""
+          if [ -n "$CALLED_SITES" ]; then
+            EVENT=workflow_call
+            keys=$CALLED_SITES
+          fi
           case "$EVENT" in
+            workflow_call)
+              why="the sites publish.yml names" ;;
             pull_request)
               base=$PR_BASE
               why="every site: the pull request has no base" ;;

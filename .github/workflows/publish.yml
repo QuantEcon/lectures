@@ -1,0 +1,166 @@
+name: publish
+
+# Publish a site built from the pool through a release in its series'
+# repository (QuantEcon/project-monorepo#78): build the site with
+# site-build.yml, then, with a token from the quantecon-lectures App, create a
+# `publish-<date>` tag and release there with the site attached as
+# publish-gh-pages attaches it (an archive, its checksum and a manifest). The
+# series' repository serves it with its deploy-release.yml, which calls
+# QuantEcon/actions' reusable deploy-release workflow on the release, and rolls
+# back by dispatching that workflow at an earlier tag.
+#
+# WHERE A SITE IS RELEASED: TARGETS below. Until a site's cutover its target
+# is a test double, never the live series: dp's is QuantEcon/test-lecture-dp,
+# for the publishing rehearsal (QuantEcon/project-monorepo#27). A site with no
+# entry is refused before anything is built. Nothing here runs on its own: a
+# person dispatches it. A test double is sent the site as its cutover will
+# publish it, built from the site's own _config.yml, so its pages keep the live
+# site's addresses: their canonical links (html.baseurl), their Download
+# Notebook links (download_nb_path), the addresses in the notebooks they offer
+# (tojupyter_urlpath and tojupyter_image_urlpath, for links and images), and,
+# for a site that maps itself, its intersphinx links to itself. The rehearsal
+# checks the release, the deploy and the rollback, not those links.
+#
+# THE TAG is `publish-<YYYY-MM-DD>`, the day in Sydney, as the series' own
+# publish tags are named; a second publish that day takes `b`, then `c` and
+# so on (the owner's practice, 2026-11-26). It points at the target's default
+# branch, and the release's manifest records the QuantEcon/lectures commit
+# the site was built from.
+#
+# THE TOKEN is minted from the App for the one target repository with
+# `contents: write` alone (the owner's ruling of 2026-11-26), in the job that
+# makes the release, which runs no repository or notebook code. A release made
+# with GITHUB_TOKEN would start no workflow in the target, so its deploy would
+# never run.
+#
+# It needs publish-gh-pages' `release-repository` and `release-tag`
+# (QuantEcon/actions#354) at @v0.
+
+on:
+  workflow_dispatch:
+    inputs:
+      site:
+        description: 'The site to publish'
+        required: true
+        type: choice
+        options: [dp]
+
+permissions:
+  contents: read
+
+# bash, as `shell: bash` runs it, -eo pipefail: a failed command in a pipeline
+# (the tag lookup's `gh api`) fails its step. A step without `shell` would get
+# `bash -e`, with no pipefail.
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: publish-${{ inputs.site }}
+  cancel-in-progress: false
+
+env:
+  # site -> owner/repository its releases go to, until its cutover.
+  TARGETS: dp=QuantEcon/test-lecture-dp
+
+jobs:
+  target:
+    runs-on: ubuntu-latest
+    outputs:
+      repository: ${{ steps.target.outputs.repository }}
+      owner: ${{ steps.target.outputs.owner }}
+      name: ${{ steps.target.outputs.name }}
+    steps:
+      - name: Find the site's target repository
+        id: target
+        env:
+          SITE: ${{ inputs.site }}
+        run: |
+          repository=""
+          for pair in $TARGETS; do
+            if [ "${pair%%=*}" = "$SITE" ]; then repository=${pair#*=}; fi
+          done
+          if [ -z "$repository" ]; then
+            echo "::error::$SITE has no target repository in TARGETS, so it is not published"
+            exit 1
+          fi
+          echo "Publishing $SITE to $repository"
+          {
+            echo "repository=$repository"
+            echo "owner=${repository%%/*}"
+            echo "name=${repository#*/}"
+          } >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: target
+    uses: ./.github/workflows/site-build.yml
+    with:
+      sites: ${{ inputs.site }}
+    # A called workflow's jobs get no more than this: site-build's first job
+    # asks for actions: read, to find a push's base.
+    permissions:
+      contents: read
+      packages: read
+      actions: read
+
+  release:
+    needs: [target, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Download the site
+        uses: actions/download-artifact@v4
+        with:
+          name: html-${{ inputs.site }}
+          path: _build/html
+
+      - name: Mint the App's token for the target repository
+        id: app
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.LECTURES_APP_ID }}
+          private-key: ${{ secrets.LECTURES_APP_PRIVATE_KEY }}
+          owner: ${{ needs.target.outputs.owner }}
+          repositories: ${{ needs.target.outputs.name }}
+          permission-contents: write
+
+      - name: Choose the tag
+        id: tag
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          REPOSITORY: ${{ needs.target.outputs.repository }}
+        run: |
+          base="publish-$(TZ=Australia/Sydney date +%Y-%m-%d)"
+          taken=$(gh api "repos/$REPOSITORY/git/matching-refs/tags/$base" --jq '.[].ref' | sed 's#^refs/tags/##')
+          tag=""
+          for suffix in "" b c d e f g h i j k l m n o p q r s t u v w x y z; do
+            if ! grep -qx "$base$suffix" <<< "$taken"; then
+              tag="$base$suffix"
+              break
+            fi
+          done
+          if [ -z "$tag" ]; then
+            echo "::error::every tag from $base to ${base}z is taken in $REPOSITORY"
+            exit 1
+          fi
+          echo "Tag: $tag"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Release the site in the target repository
+        uses: quantecon/actions/publish-gh-pages@v0
+        with:
+          mode: 'release'
+          build-dir: _build/html
+          release-repository: ${{ needs.target.outputs.repository }}
+          release-tag: ${{ steps.tag.outputs.tag }}
+          github-token: ${{ steps.app.outputs.token }}
+
+      - name: Report the release
+        env:
+          REPOSITORY: ${{ needs.target.outputs.repository }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          line="Released \`$TAG\` in $REPOSITORY: https://github.com/$REPOSITORY/releases/tag/$TAG"
+          echo "$line"
+          printf '%s\n' "$line" >> "$GITHUB_STEP_SUMMARY"
