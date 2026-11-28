@@ -1,0 +1,211 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.9"
+# dependencies = ["pyyaml"]
+# ///
+"""tools/affected-sites — the sites a change can affect, so the site build
+builds only those (QuantEcon/project-monorepo#77).
+
+Reads the changed paths on stdin, one per line, or NUL-separated with
+``-z`` as ``git diff --no-renames --name-only -z`` prints them (a rename
+must show its old path as well as its new, and a NUL list keeps a name git
+would quote as written), and prints the keys of the sites to build: those
+of the keys given that a changed path reaches, space-separated, in the
+order given, or an empty line when none is. Each path is placed by the first rule it meets:
+
+* ``lectures/<slug>.md`` and ``lectures/_static/<slug>/...``: every site
+  whose ``_toc.yml`` lists ``<slug>``; a ``_static/<dir>/`` that is no pool
+  lecture's folder (no ``lectures/<dir>.md``, here or at the base) reaches
+  every site;
+* ``lectures/_static/_shared/...``: every site that lists a lecture the
+  ledger (``sync/ledger.yml``) records as using the asset, or every site
+  when the ledger records no lecture for it;
+* ``sites/<key>/...``: site ``<key>``; another file under ``sites/``
+  (``sites/README.md``) reaches none;
+* ``tools/sync`` and ``sync/state.yml`` (``SERIES_INPUTS``): the sites
+  whose ``site.yml`` sets ``environment: series`` (the default), here or
+  at the base, since only those run tools/sync; today, dp alone;
+* any other path under ``lectures/`` (the bibliography among them, which
+  every site cites), and every other input of the build (``BUILD_INPUTS``:
+  with ``SERIES_INPUTS``, the paths of site-build.yml's filter outside the
+  pool and the sites): every site;
+* any other path (documentation, the tests, another workflow): none.
+
+So a path under ``lectures/`` that cannot be placed builds every site:
+the rule errs towards building more. A path outside the pool and the sites
+that is no build input reaches none. Links between sites do not widen the
+set: intersphinx resolves a link to another site against that site's
+published inventory, not against this build. The workflow does not ask
+this tool about a change to the tool itself or to the workflow: it builds
+every site, so a broken rule cannot skip its own build.
+
+With ``--base <commit>``, the contents lists and the ledger are read at
+that commit too, and a site is reached if either reading reaches it: a
+lecture a change deletes, or drops from a contents list, still builds
+the sites that listed it, so their strict builds catch a link left to it.
+
+Usage
+-----
+    git diff --no-renames --name-only -z BASE HEAD | tools/affected-sites -z --base BASE dp intro advanced programming intermediate jax
+
+Exit status: 0 (the keys printed, perhaps none), 2 an error (a key with no
+site folder, a ``--base`` that is no commit here, or a file that cannot be
+read or parsed).
+"""
+
+from __future__ import annotations
+
+import argparse
+import fnmatch
+import subprocess
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+LEDGER = "sync/ledger.yml"
+# site-build.yml's path filter, outside lectures/ and sites/, is these two
+# lists together. Keep them in step (tools/tests checks they are). A change
+# to a build input can change every site's build; a change to a series
+# input only the build of a site in the series environment, since only that
+# runs tools/sync, which alone reads sync/state.yml.
+SERIES_INPUTS = ("tools/sync", "sync/state.yml")
+BUILD_INPUTS = (
+    "tools/stage-site",
+    "tools/site-matrix",
+    "tools/execution-report",
+    "tools/affected-sites",
+    "sync/manifest.yml",
+    "_base/**",
+    ".github/workflows/site-build.yml",
+)
+
+
+def read(rel: str, base: str | None):
+    """The text of ``rel`` in the working tree, or at commit ``base``, or
+    None when it is not there."""
+    if base is None:
+        path = ROOT / rel
+        return path.read_text(encoding="utf-8") if path.is_file() else None
+    r = subprocess.run(["git", "-C", str(ROOT), "show", f"{base}:{rel}"], capture_output=True, text=True)
+    return r.stdout if r.returncode == 0 else None
+
+
+def toc_files(toc) -> set[str]:
+    """Every page a Jupyter Book ``_toc.yml`` lists: its root and each ``file:``."""
+    files = set()
+
+    def walk(node):
+        if isinstance(node, dict):
+            if isinstance(node.get("file"), str):
+                files.add(node["file"])
+            for key in ("parts", "chapters", "sections"):
+                walk(node.get(key))
+        elif isinstance(node, list):
+            for item in node:
+                walk(item)
+
+    if isinstance(toc, dict) and isinstance(toc.get("root"), str):
+        files.add(toc["root"])
+    walk(toc)
+    return {f[:-3] if f.endswith(".md") else f for f in files}
+
+
+def is_lecture(slug: str, base: str | None) -> bool:
+    """Whether ``lectures/<slug>.md`` is a pool lecture here or at ``base``."""
+    return (ROOT / "lectures" / f"{slug}.md").is_file() or (base is not None and read(f"lectures/{slug}.md", base) is not None)
+
+
+def readings(keys, base):
+    """``(lists, users, series)``: each site's listed pages, each shared
+    asset's lectures, and the sites in the series environment, from the
+    working tree and, with ``base``, that commit too. A site with no
+    ``site.yml`` in either counts as series, the default."""
+    import yaml
+
+    lists = {key: set() for key in keys}
+    users: dict[str, set[str]] = {}
+    environments: dict[str, set[str]] = {key: set() for key in keys}
+    for at in (None, base) if base else (None,):
+        for key in keys:
+            text = read(f"sites/{key}/_toc.yml", at)
+            if text is not None:
+                lists[key] |= toc_files(yaml.safe_load(text))
+            text = read(f"sites/{key}/site.yml", at)
+            if text is not None:
+                environments[key].add((yaml.safe_load(text) or {}).get("environment", "series"))
+        text = read(LEDGER, at)
+        ledger = (yaml.safe_load(text) if text else None) or {}
+        for name, entry in ledger.items():
+            if name == "assets" or not isinstance(entry, dict):
+                continue
+            slug = name.removeprefix("lectures/").removesuffix(".md")
+            for asset in entry.get("assets") or []:
+                users.setdefault(asset, set()).add(slug)
+    series = {key for key, found in environments.items() if not found or "series" in found}
+    return lists, users, series
+
+
+def affected(paths, keys, lists, users, series, base=None) -> list[str]:
+    reached = set()
+    every = set(keys)
+
+    def listing(*slugs):
+        return {key for key in keys if lists[key] & set(slugs)}
+
+    for path in paths:
+        parts = path.split("/")
+        if parts[0] == "lectures" and len(parts) > 1:
+            rel = "/".join(parts[1:])
+            if len(parts) == 2 and rel.endswith(".md"):
+                reached |= listing(rel[:-3])
+            elif parts[1] == "_static" and len(parts) > 3 and parts[2] == "_shared":
+                lectures = users.get(rel)
+                reached |= listing(*lectures) if lectures else every
+            elif parts[1] == "_static" and len(parts) > 3:
+                reached |= listing(parts[2]) if is_lecture(parts[2], base) else every
+            else:
+                reached |= every
+        elif parts[0] == "sites":
+            if len(parts) > 2 and parts[1] in every:
+                reached.add(parts[1])
+        elif path in SERIES_INPUTS:
+            reached |= series
+        elif any(fnmatch.fnmatch(path, pattern) for pattern in BUILD_INPUTS):
+            reached |= every
+    return [key for key in keys if key in reached]
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(prog="tools/affected-sites", description=__doc__.split("\n\n")[0])
+    parser.add_argument("keys", nargs="+", help="the sites the build may build, in order")
+    parser.add_argument("--base", help="also read the contents lists and the ledger at this commit")
+    parser.add_argument("-z", action="store_true", help="the paths on stdin are NUL-separated")
+    args = parser.parse_args(argv)
+    missing = [key for key in args.keys if not (ROOT / "sites" / key / "_toc.yml").is_file()]
+    if missing:
+        sys.stderr.write(f"error: no sites/<key>/_toc.yml for {', '.join(missing)}\n")
+        return 2
+    if args.base is not None:
+        r = subprocess.run(["git", "-C", str(ROOT), "cat-file", "-e", f"{args.base}^{{commit}}"], capture_output=True)
+        if r.returncode != 0:
+            sys.stderr.write(f"error: --base {args.base} is no commit in this repository\n")
+            return 2
+    text = sys.stdin.read()
+    paths = [p for p in (text.split("\0") if args.z else text.splitlines()) if p.strip()]
+    import yaml
+
+    try:
+        lists, users, series = readings(args.keys, args.base)
+    except yaml.YAMLError as exc:
+        sys.stderr.write(f"error: a contents list, a site.yml or the ledger cannot be parsed: {exc}\n")
+        return 2
+    print(" ".join(affected(paths, args.keys, lists, users, series, args.base)))
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except (OSError, ValueError) as exc:
+        sys.stderr.write(f"error: {exc}\n")
+        sys.exit(2)
